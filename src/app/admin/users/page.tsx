@@ -147,6 +147,7 @@ export default function UsersPage() {
 
     useEffect(() => {
         loadData();
+        fetchSyncMap();
     }, []);
 
     const handleLoadMore = () => {
@@ -529,6 +530,7 @@ export default function UsersPage() {
                 parkingSlots={parkingSlots}
                 onSuccess={() => {
                     loadData();
+                    fetchSyncMap();
                     setIsFormOpen(false);
                     setSelectedUser(null);
                 }}

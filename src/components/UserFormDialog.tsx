@@ -49,7 +49,7 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { createUser, updateUser } from "@/app/actions/users";
 import { addDevicePlate } from "@/app/actions/devices";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 
 type UserWithRelations = User & {
     unit: Unit | null;
@@ -89,6 +89,7 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
     const [pinValue, setPinValue] = useState(user?.credentials?.find(c => c.type === 'PIN')?.value || "");
     const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
     const [selectedDeviceIds, setSelectedDeviceIds] = useState<string[]>([]);
+    const [deviceSyncStatuses, setDeviceSyncStatuses] = useState<Record<string, 'pending' | 'syncing' | 'success' | 'error'>>({});
     const [selectedUnitId, setSelectedUnitId] = useState<string>("none");
     const [activeTab, setActiveTab] = useState("general");
     const [syncStatus, setSyncStatus] = useState<{ total: number, current: number, currentName: string } | null>(null);
@@ -114,6 +115,7 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
             setSelectedGroupIds(user?.accessGroups?.map(g => g.id) || []);
             setSelectedUnitId(user?.unitId || "none");
             setSelectedDeviceIds([]); // Reset on open
+            setDeviceSyncStatuses({});
         }
     }, [open, user]);
 
@@ -145,12 +147,6 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
             setTimeout(() => alert("El Nombre Completo es obligatorio."), 10);
             return;
         }
-        // Phone is required.
-        if (!phone || !phone.trim()) {
-            setActiveTab("general");
-            setTimeout(() => alert("El Teléfono es obligatorio."), 10);
-            return;
-        }
 
         setIsSubmitting(true);
 
@@ -180,31 +176,52 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
             }
 
             // --- LPR MANUAL SYNC PROCESS ---
-            const syncDeviceIds = formData.getAll("syncDeviceId") as string[];
+            const allSyncIds = formData.getAll("syncDeviceId") as string[];
+            const syncDeviceIds = Array.from(new Set(allSyncIds)); // Deduplicate
             const plate = formData.get("plate") as string;
 
             if (plate && plate.trim() !== "" && syncDeviceIds.length > 0) {
+                console.log(`[LPR Sync] Starting sync for ${plate} to ${syncDeviceIds.length} devices...`, syncDeviceIds);
                 setActiveTab("sync");
                 setSyncStatus({ total: syncDeviceIds.length, current: 0, currentName: "" });
+
+                const initials: Record<string, 'pending'> = {};
+                syncDeviceIds.forEach(id => initials[id] = 'pending');
+                setDeviceSyncStatuses(initials as any);
 
                 for (let i = 0; i < syncDeviceIds.length; i++) {
                     const devId = syncDeviceIds[i];
                     const device = devices.find(d => d.id === devId);
+
+                    console.log(`[LPR Sync] Processing ${i + 1}/${syncDeviceIds.length}: ${device?.name || devId}`);
+
                     setSyncStatus({
                         total: syncDeviceIds.length,
                         current: i,
                         currentName: device?.name || "Equipo"
                     });
 
+                    setDeviceSyncStatuses(prev => ({ ...prev, [devId]: 'syncing' }));
+
                     try {
-                        await addDevicePlate(devId, plate.toUpperCase().trim());
+                        const res = await addDevicePlate(devId, plate.toUpperCase().trim());
+                        console.log(`[LPR Sync] Result for ${device?.name || devId}:`, res);
+
+                        if (res.success) {
+                            setDeviceSyncStatuses(prev => ({ ...prev, [devId]: 'success' }));
+                        } else {
+                            setDeviceSyncStatuses(prev => ({ ...prev, [devId]: 'error' }));
+                        }
+                        // Small pause to allow the UI to show the state and avoid saturating the server
+                        await new Promise(resolve => setTimeout(resolve, 400));
                     } catch (err) {
                         console.error(`Sync error for ${device?.name}:`, err);
+                        setDeviceSyncStatuses(prev => ({ ...prev, [devId]: 'error' }));
                     }
                 }
                 setSyncStatus({ total: syncDeviceIds.length, current: syncDeviceIds.length, currentName: "Sincronización Finalizada" });
                 // Short delay to show completion
-                await new Promise(resolve => setTimeout(resolve, 800));
+                await new Promise(resolve => setTimeout(resolve, 1000));
             }
 
             onOpenChange(false);
@@ -246,7 +263,7 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
                                         <TabsTrigger value="credentials" className="text-[10px] font-black uppercase tracking-wider data-[state=active]:bg-neutral-800 data-[state=active]:text-white text-neutral-500">
                                             Credenciales
                                         </TabsTrigger>
-                                        <TabsTrigger value="sync" disabled={!isEdit} className="text-[10px] font-black uppercase tracking-wider data-[state=active]:bg-neutral-800 data-[state=active]:text-white text-neutral-500">
+                                        <TabsTrigger value="sync" className="text-[10px] font-black uppercase tracking-wider data-[state=active]:bg-neutral-800 data-[state=active]:text-white text-neutral-500">
                                             Sincronización
                                         </TabsTrigger>
                                     </TabsList>
@@ -282,9 +299,8 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
                                                     <Input
                                                         name="phone"
                                                         type="tel"
-                                                        defaultValue={user?.phone}
+                                                        defaultValue={user?.phone || ""}
                                                         placeholder="+54 9 11 ..."
-                                                        required
                                                         className="bg-neutral-900 border-neutral-800 focus:border-blue-500/50 h-8 rounded-lg text-xs transition-all"
                                                     />
                                                 </div>
@@ -522,19 +538,19 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
                                                 <Server size={12} /> Equipos con Acceso (por Grupos)
                                             </div>
                                             <div className="bg-neutral-900/50 rounded-lg p-3 border border-white/5">
-                                                {(user?.accessGroups?.length ?? 0) > 0 ? (
+                                                {selectedGroupIds.length > 0 ? (
                                                     <div className="space-y-2">
                                                         <p className="text-[9px] text-neutral-500 font-bold uppercase">Dispositivos con acceso Permitido:</p>
                                                         <div className="flex flex-wrap gap-2">
-                                                            {user!.accessGroups.flatMap(g => (g as any).devices || []).length > 0 ? (
-                                                                user!.accessGroups.flatMap(g => (g as any).devices || []).map((dev: any, i: number) => (
+                                                            {groups.filter(g => selectedGroupIds.includes(g.id)).flatMap(g => (g as any).devices || []).length > 0 ? (
+                                                                groups.filter(g => selectedGroupIds.includes(g.id)).flatMap(g => (g as any).devices || []).map((dev: any, i: number) => (
                                                                     <div key={i} className="flex items-center gap-2 px-2 py-1 bg-blue-500/5 border border-blue-500/10 rounded text-[9px] text-blue-400">
                                                                         <div className="w-1 h-1 rounded-full bg-blue-500 animate-pulse" />
                                                                         {dev.name} ({dev.ip})
                                                                     </div>
                                                                 ))
                                                             ) : (
-                                                                <span className="text-[9px] text-neutral-600 italic">No hay equipos vinculados a los grupos de este usuario.</span>
+                                                                <span className="text-[9px] text-neutral-600 italic">No hay equipos vinculados a los grupos seleccionados.</span>
                                                             )}
                                                         </div>
                                                     </div>
@@ -574,14 +590,32 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
                                                                         "p-2 rounded-lg",
                                                                         isSelected ? "bg-emerald-500/20 text-emerald-400" : "bg-neutral-800 text-neutral-500"
                                                                     )}>
-                                                                        <Camera size={14} />
+                                                                        {deviceSyncStatuses[device.id] === 'syncing' ? (
+                                                                            <Loader2 size={14} className="animate-spin" />
+                                                                        ) : deviceSyncStatuses[device.id] === 'error' ? (
+                                                                            <AlertCircle size={14} className="text-red-500" />
+                                                                        ) : deviceSyncStatuses[device.id] === 'success' ? (
+                                                                            <CheckCircle2 size={14} className="text-emerald-500" />
+                                                                        ) : (
+                                                                            <Camera size={14} />
+                                                                        )}
                                                                     </div>
                                                                     <div>
-                                                                        <p className="text-[11px] font-black text-white uppercase tracking-tight">{device.name}</p>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <p className="text-[11px] font-black text-white uppercase tracking-tight">{device.name}</p>
+                                                                            {deviceSyncStatuses[device.id] === 'success' && (
+                                                                                <span className="text-[7px] bg-emerald-500/10 text-emerald-500 px-1 py-0 rounded uppercase font-bold">OK</span>
+                                                                            )}
+                                                                            {deviceSyncStatuses[device.id] === 'error' && (
+                                                                                <span className="text-[7px] bg-red-500/10 text-red-500 px-1 py-0 rounded uppercase font-bold">Error</span>
+                                                                            )}
+                                                                        </div>
                                                                         <p className="text-[10px] font-mono text-neutral-500">{device.ip}</p>
                                                                     </div>
                                                                 </div>
-                                                                {isSelected && <Check size={16} className="text-emerald-500" />}
+                                                                {isSelected && !deviceSyncStatuses[device.id] && <Check size={16} className="text-emerald-500" />}
+                                                                {deviceSyncStatuses[device.id] === 'success' && <CheckCircle2 size={16} className="text-emerald-500" />}
+                                                                {deviceSyncStatuses[device.id] === 'error' && <AlertCircle size={16} className="text-red-500" />}
                                                             </div>
                                                         );
                                                     })

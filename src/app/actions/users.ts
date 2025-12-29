@@ -52,12 +52,12 @@ export async function createUser(formData: FormData) {
 
     const apartment = formData.get("apartment") as string;
     const parkingSlotId = formData.get("parkingSlotId") as string;
-    const syncDeviceIds = formData.getAll("syncDeviceId") as string[];
+
 
     const userPayload: any = {
         name,
         email,
-        phone,
+        phone: phone || null,
         role,
         apartment: apartment || null,
         parkingSlotId: (parkingSlotId && parkingSlotId !== "none") ? parkingSlotId : null,
@@ -136,12 +136,12 @@ export async function updateUser(id: string, formData: FormData) {
 
     const apartment = formData.get("apartment") as string;
     const parkingSlotId = formData.get("parkingSlotId") as string;
-    const syncDeviceIds = formData.getAll("syncDeviceId") as string[];
+
 
     const userPayload: any = {
         name,
         email,
-        phone,
+        phone: phone || null,
         role,
         apartment: apartment || null,
         parkingSlotId: (parkingSlotId && parkingSlotId !== "none") ? parkingSlotId : null,

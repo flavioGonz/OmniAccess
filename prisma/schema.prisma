@@ -72,7 +72,7 @@ model User {
   id            String        @id @default(cuid())
   name          String
   email         String?
-  phone         String
+  phone         String?
   dni           String?       // Documento de identidad (DNI/CEDULA)
   cara          String?       // Foto para lectores faciales
   unitId        String?
