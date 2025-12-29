@@ -27,11 +27,14 @@ async function importUsers() {
             let existing = await prisma.user.findFirst({
                 where: {
                     OR: [
-                        { email: user.email },
-                        { dni: user.dni }
-                    ]
+                        user.email ? { email: user.email } : undefined,
+                        user.dni ? { dni: user.dni } : undefined
+                    ].filter(Boolean) as any
                 },
-                include: { vehicles: true }
+                include: {
+                    vehicles: true,
+                    credentials: true
+                }
             });
 
             // Clean data for processing
@@ -42,14 +45,12 @@ async function importUsers() {
             if (userData.email === "") userData.email = null;
 
             if (existing) {
-                console.log(`  [UPDATE] User ${user.name} exists. Checking vehicles...`);
+                console.log(`  [UPDATE] User ${user.name} exists. Checking vehicles & credentials...`);
 
                 // Add missing vehicles
                 if (vehicles && vehicles.length > 0) {
                     for (const v of vehicles) {
-                        // Check if user already has this plate
                         const hasPlate = existing.vehicles.some((ev: any) => ev.plate === v.plate);
-
                         if (!hasPlate) {
                             try {
                                 await prisma.vehicle.create({
@@ -71,6 +72,31 @@ async function importUsers() {
                     }
                 }
 
+                // Add missing credentials
+                if (credentials && credentials.length > 0) {
+                    for (const c of credentials) {
+                        const credentialValue = c.value || c.code; // Fallback if name is different
+                        if (!credentialValue) continue;
+
+                        const hasCred = existing.credentials.some((ec: any) => ec.value === credentialValue);
+                        if (!hasCred) {
+                            try {
+                                await prisma.credential.create({
+                                    data: {
+                                        type: c.type,
+                                        value: credentialValue,
+                                        notes: c.notes || `Migrated ${c.type}`,
+                                        userId: existing.id
+                                    }
+                                });
+                                console.log(`     + Added credential ${credentialValue} to ${user.name}`);
+                            } catch (err) {
+                                console.error(`     ! Failed to add credential:`, err);
+                            }
+                        }
+                    }
+                }
+
             } else {
                 console.log(`  [CREATE] Creating new user: ${user.name}`);
 
@@ -80,26 +106,30 @@ async function importUsers() {
                             ...userData,
                             // Create vehicles
                             vehicles: {
-                                create: vehicles ? vehicles.map((v: any) => ({
+                                create: (vehicles || []).map((v: any) => ({
                                     plate: v.plate,
                                     brand: v.brand,
                                     model: v.model,
                                     color: v.color,
                                     type: v.type,
-                                    // photos optional
-                                })) : []
+                                }))
                             },
                             // Create credentials
                             credentials: {
-                                create: credentials ? credentials.map((c: any) => ({
-                                    type: c.type,
-                                    code: c.code,
-                                    status: c.status,
-                                    facilityCode: c.facilityCode
-                                })) : []
+                                create: (credentials || []).map((c: any) => {
+                                    const val = c.value || c.code || (c.type === 'PLATE' ? vehicles?.[0]?.plate : undefined);
+                                    if (!val) {
+                                        // If still no value, we mock it to avoid the 'value missing' error 
+                                        // but ideally the export should have it.
+                                        return null;
+                                    }
+                                    return {
+                                        type: c.type,
+                                        value: val,
+                                        notes: c.notes || `Imported ${c.type}`
+                                    };
+                                }).filter(Boolean) as any
                             }
-                            // We are NOT linking accessGroups by default to avoid ID conflicts, 
-                            // unless you want to match by name.
                         }
                     });
                     newRecords++;
@@ -110,7 +140,7 @@ async function importUsers() {
         }
 
         console.log("------------------------------------------------");
-        console.log(`Import completed. Created: ${newRecords}, Updated (Vehicles): ${updatedRecords}`);
+        console.log(`Import completed. Created: ${newRecords}, Updated: ${updatedRecords}`);
 
     } catch (e) {
         console.error("Error importing users:", e);
