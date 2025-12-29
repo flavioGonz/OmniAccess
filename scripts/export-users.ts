@@ -10,7 +10,7 @@ async function exportUsers() {
         console.log("Connecting to database...");
         const users = await prisma.user.findMany({
             include: {
-                groups: true,
+                accessGroups: true,
                 credentials: true,
                 vehicles: true,
             }

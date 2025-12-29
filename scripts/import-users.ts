@@ -42,9 +42,9 @@ async function importUsers() {
             // OR keep it if we are sure. Let's regenerate ID to be safe and avoid primary key collisions if prod isn't empty.
             // But we need to handle relations.
 
-            const { id, groups, credentials, vehicles, ...userData } = user;
+            const { id, accessGroups, credentials, vehicles, ...userData } = user;
 
-            // TODO: Groups handling. We need to find valid Group IDs in DB or create them.
+            // TODO: AccessGroups handling. We need to find valid Group IDs in DB or create them.
             // For now, let's skip group linking or try to find by name if Group model has unique name.
             // Assuming AccessGroup has 'name'.
 
