@@ -1,0 +1,107 @@
+/* =================================
+   ESTILOS PARA NOTIFICACIONES TOAST
+   ================================= */
+
+#toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 320px;
+    pointer-events: none;
+}
+
+.toast {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px;
+    border-radius: var(--border-radius-lg, 8px);
+    background-color: var(--surface-color, #34495e);
+    color: var(--text-color, #bdc3c7);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    border-left: 5px solid; /* Borde de color para indicar el tipo */
+    
+    /* Animación de entrada */
+    opacity: 0;
+    transform: translateX(100%);
+    animation: slideInFromRight 0.5s cubic-bezier(0.215, 0.610, 0.355, 1.000) forwards;
+}
+
+/* Animación de entrada */
+@keyframes slideInFromRight {
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Animación de salida (aplicada por JavaScript) */
+@keyframes slideOutToRight {
+    from {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(100%);
+        height: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        margin-top: 0;
+        margin-bottom: 0;
+        border: 0;
+    }
+}
+
+.toast.hiding {
+    animation: slideOutToRight 0.5s ease-in forwards;
+}
+
+
+/* Colores de borde y de icono */
+.toast.toast-success { border-color: #2ecc71; }
+.toast.toast-error { border-color: #e74c3c; }
+.toast.toast-info { border-color: #3498db; }
+.toast.toast-warning { border-color: var(--primary-yellow, #f1c40f); }
+
+.toast-icon {
+    font-size: 1.5rem;
+    flex-shrink: 0; /* Evita que el icono se encoja */
+}
+.toast-success .toast-icon { color: #2ecc71; }
+.toast-error .toast-icon { color: #e74c3c; }
+.toast-info .toast-icon { color: #3498db; }
+.toast-warning .toast-icon { color: var(--primary-yellow, #f1c40f); }
+
+.toast-message {
+    flex-grow: 1;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.toast-message strong {
+    display: block;
+    font-size: 1rem;
+    color: var(--heading-color, #ecf0f1);
+    margin-bottom: 3px;
+}
+
+.toast-close-btn {
+    background: none;
+    border: none;
+    color: var(--secondary-text-color, #7f8c8d);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    align-self: flex-start; /* Alinear arriba */
+    transition: color 0.2s;
+}
+
+.toast-close-btn:hover {
+    color: white;
+}

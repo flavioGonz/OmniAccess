@@ -1,0 +1,554 @@
+/* ==========================================================
+   DASHBOARD CSS v18.2 - "3-Column Command Center" (Final y Corregido)
+   ========================================================== */
+
+.command-dashboard {
+    display: grid;
+    grid-template-columns: 350px 1fr 350px;
+    grid-template-rows: auto 1fr;
+    gap: 1.5rem;
+    height: calc(100vh - 120px);
+}
+
+/* --- Fila Superior: KPIs --- */
+.kpi-header {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+}
+
+/* --- Área del Mapa (Centro) --- */
+.map-main-area {
+    grid-column: 2 / 3;
+    grid-row: 2 / 3;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    border: 1px solid var(--border-color);
+}
+#dashboard-map {
+    width: 100%;
+    height: 100%;
+    background-color: var(--surface-color);
+}
+
+/* --- Columnas Laterales de Feeds --- */
+.feed-column {
+    grid-row: 2 / 3;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+#entry-feed-column { grid-column: 1 / 2; }
+#exit-feed-column { grid-column: 3 / 4; }
+
+/* --- Responsive Layout --- */
+@media (max-width: 1400px) {
+    .command-dashboard { grid-template-columns: 1fr 1fr; grid-template-rows: auto auto 1fr; }
+    .map-main-area { grid-column: 1 / -1; grid-row: 2; min-height: 400px; }
+    .feed-column { grid-row: 3; }
+    #entry-feed-column { grid-column: 1 / 2; }
+    #exit-feed-column { grid-column: 2 / 3; }
+}
+@media (max-width: 992px) {
+    .command-dashboard { grid-template-columns: 1fr; height: auto; }
+     .map-main-area { grid-row: 2; }
+    .feed-column { grid-column: 1 / -1; }
+    #entry-feed-column { grid-row: 3; }
+    #exit-feed-column { grid-row: 4; }
+}
+@media (max-width: 768px) {
+    .kpi-header { grid-template-columns: 1fr 1fr; }
+}
+
+/* --- Estilo de Widgets --- */
+.widget { background-color: var(--surface-color); border-radius: 12px; border: 1px solid var(--border-color); display: flex; flex-direction: column; }
+.kpi-widget { padding: 1.25rem; }
+.feed-widget { flex-grow: 1; overflow: hidden; }
+.widget-header { padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--border-color-light); font-size: 0.9rem; font-weight: bold; color: var(--secondary-text-color); display: flex; align-items: center; gap: 0.5rem; }
+.widget-header i { color: var(--primary-yellow); }
+.kpi-content { display: flex; align-items: center; gap: 1rem; }
+.kpi-content .icon { font-size: 2rem; }
+.kpi-content .value { font-size: 2.2rem; font-weight: 700; }
+.kpi-content .label { font-size: 0.8rem; text-transform: uppercase; color: var(--secondary-text-color); }
+.icon-entries { color: #2ecc71; } .icon-exits { color: #3498db; }
+.icon-denied { color: #e74c3c; } .icon-gates { color: #8e44ad; }
+
+/* --- Feeds de Capturas --- */
+.capture-feed-container { height: 100%; overflow-y: auto; padding: 1rem; }
+.capture-feed-container::-webkit-scrollbar { width: 4px; }
+.capture-feed-container::-webkit-scrollbar-thumb { background: var(--primary-yellow); }
+
+@keyframes capture-fade-in { from { opacity: 0; } }
+.capture-card {
+    position: relative;
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    margin-bottom: 1rem;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    animation: capture-fade-in 0.5s ease-out;
+    background-size: cover;
+    background-position: center;
+    height: 150px;
+    display: flex;
+    align-items: flex-end;
+}
+.capture-card .overlay {
+    width: 100%;
+    padding: 0.75rem;
+    background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.6) 50%, transparent 100%);
+    color: #fff;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+}
+.capture-card .owner {
+    font-size: 0.85rem;
+    opacity: 0.8;
+    margin-top: 0.25rem;
+    color: #f0f0f0;
+}
+.capture-card .time-stamp {
+    font-size: 0.9rem;
+    font-weight: bold;
+    font-family: 'Roboto Mono', monospace;
+    background-color: rgba(0,0,0,0.5);
+    padding: 0.25rem 0.6rem;
+    border-radius: 20px;
+    white-space: nowrap;
+    color: #fff;
+}
+
+/* --- Estilo de Matrícula Mercosur --- */
+.styled-plate-mercosur {
+    display: inline-block;
+    background-color: #f5f5f5;
+    border: 1px solid #aaa;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    font-family: 'Roboto Condensed', sans-serif;
+    font-weight: 700;
+    vertical-align: middle;
+    overflow: hidden;
+}
+.styled-plate-mercosur .plate-header {
+    background-color: #0033a0;
+    color: white;
+    padding: 2px 8px;
+    font-size: 0.55em;
+    letter-spacing: 1px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    text-shadow: 1px 1px 1px rgba(0,0,0,0.3);
+}
+.styled-plate-mercosur .plate-number {
+    color: #1a1a1a;
+    padding: 5px 10px;
+    font-size: 1.25rem;
+    letter-spacing: 2.5px;
+    text-align: center;
+}
+
+/* --- Estilos para Marcadores de Cámara en el Mapa --- */
+.camera-marker-icon {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.camera-marker-icon .pulse-ring {
+    position: absolute;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    border: 3px solid rgba(46, 204, 113, 0.5); /* Verde por defecto */
+    opacity: 0;
+}
+.camera-marker-icon .icon-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #2ecc71; /* Verde online por defecto */
+    border: 2px solid #fff;
+    box-shadow: 0 0 5px rgba(0,0,0,0.5);
+    z-index: 1;
+}
+.camera-marker-icon.online .pulse-ring {
+    animation: pulse-animation 2s infinite cubic-bezier(0.2, 0.8, 0.7, 1);
+}
+@keyframes pulse-animation {
+    0% { transform: scale(0.5); opacity: 0; }
+    50% { opacity: 1; }
+    100% { transform: scale(1.5); opacity: 0; }
+}
+.camera-marker-icon.offline .icon-dot { background-color: #e74c3c; }
+.camera-marker-icon.offline .pulse-ring { border-color: rgba(231, 76, 60, 0.5); }
+.camera-marker-icon.pending .icon-dot { background-color: #f1c40f; }
+.leaflet-tooltip {
+    background-color: rgba(20, 25, 30, 0.9);
+    border: 1px solid rgba(138, 153, 170, 0.5);
+    color: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+
+/* ==========================================================
+   ESTILOS PARA TOOLTIPS DE EVENTOS EN VIVO EN EL MAPA
+   ========================================================== */
+
+.leaflet-marker-icon.camera-marker-icon {
+    position: relative; /* Permite posicionar el tooltip relativo al icono */
+}
+
+.event-tooltip {
+    position: absolute;
+    bottom: 35px; /* Posicionar justo encima del marcador */
+    left: 50%;
+    transform: translateX(-50%);
+    
+    background-color: var(--surface-color);
+    color: var(--heading-color);
+    padding: 0.5rem 1rem;
+    border-radius: var(--border-radius);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    border: 1px solid var(--border-color);
+    white-space: nowrap;
+    
+    /* Oculto por defecto y preparado para la animación */
+    opacity: 0;
+    transform: translate(-50%, 10px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    pointer-events: none; /* No se puede hacer clic en él */
+    z-index: 10;
+}
+
+/* Estado activo para mostrar el tooltip */
+.event-tooltip.active {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+.event-tooltip .styled-plate-mercosur {
+    transform: scale(0.9); /* Un poco más pequeño para que quepa bien */
+}
+
+
+.leaflet-tooltip-top:before { border-top-color: rgba(20, 25, 30, 0.9); }
+
+
+    /* Estilos para el Timeline Vertical */
+    .command-dashboard {
+        grid-template-rows: auto 1fr; /* Permitir que la fila principal crezca */
+    }
+    .feed-column {
+        display: flex;
+        flex-direction: column;
+    }
+    .widget.feed-widget {
+        flex-grow: 1; /* El widget ocupa todo el espacio de la columna */
+        display: flex;
+        flex-direction: column;
+    }
+    .widget-content.timeline-widget-content {
+        flex-grow: 1;
+        padding: 0 1rem; /* Quitar padding superior/inferior para que el timeline llegue a los bordes */
+        overflow-y: auto; /* Habilitar scroll en el contenedor del widget */
+    }
+    .vertical-timeline {
+        position: relative;
+        padding: 1.5rem 0;
+    }
+    .vertical-timeline::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 22px; /* Centrado con el icono */
+        height: 100%;
+        width: 4px;
+        background: var(--surface-color);
+        border-radius: 2px;
+    }
+    .timeline-v-item {
+        position: relative;
+        margin-bottom: 1.5rem;
+        padding-left: 60px;
+        animation: capture-fade-in 0.5s ease-out forwards;
+    }
+    .timeline-v-item:last-child {
+        margin-bottom: 0;
+    }
+    .timeline-v-icon {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 44px; height: 44px;
+        border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.2rem; color: white;
+        border: 4px solid var(--background-color);
+        z-index: 1;
+    }
+    .timeline-v-icon.entry { background-color: var(--decision-green); }
+    .timeline-v-icon.exit { background-color: var(--decision-red); }
+    
+    .timeline-v-content {
+        position: relative;
+        border-radius: var(--border-radius);
+        overflow: hidden;
+        height: 120px; /* Altura fija y más pequeña */
+        background-size: cover;
+        background-position: center;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end; /* Alinear todo el contenido hacia abajo */
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        border: 1px solid var(--border-color);
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .timeline-v-content:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+    }
+    .timeline-v-overlay {
+        width: 100%;
+        padding: 0.75rem;
+        background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.7) 50%, transparent 100%);
+        color: #fff;
+    }
+    .timeline-v-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .timeline-v-owner { font-size: 0.8em; opacity: 0.8; margin-top: 2px; }
+    .timeline-v-time { font-size: 0.8em; font-family: 'Roboto Mono', monospace; }
+
+    /* Estilos para el nuevo Popup de Detalles */
+    .details-popup-overlay {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.7); z-index: 2000;
+        display: none; /* Se muestra con JS */
+        align-items: center; justify-content: center;
+        backdrop-filter: blur(5px);
+    }
+    .details-popup {
+        width: 90%; max-width: 1000px; /* Un poco más ancho */
+        height: 80vh; max-height: 550px; /* Un poco más bajo y ancho */
+        background: var(--surface-color); border-radius: var(--border-radius);
+        border: 1px solid var(--border-color); box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+        display: grid; grid-template-columns: 1fr 1fr; /* Dividido en 50/50 */
+        animation: capture-fade-in 0.3s ease-out;
+    }
+    .popup-left-column {
+        position: relative;
+        background-size: cover;
+        background-position: center;
+        border-radius: var(--border-radius) 0 0 var(--border-radius);
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end; /* Alinear contenido del overlay abajo */
+        color: white;
+        padding: 0; /* Sin padding */
+    }
+    .popup-left-column::before { /* Viñeta oscura para legibilidad */
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: linear-gradient(to top, rgba(0,0,0,0.95) 20%, rgba(0,0,0,0.5) 60%, transparent 100%);
+        border-radius: var(--border-radius) 0 0 var(--border-radius);
+    }
+    .popup-overlay-content {
+        position: relative; /* Para estar sobre el ::before */
+        z-index: 2;
+        padding: 1.5rem;
+    }
+    .popup-overlay-content .styled-plate-mercosur { transform: scale(1.2); transform-origin: left; margin-bottom: 1rem; }
+    .popup-overlay-content h3 { font-size: 2rem; margin: 0 0 0.5rem 0; text-shadow: 2px 2px 4px rgba(0,0,0,0.7); }
+    .popup-overlay-content p { margin: 0.25rem 0; font-size: 1rem; color: #ddd; }
+    .popup-overlay-content .badge { margin-top: 1rem; font-size: 1em; }
+
+    .popup-right-column { background-color: #1a1a1a; border-radius: 0 var(--border-radius) var(--border-radius) 0; }
+    #popup-map { width: 100%; height: 100%; }
+
+    /* --- Estilos para el Popup de Detalles Mejorado --- */
+.popup-overlay-content h3 {
+    font-size: 2.2rem;
+    margin: 0 0 0.5rem 0;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.popup-overlay-content p {
+    margin: 0.25rem 0;
+    font-size: 1rem;
+    color: #e0e0e0;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.7);
+}
+.popup-overlay-content p i {
+    width: 20px; /* Alineación de iconos */
+}
+
+.popup-decision-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+    padding: 0.75rem 1.5rem;
+    border-radius: 50px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: white;
+    text-transform: uppercase;
+}
+.popup-decision-badge.permitido {
+    background-color: var(--decision-green);
+    box-shadow: 0 4px 15px rgba(40, 167, 69, 0.4);
+}
+.popup-decision-badge.denegado {
+    background-color: var(--decision-red);
+    box-shadow: 0 4px 15px rgba(220, 53, 69, 0.4);
+}
+
+
+/* --- ESTILOS PARA EL POPUP DE EVENTOS EN VIVO --- */
+.event-popup {
+    position: fixed;
+    bottom: -300px; /* Inicia fuera de la pantalla */
+    right: 20px;
+    width: 450px;
+    background-color: var(--surface-color);
+    border-radius: var(--border-radius);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--border-color);
+    z-index: 2000;
+    overflow: hidden;
+    transition: bottom 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Transición suave para la entrada/salida */
+}
+
+.event-popup.show {
+    bottom: 20px; /* Posición final cuando está visible */
+}
+
+.popup-content {
+    display: flex;
+    align-items: stretch;
+    position: relative;
+}
+
+.popup-image-container {
+    flex: 0 0 180px; /* Ancho fijo para la imagen */
+}
+
+.popup-image-container img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.popup-info-container {
+    flex-grow: 1;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+}
+
+.popup-details {
+    margin-top: 1rem;
+    font-size: 0.9em;
+}
+
+.popup-details p {
+    margin: 5px 0;
+    color: var(--secondary-text-color);
+}
+
+.popup-details p i {
+    color: var(--primary-yellow);
+    margin-right: 8px;
+    width: 16px;
+    text-align: center;
+}
+
+.popup-decision {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 10px;
+}
+
+.popup-decision.decision-green {
+    background: var(--decision-green);
+}
+
+.popup-decision.decision-red {
+    background: var(--decision-red);
+}
+
+/* Reducimos el tamaño de la matrícula en el popup */
+.popup-info-container .styled-plate-mercosur {
+    transform: scale(0.9);
+    transform-origin: left;
+}
+
+/* Estilos para las imágenes de fondo de los KPIs */
+    .kpi-widget {
+        position: relative;
+        overflow: hidden;
+        background-size: cover;
+        background-position: center;
+        transition: transform 0.3s ease;
+    }
+    .kpi-widget:hover {
+        transform: scale(1.05);
+    }
+    .kpi-widget .kpi-content {
+        position: relative;
+        z-index: 2;
+        background: rgba(0,0,0,0.5); /* Un overlay oscuro para mejorar la legibilidad */
+        padding: 1rem;
+        height: 100%;
+        border-radius: var(--border-radius);
+    }
+
+    /* Asignación de imágenes (debes tener estos archivos en /images/) */
+    .kpi-header .kpi-widget:nth-child(1) { background-image: url('images/widget-kpi-1.png'); }
+    .kpi-header .kpi-widget:nth-child(2) { background-image: url('images/widget-kpi-2.png'); }
+    .kpi-header .kpi-widget:nth-child(3) { background-image: url('images/widget-kpi-3.png'); }
+    .kpi-header .kpi-widget:nth-child(4) { background-image: url('images/widget-kpi-4.png'); }
+    .kpi-header .kpi-widget:nth-child(5) { background-image: url('images/widget-kpi-5.png'); }
+    .kpi-header .kpi-widget:nth-child(6) { background-image: url('images/widget-kpi-6.png'); }
+    .kpi-header .kpi-widget:nth-child(7) { background-image: url('images/widget-kpi-7.png'); }
+
+    /* Estilos para las flechas de navegación del popup */
+    .popup-nav-arrow {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        background-color: rgba(0, 0, 0, 0.5);
+        color: white;
+        border: none;
+        width: 40px;
+        height: 60px;
+        font-size: 1.5rem;
+        cursor: pointer;
+        z-index: 2010; /* Por encima del overlay del popup */
+        transition: background-color 0.2s;
+    }
+    .popup-nav-arrow:hover {
+        background-color: rgba(0, 0, 0, 0.8);
+    }
+    .popup-nav-arrow.prev {
+        left: 0;
+        border-radius: 0 8px 8px 0;
+    }
+    .popup-nav-arrow.next {
+        right: 0;
+        border-radius: 8px 0 0 8px;
+    }
+    /* ===== FIN: NUEVOS ESTILOS PARA WIDGETS Y POPUP ===== */

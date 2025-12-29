@@ -1,0 +1,60 @@
+/* =================================
+   ESTILOS PARA GESTIÓN DE USUARIOS
+   ================================= */
+
+/* --- Estilos de la tabla de usuarios --- */
+.data-section table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1.5rem;
+}
+
+.data-section th, .data-section td {
+    padding: 0.8rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.data-section thead th {
+    background-color: var(--surface-color-light);
+    font-weight: bold;
+    color: var(--heading-color);
+}
+
+.data-section tbody tr:hover {
+    background-color: var(--surface-color-light);
+}
+
+.data-section td .btn {
+    margin-left: 0.5rem;
+}
+
+
+/* --- Estilos para el Botón Flotante (FAB) --- */
+.fab-container {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    z-index: 997;
+}
+
+.fab-main {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background-color: var(--primary-yellow);
+    color: #111;
+    border: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    transition: transform 0.2s ease, background-color 0.2s;
+}
+
+.fab-main:hover {
+    transform: scale(1.1);
+    background-color: #ffdd4d;
+}

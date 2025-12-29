@@ -1,0 +1,253 @@
+enum VehicleType {
+  SEDAN
+  SUV
+  PICKUP
+  VAN
+  TRUCK
+  MOTORCYCLE
+}
+
+model Vehicle {
+  id          String       @id @default(cuid())
+  plate       String       @unique
+  type        VehicleType  @default(SEDAN)
+  brand       String?
+  model       String?
+  color       String?
+  imagePath   String?
+  notes       String?
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UnitType {
+  BARRIO
+  EDIFICIO
+  CASA
+}
+
+model Unit {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  type        UnitType @default(EDIFICIO)
+  number      String   @default("")
+  users       User[]
+  parkingSlots ParkingSlot[]
+  
+  // Extended Details
+  floors      Int?        // For EDIFICIO: Cantidad de niveles
+  lot         String?     // For BARRIO: Identificador de lote (letras o números)
+  houseNumber String?     // For BARRIO/CASA: Número de casa
+  address     String?
+  coordinates String?     // "lat,lng"
+  adminPhone  String?
+  deviceCount Int         @default(0)
+  deviceType  String?     // "LPR", "FACE", "BOTH"
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+enum UserRole {
+  RESIDENT
+  VISITOR
+  STAFF
+  ADMIN
+  PROVIDER
+  TEMPORARY_VISITOR
+}
+
+model User {
+  id            String        @id @default(cuid())
+  name          String
+  email         String?
+  phone         String
+  dni           String?       // Documento de identidad (DNI/CEDULA)
+  cara          String?       // Foto para lectores faciales
+  unitId        String?
+  unit          Unit?         @relation(fields: [unitId], references: [id])
+  apartment     String?       // Número de departamento o unidad funcional
+  
+  parkingSlotId String?       @unique
+  parkingSlot   ParkingSlot?  @relation(fields: [parkingSlotId], references: [id])
+
+  role          UserRole      @default(RESIDENT)
+  credentials   Credential[]
+  vehicles      Vehicle[]
+  accessGroups  AccessGroup[]
+  accessEvents  AccessEvent[]
+  
+  accessTags    String[]      @default([]) // New Access Tags field
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+enum CredentialType {
+  PLATE
+  FACE
+  TAG
+  PIN
+  FINGERPRINT
+}
+
+model Credential {
+  id        String         @id @default(cuid())
+  type      CredentialType
+  value     String
+  notes     String?        // Metadata: Fecha y equipo de origen
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+model AccessGroup {
+  id        String     @id @default(cuid())
+  name      String
+  users     User[]
+  devices   Device[]
+  schedules Schedule[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+model Schedule {
+  id            String      @id @default(cuid())
+  accessGroupId String
+  accessGroup   AccessGroup @relation(fields: [accessGroupId], references: [id], onDelete: Cascade)
+  days          DayOfWeek[]
+  startTime     String // HH:mm
+  endTime       String // HH:mm
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+
+enum DeviceType {
+  LPR_CAMERA
+  FACE_TERMINAL
+}
+
+enum DeviceBrand {
+  HIKVISION
+  AKUVOX
+  INTELBRAS
+  DAHUA
+  ZKTECO
+  AVICAM
+  MILESIGHT
+  UNIFI
+  UNIVIEW
+}
+
+enum AuthType {
+  NONE
+  BASIC
+  DIGEST
+}
+
+enum DoorStatus {
+  OPEN
+  CLOSED
+  UNKNOWN
+}
+
+enum DeviceDirection {
+  ENTRY
+  EXIT
+}
+
+model Device {
+  id           String          @id @default(cuid())
+  name         String
+  deviceType   DeviceType      @default(LPR_CAMERA)
+  brand        DeviceBrand
+  deviceModel  String?         // Specific device model (e.g., DS-2CD4A26FWD-IZS, R20A)
+  modelPhoto   String?         // Custom photo of the device
+  brandLogo    String?         // Custom logo for the manufacturer
+  ip           String
+  mac          String?
+  location     String?         // Added location field
+  direction    DeviceDirection @default(ENTRY)
+  doorStatus   DoorStatus      @default(UNKNOWN)
+  authType     AuthType        @default(BASIC)
+  username     String?
+  password     String?
+  accessGroups AccessGroup[]
+  accessEvents AccessEvent[]
+  lastOnlinePull DateTime?      // Server -> Device heartbeat
+  lastOnlinePush DateTime?      // Device -> Server heartbeat
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+enum AccessDecision {
+  GRANT
+  DENY
+}
+
+model AccessEvent {
+  id            String          @id @default(cuid())
+  timestamp     DateTime
+  accessType    CredentialType? // Enriquecemos con el tipo (PLATE, FACE, TAG)
+  credentialId  String?
+  userId        String?
+  user          User?           @relation(fields: [userId], references: [id])
+  deviceId      String?
+  device        Device?         @relation(fields: [deviceId], references: [id], onDelete: SetNull, map: "AccessEvent_deviceId_fkey_v2")
+  imagePath     String?
+  decision      AccessDecision
+  plateDetected String?
+  direction     DeviceDirection @default(ENTRY)
+  location      String?         // Added location field
+  snapshotPath  String?
+  plateNumber   String?
+  details       String?
+  createdAt     DateTime        @default(now())
+}
+
+model Setting {
+  key       String   @id @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ParkingSlot {
+  id          String   @id @default(cuid())
+  x           Float    @default(0)
+  y           Float    @default(0)
+  width       Float    @default(0)
+  height      Float    @default(0)
+  label       String
+  isOccupied  Boolean  @default(false)
+  points      String?  // JSON string of polygon points
+  unitId      String?
+  unit        Unit?    @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  user        User?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+

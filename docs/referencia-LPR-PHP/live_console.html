@@ -1,0 +1,192 @@
+<main class="console-container" style="padding-top: 1rem; height: calc(100vh - 80px);">
+    <div class="three-column-layout" style="height: 100%;">
+        <div class="event-column" id="entrada-column">
+            <h2>CÁMARA ENTRADA</h2>
+            <div id="carousel-entrada" class="carousel-container small-carousel">
+                <div class="carousel-inner"></div>
+                <button class="carousel-btn prev"><i class="fas fa-chevron-left"></i></button>
+                <button class="carousel-btn next"><i class="fas fa-chevron-right"></i></button>
+            </div>
+            <p class="no-events-message" id="no-capture-entrada">No hay capturas de entrada.</p>
+        </div>
+
+        <div class="center-column">
+            <h2>ÚLTIMA CAPTURA</h2>
+            <div id="latest-capture-carousel" class="carousel-container">
+                <div class="carousel-inner"></div>
+                <button class="carousel-btn prev" id="carousel-prev"><i class="fas fa-chevron-left"></i></button>
+                <button class="carousel-btn next" id="carousel-next"><i class="fas fa-chevron-right"></i></button>
+            </div>
+            <p class="no-events-message" id="no-latest-capture">Esperando la primera captura...</p>
+        </div>
+
+        <div class="event-column" id="salida-column">
+            <h2>CÁMARA SALIDA</h2>
+            <div id="carousel-salida" class="carousel-container small-carousel">
+                <div class="carousel-inner"></div>
+                <button class="carousel-btn prev"><i class="fas fa-chevron-left"></i></button>
+                <button class="carousel-btn next"><i class="fas fa-chevron-right"></i></button>
+            </div>
+            <p class="no-events-message" id="no-capture-salida">No hay capturas de salida.</p>
+        </div>
+    </div>
+</main>
+<style>
+    /* Estilos específicos para esta vista */
+    .console-container.full-height {
+        height: calc(100vh - 70px); /* Ocupa toda la altura menos el header */
+        padding: 1rem;
+    }
+    .three-column-layout.full-height {
+        height: 100%;
+    }
+    /*
+    .carousel-container.small-carousel .carousel-image {
+        max-height: 150px;
+        object-fit: cover;
+    }
+        */
+    .carousel-container.small-carousel .carousel-info-overlay {
+        font-size: 0.9em;
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // --- LÓGICA DE LA CONSOLA (SIN FILTROS) ---
+
+    // Referencias a los elementos del DOM
+    const latestCaptureCarousel = document.getElementById('latest-capture-carousel');
+    const carouselPrevBtn = document.getElementById('carousel-prev');
+    const carouselNextBtn = document.getElementById('carousel-next');
+    const noLatestCaptureMessage = document.getElementById('no-latest-capture');
+
+    const carouselEntrada = document.getElementById('carousel-entrada');
+    const carouselSalida = document.getElementById('carousel-salida');
+    const noCaptureEntrada = document.getElementById('no-capture-entrada');
+    const noCaptureSalida = document.getElementById('no-capture-salida');
+
+    // Variables
+    let allEvents = [];
+    let eventsEntradaData = [];
+    let eventsSalidaData = [];
+    let currentCarouselIndex = 0;
+    let currentCarouselIndexEntrada = 0;
+    let currentCarouselIndexSalida = 0;
+
+    // Cargar eventos
+    async function fetchEvents() {
+        try {
+            const response = await fetch('get_live_data.php');
+            if (!response.ok) { 
+                console.error('Error al cargar los datos en fetchEvents:', response.statusText); 
+                return; 
+            }
+            const data = await response.json();
+            allEvents = data.events;
+            // Opcional: Para depuración, puedes ver los nombres de dispositivos recibidos
+            // console.log("Dispositivos recibidos:", data.debug_device_names);
+            renderEvents();
+        } catch (error) { 
+            console.error('Error de conexión o parseo JSON en fetchEvents:', error); 
+        }
+    }
+
+    // Función para renderizar los eventos (simplificada sin filtros)
+    function renderEvents() {
+        eventsEntradaData = [];
+        eventsSalidaData = [];
+        allEvents.forEach(event => {
+            // Se usa toLowerCase() para una comparación insensible a mayúsculas/minúsculas
+            if (event.device_name.toLowerCase().includes('entrada')) {
+                eventsEntradaData.push(event);
+            } else if (event.device_name.toLowerCase().includes('salida')) {
+                eventsSalidaData.push(event);
+            }
+        });
+        renderAllCarousels();
+    }
+    
+    // Función para renderizar un carrusel individual
+    function renderSingleCarousel(container, eventsData, currentIndex, noCaptureMessageElement) {
+        const carouselInner = container.querySelector('.carousel-inner');
+        const prevBtn = container.querySelector('.carousel-btn.prev');
+        const nextBtn = container.querySelector('.carousel-btn.next');
+        
+        carouselInner.innerHTML = ''; // Limpia el contenido actual del carrusel
+
+        if (eventsData.length === 0) {
+            noCaptureMessageElement.style.display = 'block'; // Muestra el mensaje de no capturas
+            // Asegúrate de que el contenedor del carrusel no ocupe espacio si no hay eventos
+            container.style.display = 'none'; 
+            // Deshabilita los botones de navegación si no hay eventos
+            if (prevBtn) prevBtn.disabled = true;
+            if (nextBtn) nextBtn.disabled = true;
+            return 0; // Devuelve 0 o el índice inicial
+        }
+
+        container.style.display = 'block'; // Muestra el contenedor del carrusel
+        noCaptureMessageElement.style.display = 'none'; // Oculta el mensaje de no capturas
+
+        // Ajusta el índice si se sale de los límites
+        if (currentIndex >= eventsData.length) currentIndex = 0;
+        if (currentIndex < 0) currentIndex = eventsData.length - 1;
+
+        const event = eventsData[currentIndex];
+        const carouselItem = document.createElement('div');
+        carouselItem.classList.add('carousel-item', event.decision === 'acceso_permitido' ? 'decision-green-bg-color' : 'decision-red-bg-color');
+        
+        // La URL de la imagen debe ser relativa a la raíz del sitio web, ej. /LPR/plate_images/XYZ.jpg
+        // Asegúrate que el servidor web sirva correctamente el directorio "plate_images"
+        const imageUrl = event.image_path;
+
+        carouselItem.innerHTML = `
+            <img src="${imageUrl}" alt="Matrícula ${event.plate}" class="carousel-image">
+            <div class="carousel-info-overlay">
+                <span class="carousel-plate styled-plate">${event.plate}</span>
+                <div class="carousel-info-horizontal">
+                    <span class="carousel-decision ${event.decision === 'acceso_permitido' ? 'decision-green-text' : 'decision-red-text'}"><i class="fas ${event.decision === 'acceso_permitido' ? 'fa-check-circle' : 'fa-times-circle'}"></i> ${event.decision.replace('_', ' ').toUpperCase()}</span>
+                    <p class="carousel-owner-lot"><i class="fas fa-user"></i> ${event.owner_name}</p>
+                    <p class="carousel-camera"><i class="fas fa-camera"></i> ${event.device_name.toUpperCase()}</p>
+                    <span class="carousel-datetime"><i class="fas fa-clock"></i> ${event.datetime}</span> </div>
+            </div>`;
+        carouselInner.appendChild(carouselItem);
+        
+        // Habilita/deshabilita los botones de navegación según si hay más de un evento
+        if (prevBtn) prevBtn.disabled = eventsData.length <= 1;
+        if (nextBtn) nextBtn.disabled = eventsData.length <= 1;
+
+        return currentIndex; // Devuelve el índice actual ajustado
+    }
+
+    // Función principal para renderizar todos los carruseles
+    function renderAllCarousels() {
+        // El carrusel central ahora muestra todos los eventos sin filtrar
+        currentCarouselIndex = renderSingleCarousel(latestCaptureCarousel, allEvents, currentCarouselIndex, noLatestCaptureMessage);
+        // Filtra y renderiza los carruseles de entrada/salida
+        currentCarouselIndexEntrada = renderSingleCarousel(carouselEntrada, eventsEntradaData, currentCarouselIndexEntrada, noCaptureEntrada);
+        currentCarouselIndexSalida = renderSingleCarousel(carouselSalida, eventsSalidaData, currentCarouselIndexSalida, noCaptureSalida);
+    }
+    
+    // Event listeners para la navegación de carruseles
+    // Asegurarse de que los botones existan antes de añadir el listener
+    if (carouselPrevBtn) carouselPrevBtn.addEventListener('click', () => { currentCarouselIndex--; renderAllCarousels(); });
+    if (carouselNextBtn) carouselNextBtn.addEventListener('click', () => { currentCarouselIndex++; renderAllCarousels(); });
+    
+    // Los botones de los carruseles pequeños están dentro de sus contenedores
+    if (carouselEntrada) {
+        carouselEntrada.querySelector('.prev').addEventListener('click', () => { currentCarouselIndexEntrada--; renderAllCarousels(); });
+        carouselEntrada.querySelector('.next').addEventListener('click', () => { currentCarouselIndexEntrada++; renderAllCarousels(); });
+    }
+    if (carouselSalida) {
+        carouselSalida.querySelector('.prev').addEventListener('click', () => { currentCarouselIndexSalida--; renderAllCarousels(); });
+        carouselSalida.querySelector('.next').addEventListener('click', () => { currentCarouselIndexSalida++; renderAllCarousels(); });
+    }
+
+    // Carga inicial de eventos al cargar la página
+    fetchEvents();
+    // Actualiza los eventos cada 2 segundos para mantener la consola en vivo
+    setInterval(fetchEvents, 2000);
+});
+
+</script>

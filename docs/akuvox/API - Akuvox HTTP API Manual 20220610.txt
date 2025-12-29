@@ -1,0 +1,4064 @@
+HTTP API manual for Akuvox
+Intercom
+
+Content
+Introduction...................................................................................................................5
+HTTP API Release Notes...................................................................................5
+HTTP API Description.................................................................................................6
+HTTP API Request.............................................................................................. 6
+HTTP API Method........................................................................................6
+Method: GET................................................................................................6
+Method: POST............................................................................................. 7
+HTTP API Reply...................................................................................................7
+Positive Reply without Parameters...........................................................8
+Positive Reply with Parameters................................................................ 8
+Negative Reply.............................................................................................8
+HTTP API Configuration...........................................................................................10
+HTTP API Authentication Method................................................................... 11
+None............................................................................................................ 11
+Normal.........................................................................................................11
+WHITE LIST............................................................................................... 11
+Basic............................................................................................................ 11
+Digest.......................................................................................................... 11
+Token........................................................................................................... 11
+HTTP API Functions......................................................................................... 12
+Api system.................................................................................................. 14
+Api system info.......................................................................................... 15
+Api system status...................................................................................... 17
+Api system reboot..................................................................................... 17
+Api firmware param...................................................................................18
+Api firmware status................................................................................... 18
+Api firmware prepare................................................................................ 19
+Api firmware upload.................................................................................. 19
+Api firmware upgrade............................................................................... 20
+Api config get............................................................................................. 21
+Api config set............................................................................................. 24
+Api config export........................................................................................25
+Api config import........................................................................................25
+Api config reset_factory............................................................................26
+Api relay...................................................................................................... 26
+Api relay get............................................................................................... 27
+Api relay set............................................................................................... 28
+Api relay status.......................................................................................... 29
+
+Api relay...................................................................................................... 30
+Api relay trig............................................................................................... 30
+Api input...................................................................................................... 31
+Api input get............................................................................................... 32
+Api input set............................................................................................... 33
+Api input status.......................................................................................... 34
+Api publiccode........................................................................................... 35
+Api publiccode get.....................................................................................35
+Api publiccode set..................................................................................... 36
+Api privatekey............................................................................................ 37
+Api privatekey get......................................................................................37
+Api privatekey add.....................................................................................39
+Api privatekey set...................................................................................... 41
+Api privatekey del...................................................................................... 43
+Api privatekey clear...................................................................................45
+Api privatekey export................................................................................ 46
+Api privatekey import................................................................................ 46
+Api rfkey...................................................................................................... 47
+Api rfkey get............................................................................................... 48
+Api rfkey add.............................................................................................. 50
+Api rfkey set............................................................................................... 52
+Api rfkey del............................................................................................... 54
+Api rfkey clear............................................................................................ 56
+Api rfkey export..........................................................................................57
+Api rfkey import..........................................................................................57
+Api contact..................................................................................................58
+Api contact get........................................................................................... 58
+Api contact add.......................................................................................... 59
+Api contact set........................................................................................... 62
+Api contact del........................................................................................... 64
+Api contact clear........................................................................................ 66
+Api contact export..................................................................................... 67
+Api contact import..................................................................................... 68
+Api group.................................................................................................... 68
+Api group get..............................................................................................68
+Api group add.............................................................................................69
+Api group set.............................................................................................. 70
+Api group clear...........................................................................................71
+Api call status.............................................................................................72
+Api call dial................................................................................................. 72
+Api call hangup.......................................................................................... 73
+Api sip......................................................................................................... 74
+Api sip get...................................................................................................74
+Api sip set................................................................................................... 76
+
+Api sip status..............................................................................................77
+Api dialreplace........................................................................................... 78
+Api dialreplace get.....................................................................................79
+Api dialreplace add................................................................................... 79
+Api dialreplace set.....................................................................................80
+Api dialreplace del.....................................................................................81
+Api dialreplace clear................................................................................. 82
+Api dialreplace export............................................................................... 83
+Api dialreplace import............................................................................... 83
+Api log......................................................................................................... 84
+Api log get...................................................................................................84
+Api log set...................................................................................................85
+Api log export............................................................................................. 85
+Api log clear............................................................................................... 86
+Api calllog................................................................................................... 87
+Api calllog get.............................................................................................87
+Api calllog del.............................................................................................88
+Api calllog clear......................................................................................... 89
+Api calllog export....................................................................................... 90
+Api doorlog................................................................................................. 91
+Api doorlog get...........................................................................................91
+Api doorlog del...........................................................................................92
+Api doorlog clear....................................................................................... 92
+Api doorlog export..................................................................................... 93
+Api pcap status.......................................................................................... 93
+Api pcap start............................................................................................. 94
+Api pcap stop............................................................................................. 95
+Api pcap export..........................................................................................96
+Api User get............................................................................................... 96
+Api User add............................................................................................ 102
+Api User set............................................................................................. 102
+Api User del............................................................................................. 104
+Api User clear.......................................................................................... 105
+Api Schedule get..................................................................................... 105
+Api Schedule add....................................................................................108
+Api Schedule set......................................................................................110
+Api Schedule del......................................................................................111
+Api Schedule clear.................................................................................. 112
+
+Introduction
+HTTP API is an application interface which is designed for function control of
+selected Akuvox intercom via the HTTP. It enables Akuvox intercoms to be
+integrated easily with third party products, such as home automation, security
+and monitoring systems, etc.
+Note: This API document is only available for R29 series.
+
+HTTP API Release Notes
+Time
+2018.12.13
+
+Version
+V1.0
+
+Changes
+New feature:
+1. Add GET interface
+2. Add http standard authentication method:
+Basic and Digest
+3. Add system module: system, firmware,
+config, dialreplace, log, calllog, doorlog, pcap
+
+HTTP API Description
+Akuvox HTTP API is a standard protocol based on the HTTP GET/POST
+method. Any request can interact with the device via GET or POST. The format
+of the interactive message is JSON, and the file transfer mode uses the
+standard FORM upload mode.
+
+HTTP API Request
+All commands are sent via HTTP/HTTPS to the intercom address with
+absolute path completed with the /api prefix. Which protocol you choose
+depends on the current intercom settings in the Services / HTTP API section.
+The HTTP API functions are assigned to services with defined security levels
+including the TLS connection request (i.e. HTTPS).
+The absolute path includes the target system module (system, firmware, config,
+relay, etc.) and the action name (status, get, add, etc.). To be accepted by the
+intercom, a request has to include the method and absolute path specification
+followed by the Host header.
+Example:
+http://IP address/api/Target/Action?Param
+
+HTTP API Method
+Akuvox intercom applies the following two HTTP methods: GET and POST.
+The GET and POST methods are equivalent from the viewpoint of HTTP API
+but use different parameter transfers (refer to the next subsection).
+
+Method: GET
+To request intercom content download or general command execution via
+path.
+Example Request:
+
+http://192.168.1.163/api/relay/trig?mode=1&num=1&level=1&delay=5
+
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "trig",
+"message": "OK"
+
+Method: POST
+Post mode is the same as Get mode that requests intercom content download
+or general command execution, but Post moves the Query String parameters
+into the json for processing
+Example Request:
+
+http://Device-IP/api/
+{
+"target": "relay",
+"action": "trig",
+"data" : {
+"mode": 1,
+"num": 1,
+"level": 1,
+"delay": 5
+}
+}
+
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "trig",
+"message": "OK"
+
+HTTP API Reply
+Replies to requests are mostly in the JSON format, and Files exported
+
+according to requests are saved in file format without compression (e.g config
+is saved in .tgz file type , rfkey is saved in .xml file type, etc). The Content-Type
+header specifies the response format. Three basic reply types are defined for
+JSON.
+
+Positive Reply without Parameters
+This reply is sent in case a request has been executed successfully for
+functions that do not return any parameters. This reply is always combined
+with the HTTP status code 200OK.
+{
+
+}
+
+"retcode": 0,
+"action": "xxxx",
+"message": "OK"
+
+Positive Reply with Parameters
+This reply is sent in case a request has been executed successfully for
+functions that return supplementary parameters. The result item includes other
+reply parameters related to the function. This reply is always combined with
+the HTTP status code 200OK.
+{
+
+}
+
+"retcode": 0,
+"action": "xxxxx",
+"message": "OK",
+"data":
+{
+......
+}
+
+Negative Reply
+This reply is sent in case an error occurs during request processing. The reply
+specifies the error code (code), text description (description) and error details if
+necessary (param). The reply can be combined with the HTTP status code 200
+OK or 401 Unauthorized Required.
+
+{
+
+}
+
+"retcode": -1,
+"action": "unknow",
+"message": "unsupport action"
+
+HTTP API Configuration
+HTTP API configurations for Akuvox intercom are defined via web interface
+PATH: Intercom->HTTP API to disable/enable a service and select the user
+authentication method
+
+Item
+
+HTTP API
+Auth Mode
+
+User Name
+Password
+IP01
+IP02
+IP03
+IP04
+IP05
+
+Description
+
+Disabled: system allways return HTTP 403 Forbidden status
+Enabled：enable http api
+None: no authentication method
+Normal: (reserved)
+WhiteList: Whitelist model
+Basic: http Basic standard authentication method
+Digets: http Digets standard authentication method
+Token : (reserved)
+UserName: admin (default), used in basic and digest auth
+mode
+Password: httpapi (default), used in basic and digest auth
+mode
+White List IP
+White List IP
+White List IP
+White List IP
+White List IP
+
+HTTP API Authentication Method
+None
+No authentication is required for http api, it is only used by demo testing.
+
+Normal
+(Reserved)
+
+WHITE LIST
+The whitelist is suitable for operation in the LAN, by judging the IP address of
+the visitor to confirm whether to allow access to the HTTP API.
+
+Basic
+In Authorization field of Http request header, use Base64 encode method for
+the information of username and password.
+For more detailed information, please refer to RFC2671
+
+Digest
+Password encryption method, only supports MD5.
+In Authorization field of Http request header:
+WWW-Authenticate: Digest realm="HTTPAPI",qop="auth,auth-int",nonce="xx",
+opaque="xx"
+For more detailed information, please refer to RFC2671
+
+Token
+(Reserved)
+
+HTTP API Functions
+The table below provides a list of all available HTTP API functions including:
+ the HTTP request absolute path
+ the supported HTTP methods
+Absolute path
+/api/system/info
+/api/system/status
+/api/system/reboot
+/api/firmware/status
+/api/firmware/prepare
+/api/firmware/upload
+/api/firmware/upgrade
+/api/config/get
+/api/config/set
+/api/config/export
+/api/config/import
+/api/config/reset_factory
+/api/relay/get
+/api/relay/set
+/api/relay/status
+/api/relay/trig
+/api/input/get
+/api/input/set
+/api/input/status
+/api/publiccode/get
+/api/publiccode/set
+/api/privatekey/get
+/api/privatekey/add
+/api/privatekey/set
+/api/privatekey/del
+/api/privatekey/clear
+/api/privatekey/export
+/api/privatekey/import
+/api/rfkey/get
+/api/rfkey/add
+/api/rfkey/set
+/api/rfkey/del
+/api/rfkey/clear
+/api/rfkey/export
+/api/rfkey/import
+
+API Method
+GET/POST
+GET/POST
+GET/POST
+GET/POST
+GET/POST
+POST
+GET/POST
+GET/POST
+POST
+GET/POST
+POST
+GET/POST
+GET/POST
+POST
+GET/POST
+GET/POST
+GET/POST
+POST
+GET/POST
+GET/POST
+POST
+GET/POST
+POST
+POST
+POST
+GET/POST
+GET/POST
+POST
+GET/POST
+POST
+POST
+POST
+GET/POST
+GET/POST
+POST
+
+/api/contact/get
+/api/contact/add
+/api/contact/set
+/api/contact/del
+/api/contact/clear
+/api/contact/export
+/api/contact/import
+/api/group/get
+/api/group/add
+/api/group/set
+/api/group/clear
+/api/call/status
+/api/call/dial
+/api/call/hangup
+/api/sip/get
+/api/sip/set
+/api/sip/status
+/api/dialreplace/get
+/api/dialreplace/add
+/api/dialreplace/set
+/api/dialreplace/del
+/api/dialreplace/clear
+/api/dialreplace/export
+/api/dialreplace/import
+/api/log/get
+/api/log/set
+/api/log/export
+/api/log/clear
+/api/calllog/get
+/api/calllog/del
+/api/calllog/clear
+/api/calllog/export
+/api/doorlog/get
+/api/doorlog/del
+/api/doorlog/clear
+/api/doorlog/export
+/api/pcap/status
+/api/pcap/start
+/api/pcap/stop
+/api/pcap/export
+
+GET/POST
+POST
+POST
+POST
+GET/POST
+GET/POST
+POST
+GET/POST
+POST
+POST
+GET/POST
+GET/POST
+GET/POST
+GET/POST
+GET/POST
+POST
+GET/POST
+GET/POST
+POST
+POST
+POST
+GET/POST
+GET/POST
+GET/POST
+GET/POST
+POST
+GET/POST
+GET/POST
+GET/POST
+POST
+GET/POST
+GET/POST
+GET/POST
+POST
+GET/POST
+GET/POST
+GET/POST
+GET/POST
+GET/POST
+GET/POST
+
+/api/user/get
+/api/user/add
+/api/user/set
+/api/user/del
+/api/user/clear
+/api/schedule/get
+/api/schedule/add
+/api/schedule/set
+/api/schedule/del
+/api/schedule/clear
+
+GET
+POST
+POST
+POST
+GET
+GET/POST
+POST
+POST
+POST
+GET/POST
+
+Api system
+Section
+
+Status
+
+Param
+Model
+MAC
+FirmwareVersion
+HardwareVersion
+PortType
+LinkStatus
+
+Lan
+
+Account1
+
+IPAddress
+SubnetMask
+Gateway
+DNS1
+DNS2
+UserName
+SipServer
+Status
+
+Description
+ProductModel
+R29S
+MAC address
+Firmware version:
+29.1.1.250
+Hardware version
+29.3.0
+0: DHCP
+1: Static
+0: Disconnect
+1: Connected
+2: IP Conflict
+192.168.1.78
+255.255.255.0
+192.168.1.1
+192.168.1.1
+192.168.1.1
+114
+192.168.1.115
+-1: unknow
+0: disable
+1: registering
+2: registed
+3: registe failed
+
+Account2
+
+UserName
+SipServer
+Status
+
+115
+192.168.1.115
+-1: unknow
+0: disable
+1: registering
+2: registed
+3: registe failed
+
+Api system info
+The GET or POST method can be used for this function.
+The reply is in the application/json format and includes the following
+information on the device:
+Example Request:
+
+GET: /api/system/info
+POST:
+{
+"target": "system",
+"action": "info"
+}
+Example Return:
+
+{
+
+}
+
+"action": "info",
+"data":
+{
+"Account1": {
+"SipServer": "192.168.1.115",
+"Status": "2",
+"UserName": "141"
+},
+"Account2": {
+"SipServer": "192.168.1.115",
+"Status": "2",
+"UserName": "142"
+},
+"Lan": {
+"DNS1": "192.168.1.1",
+"DNS2": "",
+"Gateway": "192.168.1.1",
+"IPAddress": "192.168.1.78",
+"LinkStatus": "1",
+"PortType": "0",
+"SubnetMask": "255.255.255.0"
+},
+"Status": {
+"FirmwareVersion": "29.31.101.624",
+"HardwareVersion": "29.3.0",
+"MAC": "0C:11:05:07:8B:71",
+"Model": "R29S"
+}
+},
+"message": "OK",
+"retcode": 0
+
+Api system status
+The GET or POST method can be used for this function.
+Param
+SystemTime
+UpTime
+Example Request:
+
+GET: /api/system/status
+POST:
+{
+"target": "system",
+"action": "status"
+}
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "status",
+"message": "OK",
+"data": {
+"SystemTime": 1544336389,
+"UpTime": 137
+}
+
+Api system reboot
+Example Request:
+
+GET: /api/system/reboot
+POST:
+{
+"target": "system",
+"action": "reboot"
+}
+
+Description
+Unix time
+Device online time
+
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "reboot",
+"message": "OK",
+
+Api firmware param
+Param
+md5
+
+silent
+
+Description
+string, optional
+md5sum of the firmware
+only use in action “upgraer”
+silent
+0 - ui will display upgrade process
+1 - upload in backgroup
+only use in action “upload”
+default: 0
+
+Api firmware status
+The GET or POST method can be used for this function.
+Example Request:
+
+GET: /api/firmware/status
+POST:
+{
+"target": "firmware",
+"action": "status",
+}
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "status",
+"message": "OK",
+"data": {
+"FirmwareVersion": "29.31.101.624",
+"HardwareVersion": "29.3.0",
+"MAC": "0C:11:05:07:8B:71",
+"Model": "R29S"
+}
+
+Api firmware prepare
+Tell device into upgrade mode, this must do before upload and upgrade action
+The GET or POST method can be used for this function.
+Example Request:
+
+GET: /api/firmware/prepare
+POST:
+{
+"target": "firmware",
+"action": "prepare",
+}
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "prepare",
+"message": "OK"
+
+Api firmware upload
+Upload firmware, Only POST method can be used for this function.
+PATH: /api/firmware/upload
+
+PARAM: /api/firmware/upload?silent=0
+
+Api firmware upgrade
+The GET or POST method can be used for this function.
+Example Request(without MD5 param):
+GET: /api/firmware/upgrade
+POST:
+{
+"target": "firmware",
+"action": "upgrade",
+}
+Example Return(with MD5 param):
+{
+
+}
+
+"retcode": 0,
+"action": "upgrade",
+"message": "OK"
+
+Example Request(with MD5 param):
+
+GET: /api/firmware/upgrade?md5=25e317773f308e446cc84c503a6d1f85
+
+POST:
+{
+"target": "firmware",
+"action": "upgrade",
+"data": {
+"md5" : "25e317773f308e446cc84c503a6d1f85"
+}
+}
+
+Example Return(with MD5 param):
+{
+
+}
+
+"retcode": -1,
+"action": "upgrade",
+"message": "Wrong MD5",
+"data": {
+"md5": "25e317773f308e446cc84c503a6d1f83",
+"md5_calc": "25e317773f308e446cc84c503a6d1f85"
+}
+
+Api config get
+Note: The configuration for CardSetting、PrivateKey、DialReplace、Contact、
+Group are not included in this section.
+The GET or POST method can be used for this function.
+To get all configurations.
+Example Request 1:
+
+GET: /api/config/get
+
+POST:
+{
+"target": "config",
+"action": "get"
+}
+Example Return 1:
+
+{
+
+"retcode": 0,
+"action": "get",
+"message": "OK",
+"data": {
+"Config.Account1.ADVANCED.ShowMissedCall": "1",
+"Config.Account1.ANONYMOUS_CALL.Enable": "0",
+"Config.Account1.ANONYMOUS_CALL.OffCode": "",
+"Config.Account1.ANONYMOUS_CALL.OnCode": "",
+.......
+"Config.Account1.ANONYMOUS_CALL.PrivacyHeaderValue": "id",
+}，
+}
+
+To get the configurations for one section.
+Example Request 2:
+
+POST:
+{
+"target": "config",
+"action": "get",
+"data": {
+"filter": [
+"Config.DoorSetting.CLOUDSERVER"
+]
+}
+}
+
+Example Return 2:
+
+{
+
+"retcode": 0
+"action": "get",
+"message": "OK",
+"data": {
+"Config.DoorSetting.CLOUDSERVER.DeviceCommunity": "",
+"Config.DoorSetting.CLOUDSERVER.Enable": "0",
+"Config.DoorSetting.CLOUDSERVER.GatePort": "0",
+"Config.DoorSetting.CLOUDSERVER.GateServer": "",
+"Config.DoorSetting.CLOUDSERVER.OpenDoorLimit": "",
+"Config.DoorSetting.CLOUDSERVER.Port": "",
+"Config.DoorSetting.CLOUDSERVER.RpsEnable": "1",
+"Config.DoorSetting.CLOUDSERVER.RpsServer":
+"http://rps.akuvox.com:8080/redirect?mac=",
+"Config.DoorSetting.CLOUDSERVER.Server": "",
+"Config.DoorSetting.CLOUDSERVER.Token": "",
+"Config.DoorSetting.CLOUDSERVER.Type": "",
+"Config.DoorSetting.CLOUDSERVER.UploadPassword": "",
+"Config.DoorSetting.CLOUDSERVER.UploadUrl": "",
+"Config.DoorSetting.CLOUDSERVER.UploadUser": ""
+},
+，
+}
+
+To get the specified configuration.
+Example Request 3:
+
+POST:
+{
+"action": "get",
+"target": "config",
+"data": {
+"item": [
+"Config.DoorSetting.CLOUDSERVER.Enable",
+"Config.DoorSetting.CLOUDSERVER.RpsServer"
+]
+}
+}
+
+Example Return 3:
+
+{
+
+"retcode": 0
+"action": "get",
+"message": "OK",
+"data": {
+"Config.DoorSetting.CLOUDSERVER.Enable": "0",
+"Config.DoorSetting.CLOUDSERVER.RpsServer":
+"http://rps.akuvox.com:8080/redirect?mac="
+},
+}
+
+Api config set
+Only POST method can be used for this function.
+Example Request:
+
+POST:
+{
+"target": "config",
+"action": "set",
+"data": {
+"Config.DoorSetting.CLOUDSERVER.Enable": "0",
+"Config.DoorSetting.CLOUDSERVER.RpsServer":
+"192.168.1.163"
+}
+}
+
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "set",
+"message": "OK"
+
+Api config export
+To export the configuration, equivalent to operate via web interface path:
+Upgrader- > Advanced-> Config File->Export, and the exported configuration
+is encrypted which cannot be modified.
+The GET or POST method can be used for this function.
+Example Request:
+
+GET: /api/config/export
+POST:
+{
+"action": "export",
+"target": "config",
+"data": {
+}
+}
+Example Return:
+
+Config.tgz file type
+
+Api config import
+To import the configuration, equivalent to operate via web interface path:
+Upgrader-> Advanced-> Config File->Import, and only tgz file can be accepted.
+Note: Device will reboot after import the configuration successfully.
+Only POST method can be used for this function.
+
+Api config reset_factory
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/config/reset_factory
+POST:
+{
+"target": "config",
+"action": "reset_factory"
+}
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "reset_factory",
+"message": "OK"
+
+Api relay
+Params
+Config.DoorSetting.RELAY.TypeA
+Config.DoorSetting.RELAY.TypeB
+Config.DoorSetting.RELAY.TypeC
+Config.DoorSetting.RELAY.HoldDelayA
+Config.DoorSetting.RELAY.HoldDelayB
+Config.DoorSetting.RELAY.HoldDelayC
+Config.DoorSetting.RELAY.TriggerDelayA
+Config.DoorSetting.RELAY.TriggerDelayB
+Config.DoorSetting.RELAY.TriggerDelayC
+Config.DoorSetting.DTMF.Enable
+
+Description
+Relay Open Type
+0 - NC - COM Open
+1- NO -COM Open
+Relay Hold Delay 0 ~ 60 second
+
+Config.DoorSetting.DTMF.Code1
+
+one dtmf code
+
+Relay Trigger Delay 0 ~ 60 second
+Delay X second to trigger relay
+Config.DoorSetting.DTMF.Option
+n=1: 1 digit dtmf, refer to
+Config.DoorSetting.DTMF.CodeX
+n=2~4: 2~4 digits dtmf, refer to
+Config.DoorSetting.DTMF.MultiCodeX
+
+Config.DoorSetting.DTMF.Code2
+Config.DoorSetting.DTMF.Code3
+Config.DoorSetting.DTMF.MultiCode1
+Config.DoorSetting.DTMF.MultiCode2
+Config.DoorSetting.DTMF.MultiCode3
+
+2 ~ 4 digits dtmf code
+
+Api relay get
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/relay/get
+POST:
+{
+"target": "relay",
+"action": "get"
+}
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "get",
+"message": "OK",
+"data": {
+"Config.DoorSetting.RELAY.TypeA": "0",
+"Config.DoorSetting.RELAY.TypeB": "0",
+"Config.DoorSetting.RELAY.TypeC": "0",
+"Config.DoorSetting.RELAY.HoldDelayA": "5",
+"Config.DoorSetting.RELAY.HoldDelayB": "5",
+"Config.DoorSetting.RELAY.HoldDelayC": "5",
+"Config.DoorSetting.RELAY.TriggerDelayA": "0",
+"Config.DoorSetting.RELAY.TriggerDelayB": "0",
+"Config.DoorSetting.RELAY.TriggerDelayC": "0",
+"Config.DoorSetting.RELAY.NameA": "RelayA",
+"Config.DoorSetting.RELAY.NameB": "RelayB",
+"Config.DoorSetting.RELAY.NameC": "RelayC",
+"Config.DoorSetting.RELAY.HttpTrig": "0",
+"Config.DoorSetting.RELAY.UserName": "",
+"Config.DoorSetting.RELAY.Password": "",
+"Config.DoorSetting.DTMF.Enable": "1",
+"Config.DoorSetting.DTMF.Option": "0",
+"Config.DoorSetting.DTMF.Code1": "0",
+"Config.DoorSetting.DTMF.Code2": "1",
+"Config.DoorSetting.DTMF.Code3": "2",
+"Config.DoorSetting.DTMF.MultiCode1": "010",
+"Config.DoorSetting.DTMF.MultiCode2": "012",
+"Config.DoorSetting.DTMF.MultiCode3": "013"
+}
+
+Api relay set
+Only POST method can be used for this function.
+Example Request:
+
+POST:
+{
+"target": "relay",
+"action": "set",
+"data" : {
+"Config.DoorSetting.RELAY.HoldDelayA": "8"
+}
+}
+
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "set",
+"message": "OK"
+
+Api relay status
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/relay/status
+POST:
+{
+"target": "relay",
+"action": "status"
+}
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "status",
+"message": "OK",
+"data": {
+"RelayA": 0,
+"RelayB": 0,
+"RelayC": 0
+}
+
+Api relay
+Params
+mode
+num
+
+level
+delay
+
+Description
+0:Auto Close
+1: Manual
+1 Relay A
+2 Relay B
+3 Relay C
+0 NO - COM
+1 NC - COM
+0~65535(Second)
+
+Api relay trig
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/relay/trig?mode=1&num=1&level=1&delay=5
+
+POST:
+{
+"target": "relay",
+"action": "trig",
+"data" : {
+"mode": 1,
+"num": 1,
+"level": 1,
+"delay": 5
+}
+}
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "trig",
+"message": "OK"
+
+Api input
+Params
+Config.DoorSetting.INPUT.EnableA
+Config.DoorSetting.INPUT.EnableB
+Config.DoorSetting.INPUT.EnableC
+Config.DoorSetting.INPUT.OptionA
+Config.DoorSetting.INPUT.OptionB
+Config.DoorSetting.INPUT.OptionC
+Config.DoorSetting.INPUT.DelayA
+Config.DoorSetting.INPUT.DelayB
+Config.DoorSetting.INPUT.DelayC
+Config.DoorSetting.INPUT.RelayIdA
+Config.DoorSetting.INPUT.RelayIdB
+Config.DoorSetting.INPUT.RelayIdC
+Config.DoorSetting.INPUT.ActionUrlA
+Config.DoorSetting.INPUT.ActionUrlB
+Config.DoorSetting.INPUT.ActionUrlC
+Config.DoorSetting.INPUT.FtpEnableA
+
+Description
+Input Enable
+Trig Option:
+0 Low Trig
+1 High Trig
+Trig Delay 0 ~ 65536 second
+0: trig now
+1 ~ 65536: trig after X second
+Trig which relay id
+1 - Relay A
+2 - Relay B
+3 - Relay C
+Action URL
+More Action URL Param see Action
+URL document
+when input trig, send capture files to
+
+Config.DoorSetting.INPUT.FtpEnableA
+Config.DoorSetting.INPUT.FtpEnableA
+Config.DoorSetting.INPUT.HttpEnableA
+Config.DoorSetting.INPUT.HttpEnableB
+Config.DoorSetting.INPUT.HttpEnableC
+Config.DoorSetting.INPUT.SmtpEnableA
+Config.DoorSetting.INPUT.SmtpEnableB
+Config.DoorSetting.INPUT.SmtpEnableC
+Config.DoorSetting.INPUT.SipEnableA
+Config.DoorSetting.INPUT.SipEnableB
+Config.DoorSetting.INPUT.SipEnableC
+Config.DoorSetting.Action.CallNum
+Config.DoorSetting.Action.CallName
+
+ftp server.
+0 - Disable
+1 - Enable
+when input trig, send a http get requst
+with url
+0 - Disable
+1 - Enable
+when input trig, send capture files with
+smtp
+0 - Disable
+1 - Enable
+when input trig, start a sip call
+
+sip call num
+sip call remote display name
+
+Api input get
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/input/get
+POST:
+{
+"target": "input",
+"action": "get"
+}
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "get",
+"message": "OK",
+"data": {
+"Config.DoorSetting.INPUT.EnableA": "1",
+"Config.DoorSetting.INPUT.EnableB": "1",
+"Config.DoorSetting.INPUT.EnableC": "1",
+"Config.DoorSetting.INPUT.OptionA": "0",
+"Config.DoorSetting.INPUT.OptionB": "0",
+"Config.DoorSetting.INPUT.OptionC": "0",
+"Config.DoorSetting.INPUT.DelayA": "0",
+"Config.DoorSetting.INPUT.DelayB": "0",
+"Config.DoorSetting.INPUT.DelayC": "0",
+"Config.DoorSetting.INPUT.RelayIdA": "1",
+"Config.DoorSetting.INPUT.RelayIdB": "2",
+"Config.DoorSetting.INPUT.RelayIdC": "3",
+"Config.DoorSetting.INPUT.FtpEnableA": "0",
+"Config.DoorSetting.INPUT.FtpEnableB": "0",
+"Config.DoorSetting.INPUT.FtpEnableC": "0",
+"Config.DoorSetting.INPUT.HttpEnableA": "0",
+"Config.DoorSetting.INPUT.HttpEnableB": "0",
+"Config.DoorSetting.INPUT.HttpEnableC": "0",
+"Config.DoorSetting.INPUT.SipEnableA": "0",
+"Config.DoorSetting.INPUT.SipEnableB": "0",
+"Config.DoorSetting.INPUT.SipEnableC": "0",
+"Config.DoorSetting.INPUT.SmtpEnableA": "0",
+"Config.DoorSetting.INPUT.SmtpEnableB": "0",
+"Config.DoorSetting.INPUT.SmtpEnableC": "0",
+"Config.DoorSetting.INPUT.ActionUrlA": "",
+"Config.DoorSetting.INPUT.ActionUrlB": "",
+"Config.DoorSetting.INPUT.ActionUrlC": ""
+}
+
+Api input set
+Only POST method can be used for this function.
+Example Request:
+
+POST:
+{
+"target": "input",
+"action": "set",
+"data" : {
+"Config.DoorSetting.INPUT.EnableA": "0"
+}
+}
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "set",
+"message": "OK"
+
+Api input status
+Params
+InputA
+InputB
+InputC
+
+Description
+Door A GPIO Level
+Door B GPIO Level
+Door C GPIO Level
+
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/input/status
+POST:
+{
+"target": "input",
+"action": "status",
+}
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "status",
+"message": "OK",
+"data": {
+"InputA": 1,
+"InputB": 1,
+"InputC": 1
+}
+
+Api publiccode
+Params
+Config.DoorSetting.PASSWORD.PublicKeyEnable
+
+Config.DoorSetting.PASSWORD.PublicKey1
+Config.DoorSetting.PASSWORD.PublicKey2
+Config.DoorSetting.PASSWORD.PublicKey3
+Config.DoorSetting.PASSWORD.PublicKeyBitsLimit
+
+Description
+Enable Public Code
+0: Disable
+1: Enable
+Public Key 1
+Public Key 2
+Public Key 3
+0 - 8 bit
+1 - 4bit
+2 - 5bit
+3 - 6bit
+4 - 7bit
+
+Api publiccode get
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/publiccode/get
+POST:
+{
+"target": "publiccode",
+"action": "get",
+}
+
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "get",
+"message": "OK",
+"data": {
+"Config.DoorSetting.PASSWORD.PublicKeyEnable": "1",
+"Config.DoorSetting.PASSWORD.PublicKey1": "33333333",
+"Config.DoorSetting.PASSWORD.PublicKey2": "66666666",
+"Config.DoorSetting.PASSWORD.PublicKey3": "88888888",
+"Config.DoorSetting.PASSWORD.PublicKeyBitsLimit": "0"
+}
+
+Api publiccode set
+Only POST method can be used for this function.
+Example Request:
+POST:
+{
+"target": "publiccode",
+"action": "set",
+"data" : {
+"Config.DoorSetting.PASSWORD.PublicKeyEnable": "0"
+}
+}
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "set",
+"message": "OK"
+
+Api privatekey
+Param
+ID
+Code
+DoorNum
+
+Mon
+Tue
+Wed
+Thur
+Fri
+Sat
+Sun
+TimeStart
+TimeEnd
+
+Description
+e.g. “ID”:”1”
+RF SN
+e.g. “Code”:”12345678”
+1 : Door A
+2 : Door B
+3 : Door C
+e.g. “DoorNum”: “123”
+0 - Disable
+1 - Enable
+0 - Disable
+1 - Enable
+0 - Disable
+1 - Enable
+0 - Disable
+1 - Enable
+0 - Disable
+1 - Enable
+0 - Disable
+1 - Enable
+0 - Disable
+1 - Enable
+“00:00” - “23:59”
+“00:00” - “00:00”: key will always workr
+“00:00” - “23:59”
+
+Api privatekey get
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/privatekey/get
+POST:
+{
+"target": "privatekey",
+"action": "get",
+}
+
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "get",
+"message": "OK",
+"data": {
+"num": 2,
+"item": [
+{
+"Code": "12345678",
+"DoorNum": "1",
+"Fri": "1",
+"ID": "1",
+"Mon": "1",
+"Name": "123456",
+"Sat": "1",
+"Sun": "1",
+"Thur": "1",
+"TimeEnd": "00:00",
+"TimeStart": "00:00",
+"Tue": "1",
+"Wed": "1"
+},
+{
+"Code": "78965412",
+"DoorNum": "1",
+"Fri": "1",
+"ID": "2",
+"Mon": "1",
+"Name": "5555",
+"Sat": "1",
+"Sun": "1",
+"Thur": "1",
+"TimeEnd": "00:00",
+"TimeStart": "00:00",
+"Tue": "1",
+"Wed": "1"
+}
+]
+}
+
+Api privatekey add
+Only POST method can be used for this function.
+Example Request:
+
+POST:
+{
+"target": "privatekey",
+"action": "add",
+"data" : {
+"item": [
+{
+"Code": "88888888",
+"DoorNum": "1",
+"Fri": "1",
+"ID": "1",
+"Mon": "1",
+"Name": "Lucy",
+"Sat": "1",
+"Sun": "1",
+"Thur": "1",
+"TimeEnd": "00:00",
+"TimeStart": "00:00",
+"Tue": "1",
+"Wed": "1"
+},
+{
+"Code": "66666666",
+"DoorNum": "1",
+"Fri": "1",
+"ID": "2",
+"Mon": "1",
+"Name": "Carol",
+"Sat": "1",
+"Sun": "1",
+"Thur": "1",
+"TimeEnd": "00:00",
+"TimeStart": "00:00",
+"Tue": "1",
+"Wed": "1"
+}
+]
+}
+}
+
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "add",
+"message": "OK",
+"data": {
+"num": 2,
+"item": [
+{
+"Code": "88888888",
+"ID": "1",
+"Name": "Lucy"
+},
+{
+"Code": "66666666",
+"ID": "2",
+"Name": "Carol"
+}
+]
+}
+
+Api privatekey set
+Only POST method can be used for this function.
+Example Request:
+
+POST:
+{
+"target": "privatekey",
+"action": "set",
+"data" : {
+"item": [
+{
+"Code": "12345678",
+"DoorNum": "0",
+"Fri": "1",
+"ID": "5",
+"Mon": "1",
+"Name": "Lucy",
+"Sat": "1",
+"Sun": "1",
+"Thur": "1",
+"TimeEnd": "00:00",
+"TimeStart": "00:00",
+"Tue": "1",
+"Wed": "1"
+},
+{
+"Code": "99999999",
+"DoorNum": "0",
+"Fri": "1",
+"ID": "6",
+"Mon": "1",
+"Name": "Carol",
+"Sat": "1",
+"Sun": "1",
+"Thur": "1",
+"TimeEnd": "00:00",
+"TimeStart": "00:00",
+"Tue": "1",
+"Wed": "1"
+}
+]
+}
+}
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "set",
+"message": "OK",
+"data": {
+"num": 2,
+"item": [
+{
+"Ret": 0,
+"Code": "12345678",
+"ID": "5",
+"Name": "Lucy"
+},
+{
+"Ret": 0,
+"Code": "99999999",
+"ID": "6",
+"Name": "Carol"
+}
+]
+}
+
+Api privatekey del
+Only POST method can be used for this function.
+Example Request:
+
+POST:
+{
+"target": "privatekey",
+"action": "del",
+"data" : {
+"item": [
+{
+"ID": "7"
+},
+{
+"Code": "66666666"
+},
+{
+"Name": "Carol"
+},
+{
+"ID": "5",
+"Code": "88888888",
+"Name": "Lucy"
+}
+]
+}
+}
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "del",
+"message": "OK",
+"data": {
+"num": 4,
+"item": [
+{
+"Ret": 0,
+"Code": "88888888",
+"ID": "7",
+"Name": "Lucy"
+},
+{
+"Ret": 0,
+"Code": "66666666",
+"ID": "6",
+"Name": "Carol"
+},
+{
+"Ret": 0,
+"Code": "66666666",
+"ID": "8",
+"Name": "Carol"
+},
+{
+"Ret": 0,
+"Code": "88888888",
+"ID": "5",
+"Name": "Lucy"
+}
+]
+}
+
+Api privatekey clear
+The GET or POST method can be used for this function.
+Example Request:
+
+GET: /api/privatekey/clear
+POST:
+{
+"target": "privatekey",
+"action": "clear",
+}
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "clear",
+"message": "OK"
+
+Api privatekey export
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/privatekey/export
+POST:
+{
+"target": "privatekey",
+"action": "export"
+}
+Example Return:
+Content-Type: application/octet-stream
+Content-Disposition: attachment;filename=PrivateKey.xml
+
+Api privatekey import
+Only POST method can be used for this function.
+
+Api rfkey
+Param
+ID
+Code
+DoorNum
+
+Mon
+Tue
+Wed
+Thur
+Fri
+Sat
+Sun
+TimeStart
+TimeEnd
+Tags
+
+Frequency
+DoorWebRelay
+
+Description
+e.g. “ID”:”1”
+RF SN
+e.g. “Code”:”12345678”
+1 : Door A
+2 : Door B
+3 : Door C
+e.g. “DoorNum”: “123”
+0 - Disable
+1 - Enable
+0 - Disable
+1 - Enable
+0 - Disable
+1 - Enable
+0 - Disable
+1 - Enable
+0 - Disable
+1 - Enable
+0 - Disable
+1 - Enable
+0 - Disable
+1 - Enable
+“00:00” - “23:59”
+“00:00” - “00:00”: key will always work
+“00:00” - “23:59”
+0: ALLOWED
+1: FREQUENCY
+2: FROBIDDEN forbidden
+3: SCHEDULE
+0 ~ 65535
+(Reserved) for WebRelay Action
+
+Api rfkey get
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/rfkey/get
+POST:
+{
+"target": "rfkey",
+"action": "get",
+}
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "get",
+"message": "OK",
+"data": {
+"num": 2,
+"item": [
+{
+"Code": "00B4161D",
+"DoorNum": "0",
+"Frequency": "0",
+"Fri": "1",
+"ID": "1",
+"Mon": "1",
+"Name": "Lucy",
+"Sat": "1",
+"Sun": "1",
+"Tags": "0",
+"Thur": "1",
+"TimeEnd": "00:00",
+"TimeStart": "00:00",
+"Tue": "1",
+"Wed": "1"
+},
+{
+"Code": "00B4161E",
+"DoorNum": "0",
+"Frequency": "0",
+"Fri": "1",
+"ID": "2",
+"Mon": "1",
+"Name": "Carol",
+"Sat": "1",
+"Sun": "1",
+"Tags": "0",
+"Thur": "1",
+"TimeEnd": "00:00",
+"TimeStart": "00:00",
+"Tue": "1",
+"Wed": "1"
+}
+]
+}
+
+Api rfkey add
+Only POST method can be used for this function.
+Example Request:
+
+POST:
+{
+"target": "rfkey",
+"action": "add",
+"data" : {
+"item": [
+{
+"ID": "0",
+"Name": "Lucy",
+"Code": "00B4161D",
+"DoorNum": "1",
+"Tags": "0",
+"Frequency": "0",
+"Mon": "1",
+"Tue": "1",
+"Wed": "1",
+"Thur": "1",
+"Fri": "1",
+"Sat": "1",
+"Sun": "1",
+"TimeEnd": "00:00",
+"TimeStart": "00:00"
+},
+{
+"ID": "0",
+"Name": "Carol",
+"Code": "00B4161E",
+"DoorNum": "1",
+"Tags": "0",
+"Frequency": "0",
+"Mon": "1",
+"Tue": "1",
+"Wed": "1",
+"Thur": "1",
+"Fri": "1",
+"Sat": "1",
+"Sun": "1",
+"TimeEnd": "00:00",
+"TimeStart": "00:00"
+}
+]
+}
+}
+
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "add",
+"message": "OK",
+"data": {
+"num": 2,
+"item": [
+{
+"Ret": 1,
+"Code": "00B4161D",
+"ID": "1",
+"Name": "Lucy"
+},
+{
+"Ret": 2,
+"Code": "00B4161E",
+"ID": "2",
+"Name": "Carol"
+}
+]
+}
+
+Api rfkey set
+Only POST method can be used for this function.
+Example Request:
+
+POST:
+{
+"target": "rfkey",
+"action": "set",
+"data" : {
+"item": [
+{
+"ID": "1",
+"Name": "Lucy",
+"Code": "00B4161D",
+"DoorNum": "123",
+"Tags": "0",
+"Frequency": "0",
+"Mon": "1",
+"Tue": "1",
+"Wed": "1",
+"Thur": "1",
+"Fri": "1",
+"Sat": "1",
+"Sun": "1",
+"TimeEnd": "00:00",
+"TimeStart": "00:00"
+}
+]
+}
+}
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "set",
+"message": "OK",
+"data": {
+"num": 1,
+"item": [
+{
+"Ret": 0,
+"Code": "00B4161D",
+"ID": "1",
+"Name": "Lucy"
+}
+]
+}
+
+Api rfkey del
+Only POST method can be used for this function.
+Example Request:
+
+POST:
+{
+"target": "rfkey",
+"action": "del",
+"data" : {
+"item": [
+{
+"ID": "1"
+},
+{
+"Name": "Carol"
+},
+{
+"ID": "5",
+"Code": "88888888",
+"Name": "Lucy"
+}
+]
+}
+}
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "del",
+"message": "OK",
+"data": {
+"num": 3,
+"item": [
+{
+"Ret": 0,
+"Code": "00B4161D",
+"ID": "1",
+"Name": "Lucy"
+},
+{
+"Ret": 0,
+"Code": "00B4161E",
+"ID": "2",
+"Name": "Carol"
+},
+{
+"Ret": -1,
+"Code": "88888888",
+"ID": "5",
+"Name": "Lucy"
+}
+]
+}
+
+Api rfkey clear
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/rfkey/clear
+POST:
+{
+"target": "rfkey",
+"action": "clear",
+}
+
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "clear",
+"message": "OK"
+
+Api rfkey export
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/rfkey/export
+POST:
+{
+"target": "rfkey",
+"action": "export"
+}
+Example Return:
+Content-Type: application/octet-stream
+Content-Disposition: attachment;filename=ICKey.xml
+
+Api rfkey import
+Only POST method can be used for this function.
+
+Api contact
+Param
+ID
+Name
+Phone
+DialType
+
+Group
+
+Description
+Index
+Name
+Phone Number
+0 Auto (if phone number is ip, will can with direct
+ip, others use register account )
+1 Account 1
+2 Account 2
+Group Name
+
+Api contact get
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/contact/get
+POST:
+{
+"target": "contact",
+"action": "get"
+}
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "get",
+"message": "OK",
+"data": {
+"num": 4,
+"item": [
+{
+"DialType": "0",
+"Group": "",
+"ID": "2",
+"Name": "Carol",
+"Phone": "112"
+},
+{
+"DialType": "0",
+"Group": "FLOOR-1",
+"ID": "3",
+"Name": "Feya",
+"Phone": "124"
+},
+{
+"DialType": "0",
+"Group": "FLOOR-0",
+"ID": "4",
+"Name": "Justa",
+"Phone": "110"
+},
+{
+"DialType": "0",
+"Group": "",
+"ID": "1",
+"Name": "Lucy",
+"Phone": "123"
+}
+]
+}
+
+Api contact add
+Only POST method can be used for this function.
+
+Example Request:
+POST:
+{
+"target": "contact",
+"action": "add",
+"data": {
+"num": 6,
+"item": [
+{
+"DialType": "0",
+"Group": "",
+"ID": "0",
+"Name": "Carol",
+"Phone": "115"
+},
+{
+"DialType": "0",
+"Group": "",
+"ID": "0",
+"Name": "Eric",
+"Phone": "115"
+},
+{
+"DialType": "0",
+"Group": "FLOOR-1",
+"ID": "0",
+"Name": "Feya",
+"Phone": "126"
+},
+{
+"DialType": "0",
+"Group": "FLOOR-1",
+"ID": "0",
+"Name": "Leaf",
+"Phone": "126"
+},
+
+{
+
+},
+{
+
+}
+
+}
+
+]
+
+}
+
+"DialType": "0",
+"Group": "",
+"ID": "0",
+"Name": "Lucy",
+"Phone": "115"
+
+"DialType": "0",
+"Group": "FLOOR-1",
+"ID": "0",
+"Name": "Tony",
+"Phone": "126"
+
+Example Return:
+{
+
+"retcode": 0,
+"action": "add",
+"message": "OK",
+"data": {
+"num": 6,
+"item": [
+{
+"Ret": 0,
+"ID": "74",
+"Name": "Carol",
+"Phone": "115"
+},
+{
+"Ret": 0,
+"ID": "75",
+"Name": "Eric",
+"Phone": "115"
+},
+{
+"Ret": 0,
+"ID": "76",
+
+},
+{
+
+},
+{
+
+},
+{
+
+}
+
+}
+
+]
+
+}
+
+"Name": "Feya",
+"Phone": "126"
+
+"Ret": 0,
+"ID": "77",
+"Name": "Leaf",
+"Phone": "126"
+
+"Ret": 0,
+"ID": "78",
+"Name": "Lucy",
+"Phone": "115"
+
+"Ret": 0,
+"ID": "79",
+"Name": "Tony",
+"Phone": "126"
+
+Api contact set
+Only POST method can be used for this function.
+Example Request:
+
+POST:
+{
+"target": "contact",
+"action": "set",
+"data": {
+"item": [
+{
+"ID": "1",
+"Name": "Eric",
+"Phone": "118",
+"DialType": "0",
+"Group": ""
+},
+{
+"ID": "2",
+"Name": "Tony",
+"Phone": "116",
+"DialType": "0",
+"Group": "FLOOR-1"
+}
+]
+}
+}
+
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "set",
+"message": "OK",
+"data": {
+"num": 2,
+"item": [
+{
+"Ret": 0,
+"ID": "1",
+"Name": "Eric",
+"Phone": "118"
+},
+{
+"Ret": 0,
+"ID": "2",
+"Name": "Tony",
+"Phone": "116"
+}
+]
+}
+
+Api contact del
+Only POST method can be used for this function.
+Example Request:
+
+POST:
+{
+"target": "contact",
+"action": "del",
+"data": {
+"item": [
+{
+"Name": "Carol"
+},
+{
+"ID": "26"
+},
+{
+"Phone": "126"
+}
+]
+}
+}
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "del",
+"message": "OK",
+"data": {
+"num": 3,
+"item": [
+{
+"Ret": 0,
+"ID": "25",
+"Name": "Carol",
+"Phone": "115"
+},
+{
+"Ret": 0,
+"ID": "26",
+"Name": "Eric",
+"Phone": "115"
+},
+{
+"Ret": 0,
+"ID": "27",
+"Name": "Feya",
+"Phone": "126"
+}
+]
+}
+
+Api contact clear
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/contact/clear
+POST:
+{
+"target": "contact",
+"action": "clear"
+}
+
+Example Return:
+{
+
+}
+
+"retcode": 0
+"action": "clear",
+"message": "OK",
+
+Api contact export
+Param
+filetype
+
+Description
+option param, default type csv
+csv: csv file
+xml: xml file
+vcf: vcf file
+Note: if contact is empty, it will return failed
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/contact/export?filetype=csv
+POST:
+{
+"target": "contact",
+"action": "export",
+"data": {
+"filetype":"csv"
+}
+}
+
+Example Return:
+succeed: send csv file
+failed:
+{
+"retcode": -1,
+"action": "export",
+"message": "Export Failed."
+}
+
+Api contact import
+Only POST method can be used for this function.
+Example Request&Return:
+
+Api group
+Param
+ID
+Name
+
+Description
+Index
+Group Name
+
+Api group get
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/group/get
+POST:
+{
+"target": "group",
+"action": "get",
+}
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "get",
+"message": "OK",
+"data": {
+"num": 1,
+"item": [
+{
+"ID": "12",
+"Name": "FLOOR-1"
+}
+]
+}
+
+Api group add
+Only POST method can be used for this function.
+Example Request:
+POST:
+{
+"target": "group",
+"action": "add",
+"data" : {
+"item": [
+{
+"ID": "0",
+"Name": "FLOOR2"
+}
+]
+}
+}
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "add",
+"message": "OK",
+"data": {
+"num": 1,
+"item": [
+{
+"Ret": 0,
+"ID": "13",
+"Name": "FLOOR2"
+}
+]
+}
+
+Api group set
+Only POST method can be used for this function.
+Example Request:
+POST:
+{
+"target": "group",
+"action": "set",
+"data" : {
+"item": [
+{
+"ID": "13",
+"Name": "FLOOR-402"
+}
+]
+}
+}
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "set",
+"message": "OK",
+"data": {
+"num": 1,
+"item": [
+{
+"Ret": 0,
+"ID": "13",
+"Name": "FLOOR-402"
+}
+]
+}
+
+Api group clear
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/group/clear
+POST:
+{
+"target": "group",
+"action": "clear"
+}
+Example Return:
+{
+
+}
+
+"action": "clear",
+"message": "OK",
+"retcode": 0
+
+Api call status
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/call/status
+POST:
+{
+"target": "call",
+"action": "status"
+}
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "status",
+"message": "OK",
+"data": {
+"Status": "READY"
+}
+
+Api call dial
+The GET or POST method can be used for this function.
+Example Request:
+GET:
+/api/call/dial?Phone=192.168.1.58&DisplayName=Jus
+ta
+
+POST:
+{
+"target": "call",
+"action": "dial",
+"data" : {
+"Phone": "192.168.1.58",
+"DisplayName": "Justa"
+}
+}
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "dial",
+"message": "OK"
+
+Api call hangup
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/call/hangup
+POST:
+{
+"target": "call",
+"action": "hangup",
+}
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "hangup",
+"message": "OK"
+
+Api sip
+Param
+Account 1
+Config.Account1.GENERAL.Enable
+Config.Account1.SIP.Server
+Config.Account1.SIP.Port
+Config.Account1.GENERAL.AuthName
+Config.Account1.GENERAL.UserName
+Config.Account1.GENERAL.Pwd
+Config.Account1.GENERAL.DisplayName
+Account 2
+Config.Account2.GENERAL.Enable
+Config.Account2.SIP.Server
+Config.Account2.SIP.Port
+Config.Account2.GENERAL.AuthName
+Config.Account2.GENERAL.UserName
+Config.Account2.GENERAL.Pwd
+Config.Account2.GENERAL.DisplayName
+
+Description
+0 Disable
+1 Enable
+SIP Server
+Ex:192.168.1.115
+SIP Server Port
+Ex:5060
+Sip Server Auth Name
+Sip Server Register Name
+Sip Server Password
+Remote Display Name
+0 Disable
+1 Enable
+SIP Server
+Ex:192.168.1.115
+SIP Server Port
+Ex:5060
+Sip Server Auth Name
+Sip Server Register Name
+Sip Server Password
+Remote Display Name
+
+Api sip get
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/sip/get
+POST:
+{
+"target": "sip",
+"action": "get"
+}
+Example Return:
+
+{
+
+"retcode": 0,
+"action": "get",
+"message": "OK",
+"data": {
+"Config.Account1.ANONYMOUS_CALL.Enable": "0",
+"Config.Account1.ANONYMOUS_CALL.OffCode": "",
+"Config.Account1.ANONYMOUS_CALL.OnCode": "",
+"Config.Account1.ANONYMOUS_CALL.PrivacyHeaderValue": "id",
+"Config.Account1.AUTO_ANSWER.Enable": "1",
+"Config.Account1.GENERAL.AuthName": "",
+"Config.Account1.GENERAL.DisplayName": "",
+"Config.Account1.GENERAL.EditEnable": "",
+"Config.Account1.GENERAL.Enable": "0",
+"Config.Account1.GENERAL.Label": "",
+"Config.Account1.GENERAL.Pwd": "",
+"Config.Account1.GENERAL.UserAgent": "",
+"Config.Account1.GENERAL.UserName": "",
+"Config.Account1.NAT.Rport": "0",
+"Config.Account1.NAT.UdpKeepEnable": "1",
+"Config.Account1.NAT.UdpKeepInterval": "30",
+"Config.Account1.OUTPROXY.BakPort": "5060",
+"Config.Account1.OUTPROXY.BakServer": "",
+"Config.Account1.OUTPROXY.DHCPOption": "0",
+"Config.Account1.OUTPROXY.Enable": "0",
+"Config.Account1.OUTPROXY.Port": "5060",
+"Config.Account1.OUTPROXY.Server": "",
+"Config.Account1.REJECT_ANONYMOUSCALL.Enable": "0",
+"Config.Account1.REJECT_ANONYMOUSCALL.OffCode": "",
+"Config.Account1.REJECT_ANONYMOUSCALL.OnCode": "",
+"Config.Account1.SIP.ListenPortMax": "5062",
+"Config.Account1.SIP.ListenPortMin": "5062",
+"Config.Account1.SIP.Port": "5060",
+"Config.Account1.SIP.Port2": "5060",
+"Config.Account1.SIP.Server": "",
+"Config.Account1.SIP.Server2": "",
+"Config.Account1.SIP.TransType": "0",
+"Config.Account1.STUN.Enable": "0",
+"Config.Account1.STUN.Port": "3478",
+"Config.Account1.STUN.Server": "",
+"Config.Account2.ANONYMOUS_CALL.Enable": "0",
+"Config.Account2.ANONYMOUS_CALL.OffCode": "",
+"Config.Account2.ANONYMOUS_CALL.OnCode": "",
+
+}
+
+}
+
+"Config.Account2.ANONYMOUS_CALL.PrivacyHeaderValue": "id",
+"Config.Account2.AUTO_ANSWER.Enable": "1",
+"Config.Account2.GENERAL.AuthName": "",
+"Config.Account2.GENERAL.DisplayName": "",
+"Config.Account2.GENERAL.EditEnable": "",
+"Config.Account2.GENERAL.Enable": "0",
+"Config.Account2.GENERAL.Label": "",
+"Config.Account2.GENERAL.Pwd": "",
+"Config.Account2.GENERAL.UserAgent": "",
+"Config.Account2.GENERAL.UserName": "",
+"Config.Account2.NAT.Rport": "0",
+"Config.Account2.NAT.UdpKeepEnable": "1",
+"Config.Account2.NAT.UdpKeepInterval": "30",
+"Config.Account2.OUTPROXY.BakPort": "5060",
+"Config.Account2.OUTPROXY.BakServer": "",
+"Config.Account2.OUTPROXY.DHCPOption": "0",
+"Config.Account2.OUTPROXY.Enable": "0",
+"Config.Account2.OUTPROXY.Port": "5060",
+"Config.Account2.OUTPROXY.Server": "",
+"Config.Account2.REJECT_ANONYMOUSCALL.Enable": "0",
+"Config.Account2.REJECT_ANONYMOUSCALL.OffCode": "",
+"Config.Account2.REJECT_ANONYMOUSCALL.OnCode": "",
+"Config.Account2.SIP.ListenPortMax": "5063",
+"Config.Account2.SIP.ListenPortMin": "5063",
+"Config.Account2.SIP.Port": "5060",
+"Config.Account2.SIP.Port2": "5060",
+"Config.Account2.SIP.Server": "",
+"Config.Account2.SIP.Server2": "",
+"Config.Account2.SIP.TransType": "0",
+"Config.Account2.STUN.Enable": "0",
+"Config.Account2.STUN.Port": "3478",
+"Config.Account2.STUN.Server": ""
+
+Api sip set
+Only POST method can be used for this function.
+Example Request:
+
+POST:
+{
+"target": "sip",
+"action": "set",
+"data" : {
+"Config.Account1.GENERAL.AuthName" : "130",
+"Config.Account1.GENERAL.DisplayName": "130",
+"Config.Account1.GENERAL.Enable": "1",
+"Config.Account1.GENERAL.Label": "130",
+"Config.Account1.GENERAL.Pwd": "130",
+"Config.Account1.GENERAL.UserName":"130",
+"Config.Account1.SIP.Port":"5060",
+"Config.Account1.SIP.Server": "192.168.1.115"
+}
+}
+
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "set",
+"message": "OK"
+
+Api sip status
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/sip/status
+
+POST:
+{
+"target": "sip",
+"action": "status",
+}
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "status",
+"message": "OK",
+"data": {
+"Account1": {
+"UserName": "130",
+"SipServer": "192.168.1.115",
+"Status": "2"
+},
+"Account2": {
+"UserName": "",
+"SipServer": "",
+"Status": "0"
+}
+}
+
+Api dialreplace
+Param
+ID
+Prefix
+Line
+
+Replace1
+Replace2
+Replace3
+Replace4
+Replace5
+
+Description
+ID
+number
+0 Auto
+1 Account 1
+2 Account 2
+number
+number
+number
+number
+number
+
+Api dialreplace get
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/dialreplace/get
+POST:
+{
+"target": "dialreplace",
+"action": "get"
+}
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "get",
+"message": "OK",
+"data": {
+"num": 1,
+"item": [
+{
+"ID": "1",
+"Line": "0",
+"Prefix": "110",
+"Replace1": "192.168.2.1",
+"Replace2": "192.168.2.4",
+"Replace3": "192.168.2.2",
+"Replace4": "192.168.2.5",
+"Replace5": "192.168.2.3"
+}
+]
+}
+
+Api dialreplace add
+Only POST method can be used for this function.
+Example Request:
+
+POST:
+{
+"target": "dialreplace",
+"action": "add",
+"data" : {
+"item": [
+{
+"ID": "1",
+"Line": "0",
+"Prefix" : "110",
+"Replace1": "192.168.2.1",
+"Replace2": "192.168.2.4",
+"Replace3": "192.168.2.2",
+"Replace4": "192.168.2.5",
+"Replace5": "192.168.2.3"
+}
+]
+}
+}
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "add",
+"message": "OK",
+"data": {
+"num": 1,
+"item": [
+{
+"Ret": 0,
+"ID": "1",
+"Prefix": "110"
+}
+]
+}
+
+Api dialreplace set
+Only POST method can be used for this function.
+
+Example Request:
+POST:
+{
+"target": "dialreplace",
+"action": "set",
+"data" : {
+"item": [
+{
+"ID": "1",
+"Line": "0",
+"Prefix" : "110",
+"Replace1": "192.168.2.1",
+"Replace2": "192.168.2.4",
+"Replace3": "192.168.2.2",
+"Replace4": "192.168.2.5",
+"Replace5": "192.168.2.3"
+}
+]
+}
+}
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "set",
+"message": "OK",
+"data": {
+"num": 1,
+"item": [
+{
+"Ret": 0,
+"ID": "1",
+"Prefix": "110"
+}
+]
+}
+
+Api dialreplace del
+Only POST method can be used for this function.
+
+Example Request:
+POST:
+{
+"target": "dialreplace",
+"action": "del",
+"data" : {
+"item": [
+{
+"ID": "1"
+}
+]
+}
+}
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "del",
+"message": "OK",
+"data": {
+"num": 1,
+"item": [
+{
+"Ret": 0,
+"ID": "1"
+}
+]
+}
+
+Api dialreplace clear
+Example Request:
+GET: /api/dialreplace/clear
+POST:
+{
+"target": "dialreplace",
+"action": "clear",
+}
+
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "clear",
+"message": "OK"
+
+Api dialreplace export
+Example Request:
+GET: /api/dialreplace/export
+POST:
+{
+"target": "dialreplace",
+"action": "export",
+}
+Example Return:
+DialReplace.xml
+
+Api dialreplace import
+Only POST method can be used for this function.
+Example Request&Return::
+
+Api log
+Param
+Config.Settings.LOGLEVEL.Level
+
+Description
+log debug level
+0 LOG_LEVEL_EMERG
+1 LOG_LEVEL_ALERT
+2 LOG_LEVEL_CRIT
+3 LOG_LEVEL_ERR
+4 LOG_LEVEL_WARNING
+5 LOG_LEVEL_NOTICE
+6 LOG_LEVEL_INFO
+7 LOG_LEVEL_DEBUG
+
+Api log get
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/log/get
+POST:
+{
+"target": "log",
+"action": "get",
+}
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "get",
+"message": "OK",
+"data": {
+"Config.Settings.LOGLEVEL.Level": "3"
+}
+
+Api log set
+Only POST method can be used for this function.
+Example Request:
+POST:
+{
+"target": "log",
+"action": "set",
+"data" : {
+"Config.Settings.LOGLEVEL.Level": "7"
+}
+}
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "set",
+"message": "OK",
+
+Api log export
+Param
+type
+
+Description
+export log type
+log : default , application log(Android logcat or
+Linux syslog)
+kmsg: kernel log
+log_debug: support android only
+
+Example Request:
+GET: /api/log/export?type=log
+
+POST:
+{
+"target": "log",
+"action": "export",
+"data" : {
+"type" : "log"
+}
+}
+Example Return:
+log.txt
+kmsg.txt
+log_debug.tar.gz
+
+Api log clear
+Param
+type
+
+Description
+export log type
+log : default , application log(Android logcat or
+Linux syslog)
+kmsg: kernel log
+log_debug: support android only
+
+Example Request:
+GET: /api/log/clear?type=kmsg
+POST:
+{
+"target": "log",
+"action": "clear",
+"data" : {
+"type" : "kmsg"
+}
+}
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "clear",
+"message": "OK"
+
+Api calllog
+Param
+ID
+Type
+
+Date
+Time
+Local Identity
+Name
+Number
+
+Description
+0
+1
+2
+3
+4
+5
+
+"All",
+"Dialed",
+"Received",
+"Missed",
+"Forwarded",
+"Unknow",
+
+Sip Server
+Remote DisplayName
+Call Num
+
+Api calllog get
+Param
+Type
+
+Example Request:
+GET: /api/calllog/get
+
+Description
+Optional , Default “All”
+0 "All",
+1 "Dialed",
+2 "Received",
+3 "Missed",
+4 "Forwarded",
+5 "Unknow",
+
+POST:
+{
+"target": "calllog",
+"action": "get"
+}
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "get",
+"message": "OK",
+"data": {
+"num": 1,
+"item": [
+{
+"Date": "2018-12-13",
+"ID": "23",
+"LocalIdentity": "192.168.1.98@192.168.1.98",
+"Name": "192.168.1.48",
+"Num": "192.168.1.98@192.168.1.98",
+"Time": "05:55:59",
+"Type": "Received"
+}
+]
+}
+
+Api calllog del
+Param
+ID
+
+Description
+string, index
+
+Only POST method can be used for this function.
+Example Request:
+
+POST:
+{
+"target": "calllog",
+"action": "del",
+"data" : {
+"ID" : "23"
+}
+}
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "del",
+"message": "OK"
+
+Api calllog clear
+Param
+Type
+
+Description
+string
+0 "All",
+1 "Dialed",
+2 "Received",
+3 "Missed",
+4 "Forwarded",
+5 "Unknow",
+
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/calllog/clear?type=Missed
+
+POST:
+{
+"target": "calllog",
+"action": "clear"
+}
+
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "clear",
+"message": "OK"
+
+Api calllog export
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/calllog/export
+POST:
+{
+"target": "calllog",
+"action": "export",
+}
+Example Return:
+History.csv
+
+Api doorlog
+Param
+ID
+Type
+
+Name
+Status
+Code
+Date
+Time
+
+Description
+0
+1
+2
+3
+4
+
+“Unknow”,
+"Card",
+"Password",
+"Public",
+"Face",
+
+0 Success
+1 Failed
+
+Api doorlog get
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/doorlog/get
+POST:
+{
+"target": "doorlog",
+"action": "get"
+}
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "get",
+"message": "OK",
+"data": {
+"num": 0,
+"item": []
+}
+
+Api doorlog del
+Param
+ID
+
+Description
+string, index
+
+Only POST method can be used for this function.
+Example Request:
+POST:
+{
+"target": "doorlog",
+"action": "del",
+"data" : {
+"ID" : "1"
+}
+}
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "del",
+"message": "OK"
+
+Api doorlog clear
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/doorlog/clear
+POST:
+{
+"target": "doorlog",
+"action": "clear",
+}
+
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "clear",
+"message": "OK"
+
+Api doorlog export
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/doorlog/export
+POST:
+{
+"target": "doorlog",
+"action": "export",
+}
+Example Return:
+DoorLog.xml
+
+Api pcap status
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/pcap/status
+POST:
+{
+"target": "pcap",
+"action": "status"
+}
+
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "status",
+"message": "OK",
+"data": {
+"FileSize": 0,
+"Status": "stop"
+}
+
+Api pcap start
+Param
+type
+
+filter
+
+time
+
+size
+
+Description
+capature type, optional
+auto auto stop (capture 60 second)
+manual
+pcap filter type, optional
+more info see libpcap
+default: “ip”
+capture time 1-180 , optional
+default 60 second
+only work on type == auto
+optional capture limit size, when reach size
+limit it will auto stop
+default: 1048576
+
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/pcap/start
+
+POST:
+{
+"target": "pcap",
+"action": "start",
+"data" : {
+"type" : "auto",
+"filter" : "ip",
+"time": "180",
+"size": "1048576"
+}
+}
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "start",
+"message": "OK",
+"data": {
+"filter": "ip",
+"interface": "eth0",
+"size": "1048576",
+"time": "180",
+"type": "auto"
+}
+
+Api pcap stop
+The GET or POST method can be used for this function.
+Example Request:
+GET: /api/pcap/stop
+POST:
+{
+"target": "pcap",
+"action": "stop"
+}
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "stop",
+"message": "OK",
+"data": {
+"FileSize": "314407",
+"Time": "9"
+}
+
+Api pcap export
+The GET method can be used for this function.
+Example Request:
+GET: /api/pcap/export
+Example Return:
+phone.pcap
+
+Api User get
+The GET method can be used for this function.
+Example Request:
+GET: /api/user/get
+Example Return:
+
+{
+
+"retcode": 0,
+"action": "get",
+"message": "OK",
+"data": {
+"curPageNum": 2,
+"num": 2,
+"item": [
+{
+"Building": "",
+"CardCode": "",
+"FaceUrl": "",
+"FingerId": "0",
+"FingerUrl": "",
+"ID": "4",
+"LiftFloorNum": "",
+"Name": "test",
+"PrivatePIN": "12345",
+"Room": "",
+"ScheduleRelay": "1-1;2-123",
+"Type": "-1",
+"UserID": "user0002",
+"WebRelay": "0"
+},
+{
+"Building": "",
+"CardCode": "112344;1123",
+"FaceUrl": "xxxx",
+"FingerId": "0",
+"FingerUrl": "",
+"ID": "3",
+"LiftFloorNum": "",
+"Name": "test",
+"PrivatePIN":
+"01016566;01011212",
+"Room": "",
+"ScheduleRelay": "1-1;2-123",
+"Type": "-1",
+"UserID": "user0001",
+"WebRelay": "0"
+}
+]
+}
+}
+
+Example Request:
+GET: /api/user/get?NameOrPerID=sqd
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "get",
+"message": "OK",
+"data": {
+"curPageNum": 1,
+"num": 1,
+"item": [
+{
+"Building": "",
+"CardCode": "",
+"FaceUrl": "",
+"FingerId": "0",
+"FingerUrl": "",
+"ID": "13",
+"LiftFloorNum": "0",
+"Name": "sqd",
+"PrivatePIN": "11313",
+"Room": "",
+"ScheduleRelay": "1001-1",
+"Type": "-1",
+"UserID": "6",
+"WebRelay": "0"
+}
+]
+}
+
+Example Request:
+GET: /api/user/get?NameOrPerID=6
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "get",
+"message": "OK",
+"data": {
+"curPageNum": 1,
+"num": 1,
+"item": [
+{
+"Building": "",
+"CardCode": "",
+"FaceUrl": "",
+"FingerId": "0",
+"FingerUrl": "",
+"ID": "13",
+"LiftFloorNum": "0",
+"Name": "sqd",
+"PrivatePIN": "11313",
+"Room": "",
+"ScheduleRelay": "1001-1",
+"Type": "-1",
+"UserID": "6",
+"WebRelay": "0"
+}
+]
+}
+
+Example Request:
+GET: /api/user/get?page=2
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "get",
+"message": "OK",
+"data": {
+"curPageNum": 1,
+"num": 11,
+"item": [
+{
+"Building": "",
+"CardCode": "",
+"FaceUrl": "",
+"FingerId": "0",
+"FingerUrl": "",
+"ID": "5",
+"LiftFloorNum": "",
+"Name": "test",
+"PrivatePIN": "12345",
+"Room": "",
+"ScheduleRelay": "1-1;2-123",
+"Type": "-1",
+"UserID": "user0002",
+"WebRelay": "0"
+}
+]
+}
+
+Example Request:
+GET: /api/user/get?SourceType=Local
+Example Return:
+
+{
+
+"retcode": 0,
+"action": "get",
+"message": "OK",
+"data": {
+"curPageNum": 2,
+"num": 2,
+"item": [
+{
+"Building": "",
+"CardCode": "",
+"FaceUrl": "",
+"FingerId": "0",
+"FingerUrl": "",
+"ID": "4",
+"LiftFloorNum": "",
+"Name": "test",
+"PrivatePIN": "12345",
+"Room": "",
+"ScheduleRelay": "1-1;2-123",
+"Type": "-1",
+"UserID": "user0002",
+"WebRelay": "0"
+},
+{
+"Building": "",
+"CardCode": "112344;1123",
+"FaceUrl": "xxxx",
+"FingerId": "0",
+"FingerUrl": "",
+"ID": "3",
+"LiftFloorNum": "",
+"Name": "test",
+"PrivatePIN":
+"01016566;01011212",
+"Room": "",
+"ScheduleRelay": "1-1;2-123",
+"Type": "-1",
+"UserID": "user0001",
+"WebRelay": "0"
+}
+]
+}
+}
+
+Api User add
+Only POST method can be used for this function.
+Example Request:
+POST:
+{
+
+}
+
+}
+
+"target": "user",
+"action": "add",
+"data": {
+"item": [
+{
+"Building": "",
+"CardCode": "",
+"FaceUrl": "",
+"LiftFloorNum": "",
+"Name": "test",
+"PrivatePIN": "12345",
+"Room": "",
+"ScheduleRelay": "1-1;2-123",
+"UserID": "user0002",
+"WebRelay": "0"
+}
+]
+
+Example Return:
+{
+
+}
+
+"retcode": 1,
+"action": "add",
+"message": "OK"
+
+Api User set
+Only POST method can be used for this function.
+Example Request:
+
+POST:
+{
+
+}
+
+}
+
+"target": "user",
+"action": "set",
+"data": {
+"item": [
+{
+"Building": "",
+"CardCode": "",
+"FaceUrl": "",
+"ID": "2",
+"LiftFloorNum": "1",
+"Name": "Tom",
+"PrivatePIN": "",
+"Room": "",
+"ScheduleRelay": "1001-1",
+"UserID": "2",
+"WebRelay": "8"
+},
+{
+"Building": "",
+"CardCode": "",
+"FaceUrl": "",
+"ID": "1",
+"LiftFloorNum": "1",
+"Name": "Henry",
+"PrivatePIN": "",
+"Room": "",
+"ScheduleRelay": "1001-1",
+"UserID": "1",
+"WebRelay": "8"
+}
+]
+
+Example Return:
+
+{
+
+}
+
+"retcode": 2,
+"action": "set",
+"message": "OK"
+
+Api User del
+Only POST method can be used for this function.
+Example Request:
+POST:
+{
+
+}
+
+}
+
+"target": "user",
+"action": "del",
+"data": {
+"item": [
+{
+"ID": "3"
+},
+{
+"ID":"4"
+}
+]
+
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "del",
+"message": "OK"
+
+Api User clear
+The GET method can be used for this function.
+Example Request:
+GET: /api/user/clear
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "clear",
+"message": "OK"
+
+Api Schedule get
+The GET method can be used for this function.
+Example Request:
+GET: /api/schedule/get
+Example Return:
+
+{
+
+"retcode": 0,
+"action": "get",
+"message": "OK",
+"data": {
+"curPageNum": 3,
+"num": 3,
+"item": [
+{
+"DateEnd": "",
+"DateStart": "",
+"DisplayID": "1",
+"Fri": "0",
+"ID": "3",
+"Mon": "0",
+"Name": "5776gjk",
+"Sat": "0",
+"SourceType": "-1",
+"Sun": "0",
+"Thur": "0",
+"TimeEnd": "00:00",
+"TimeStart": "00:00",
+"Tue": "0",
+"Type": "2",
+"Wed": "0"
+},
+
+{
+
+},
+{
+
+}
+
+}
+
+]
+
+}
+
+"DateEnd": "",
+"DateStart": "",
+"DisplayID": "1002",
+"Fri": "0",
+"ID": "2",
+"Mon": "0",
+"Name": "Never",
+"Sat": "0",
+"SourceType": "-1",
+"Sun": "0",
+"Thur": "0",
+"TimeEnd": "",
+"TimeStart": "",
+"Tue": "0",
+"Type": "2",
+"Wed": "0"
+
+"DateEnd": "",
+"DateStart": "",
+"DisplayID": "1001",
+"Fri": "0",
+"ID": "1",
+"Mon": "0",
+"Name": "Always",
+"Sat": "0",
+"SourceType": "-1",
+"Sun": "0",
+"Thur": "0",
+"TimeEnd": "23:59:59",
+"TimeStart": "00:00:00",
+"Tue": "0",
+"Type": "2",
+"Wed": "0"
+
+Example Request:
+GET: /api/schedule/get?SourceType=SDMC
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "get",
+"message": "OK",
+"data": {
+"curPageNum": 0,
+"num": 0,
+"item": []
+}
+
+Api Schedule add
+Only POST method can be used for this function.
+Example Request:
+
+POST:
+{
+
+}
+
+}
+
+"target": "schedule",
+"action": "add",
+"data": {
+"item": [
+{
+"Name": "test3",
+"Type": "0",
+"Mon": "1",
+"Tue": "1",
+"Wed": "1",
+"Thur": "1",
+"Fri": "1",
+"Sat": "1",
+"Sun": "1",
+"DateStart": "20211020",
+"DateEnd": "20211020",
+"TimeEnd": "00:00",
+"TimeStart": "00:00"
+}
+]
+
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "add",
+"message": "OK",
+"data": {
+"num": 1,
+"item": [
+{
+"Ret": 0,
+"Type": 0,
+"Name": "test3"
+}
+]
+}
+
+Api Schedule set
+Only POST method can be used for this function.
+Example Request:
+POST:
+{
+
+}
+
+}
+
+"target": "schedule",
+"action": "set",
+"data": {
+"item": [
+{
+"ID":"5",
+"Name": "bf",
+"Type": "0",
+"Mon": "1",
+"Tue": "1",
+"Wed": "1",
+"Thur": "1",
+"Fri": "1",
+"Sat": "1",
+"Sun": "1",
+"DateStart": "20211020",
+"DateEnd": "20211020",
+"TimeEnd": "00:00",
+"TimeStart": "00:00"
+}
+]
+
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "set",
+"message": "OK",
+"data": {
+"num": 1,
+"item": [
+{
+"Ret": 0,
+"Type": 0,
+"ID": "5",
+"Name": "bf"
+}
+]
+}
+
+Api Schedule del
+Only POST method can be used for this function.
+Example Request:
+POST:
+{
+
+}
+
+}
+
+"target": "schedule",
+"action": "del",
+"data": {
+"item": [
+{
+"ID": "2"
+},
+{
+"ID":"3"
+}
+]
+
+Example Return:
+
+{
+
+}
+
+"retcode": 0,
+"action": "del",
+"message": "OK",
+"data": {
+"num": 2,
+"item": [
+{
+"Ret": 0,
+"Type": 0,
+"ID": "2",
+"Name": ""
+},
+{
+"Ret": 0,
+"Type": 0,
+"ID": "3",
+"Name": ""
+}
+]
+}
+
+Api Schedule clear
+The GET method can be used for this function.
+Example Request:
+GET: /api/schedule/clear
+Example Return:
+{
+
+}
+
+"retcode": 0,
+"action": "clear",
+"message": "OK"
+
+

@@ -1,0 +1,128 @@
+/* =================================
+   ESTILOS PARA LA PÁGINA DE LOGIN
+   ================================= */
+
+/* Asegúrate de tener estas variables definidas en tu style.css principal */
+:root {
+    --background-color: #2c3e50;
+    --surface-color: #34495e;
+    --primary-yellow: #f1c40f;
+    --heading-color: #ecf0f1;
+    --text-color: #bdc3c7;
+    --border-radius-lg: 8px;
+    --border-radius: 4px;
+}
+
+html, body {
+    height: 100%;
+}
+
+body.login-page {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background-color: var(--background-color);
+    font-family: 'Roboto', sans-serif; /* O la fuente principal de tu app */
+}
+
+.login-container {
+    width: 100%;
+    max-width: 400px;
+    padding: 2.5rem;
+    background-color: var(--surface-color);
+    border-radius: var(--border-radius-lg);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    border-top: 4px solid var(--primary-yellow);
+    animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.login-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.login-header img {
+    height: 50px;
+    margin-bottom: 1rem;
+}
+
+.login-header h1 {
+    margin: 0;
+    font-size: 1.8rem;
+    color: var(--heading-color);
+}
+
+.login-error {
+    background-color: rgba(231, 76, 60, 0.1);
+    color: #e74c3c;
+    padding: 1rem;
+    border-radius: var(--border-radius);
+    margin-bottom: 1.5rem;
+    text-align: center;
+    border: 1px solid #e74c3c;
+    font-size: 0.9rem;
+}
+
+.login-success {
+    background-color: rgba(46, 204, 113, 0.1);
+    color: #2ecc71;
+    padding: 1rem;
+    border-radius: var(--border-radius);
+    margin-bottom: 1.5rem;
+    text-align: center;
+    border: 1px solid #2ecc71;
+    font-size: 0.9rem;
+}
+
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--text-color);
+}
+
+.form-input {
+    width: 100%;
+    padding: 0.8rem 1rem;
+    background-color: var(--background-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    color: var(--heading-color);
+    font-size: 1rem;
+    box-sizing: border-box; /* Importante para que el padding no afecte el ancho */
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--primary-yellow);
+    box-shadow: 0 0 0 3px rgba(241, 196, 15, 0.2);
+}
+
+.login-btn {
+    width: 100%;
+    padding: 0.8rem;
+    font-size: 1.1rem;
+    font-weight: bold;
+    border: none;
+    border-radius: var(--border-radius);
+    background-color: var(--primary-yellow);
+    color: #34495e;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.login-btn:hover {
+    background-color: #f39c12; /* Un amarillo más oscuro al hacer hover */
+}
