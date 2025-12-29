@@ -78,7 +78,7 @@ const VEHICLE_TYPES = [
     { value: 'MOTORCYCLE', label: 'Motocicleta', icon: Bike },
 ];
 
-export function UserFormDialog({ user, units, groups, parkingSlots = [], onSuccess, open, onOpenChange }: UserFormDialogProps) {
+export function UserFormDialog({ user, units, groups, devices, parkingSlots = [], onSuccess, open, onOpenChange }: UserFormDialogProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [previewUrl, setPreviewUrl] = useState<string | null>(user?.cara || null);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
