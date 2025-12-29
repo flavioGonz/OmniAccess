@@ -335,6 +335,16 @@ export default function UsersPage() {
                                                                 </Badge>
                                                                 <span className="text-[9px] text-neutral-600 font-bold max-w-[80px] truncate">{user.unit?.name || "Sin Unidad"}</span>
                                                             </div>
+                                                            {user.vehicles && user.vehicles.length > 0 && (
+                                                                <div className="flex flex-wrap gap-1 mt-2">
+                                                                    {user.vehicles.map((v: any) => (
+                                                                        <div key={v.id} className="flex items-center gap-1 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20">
+                                                                            <Car size={8} className="text-blue-400" />
+                                                                            <span className="text-[8px] font-black text-blue-400 font-mono">{v.plate}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
                                                             <div className="flex gap-1.5 mt-1.5 opacity-40 group-hover:opacity-100 transition-opacity">
                                                                 <ScanFace size={12} className={cn(creds.hasFace ? "text-blue-400" : "text-neutral-800")} />
                                                                 <CreditCard size={12} className={cn(creds.hasTag ? "text-emerald-400" : "text-neutral-800")} />
