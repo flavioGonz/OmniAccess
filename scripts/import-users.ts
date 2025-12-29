@@ -59,7 +59,6 @@ async function importUsers() {
                                         model: v.model,
                                         color: v.color,
                                         type: v.type,
-                                        accessStatus: v.accessStatus || "ALLOWED",
                                         userId: existing.id
                                     }
                                 });
@@ -87,7 +86,6 @@ async function importUsers() {
                                     model: v.model,
                                     color: v.color,
                                     type: v.type,
-                                    accessStatus: v.accessStatus || "ALLOWED",
                                     // photos optional
                                 })) : []
                             },
