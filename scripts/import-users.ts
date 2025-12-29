@@ -6,144 +6,116 @@ import path from 'path';
 const prisma = new PrismaClient();
 
 async function importUsers() {
+    console.log("--- MIGRATOR V5 (ULTRA-ROBUST) ---");
     try {
         const importPath = path.join(process.cwd(), 'users_export.json');
 
         if (!fs.existsSync(importPath)) {
-            console.error("File users_export.json not found!");
+            console.error("Archivo users_export.json no encontrado!");
             return;
         }
 
         const data = fs.readFileSync(importPath, 'utf-8');
         const users = JSON.parse(data);
 
-        console.log(`Loaded ${users.length} users from file.`);
+        console.log(`Cargados ${users.length} usuarios del archivo.`);
 
         let newRecords = 0;
         let updatedRecords = 0;
+        let errors = 0;
 
         for (const user of users) {
-            // 1. Check if user exists
-            let existing = await prisma.user.findFirst({
-                where: {
-                    OR: [
-                        user.email ? { email: user.email } : undefined,
-                        user.dni ? { dni: user.dni } : undefined
-                    ].filter(Boolean) as any
-                },
-                include: {
-                    vehicles: true,
-                    credentials: true
-                }
-            });
+            // 1. Limpieza profunda de datos
+            const { id, accessGroups, credentials, vehicles, createdAt, updatedAt, ...userData } = user;
 
-            // Clean data for processing
-            const { id, accessGroups, credentials, vehicles, ...userData } = user;
+            // Limpiar strings vacíos para evitar errores de unicidad en Prisma
+            if (userData.dni && userData.dni.trim() === "") userData.dni = null;
+            if (userData.email && userData.email.trim() === "") userData.email = null;
+            if (userData.phone === undefined) userData.phone = "N/A";
 
-            // Filter invalid data (empty strings that should be null)
-            if (userData.dni === "") userData.dni = null;
-            if (userData.email === "") userData.email = null;
+            // 2. Buscar si ya existe
+            const searchConditions = [];
+            if (userData.email) searchConditions.push({ email: userData.email });
+            if (userData.dni) searchConditions.push({ dni: userData.dni });
+
+            let existing = null;
+            if (searchConditions.length > 0) {
+                existing = await prisma.user.findFirst({
+                    where: { OR: searchConditions },
+                    include: { vehicles: true, credentials: true }
+                });
+            }
 
             if (existing) {
-                console.log(`  [UPDATE] User ${user.name} exists. Checking vehicles & credentials...`);
+                console.log(`  [EXISTE] ${user.name}. Sincronizando vehículos/credenciales...`);
 
-                // Add missing vehicles
+                // Vincular Vehículos faltantes
                 if (vehicles && vehicles.length > 0) {
                     for (const v of vehicles) {
+                        if (!v.plate) continue;
                         const hasPlate = existing.vehicles.some((ev: any) => ev.plate === v.plate);
                         if (!hasPlate) {
-                            try {
-                                await prisma.vehicle.create({
-                                    data: {
-                                        plate: v.plate,
-                                        brand: v.brand,
-                                        model: v.model,
-                                        color: v.color,
-                                        type: v.type,
-                                        userId: existing.id
-                                    }
-                                });
-                                console.log(`     + Added plate ${v.plate} to ${user.name}`);
-                                updatedRecords++;
-                            } catch (err) {
-                                console.error(`     ! Failed to add plate ${v.plate}:`, err);
-                            }
+                            await prisma.vehicle.create({
+                                data: {
+                                    plate: v.plate,
+                                    brand: v.brand || "LPR",
+                                    model: v.model || "IMPORTED",
+                                    color: v.color,
+                                    type: v.type || "SEDAN",
+                                    userId: existing.id
+                                }
+                            }).catch(e => console.error(`    ! Error vinculando patente ${v.plate}`));
+                            updatedRecords++;
                         }
                     }
                 }
-
-                // Add missing credentials
-                if (credentials && credentials.length > 0) {
-                    for (const c of credentials) {
-                        const credentialValue = c.value || c.code; // Fallback if name is different
-                        if (!credentialValue) continue;
-
-                        const hasCred = existing.credentials.some((ec: any) => ec.value === credentialValue);
-                        if (!hasCred) {
-                            try {
-                                await prisma.credential.create({
-                                    data: {
-                                        type: c.type,
-                                        value: credentialValue,
-                                        notes: c.notes || `Migrated ${c.type}`,
-                                        userId: existing.id
-                                    }
-                                });
-                                console.log(`     + Added credential ${credentialValue} to ${user.name}`);
-                            } catch (err) {
-                                console.error(`     ! Failed to add credential:`, err);
-                            }
-                        }
-                    }
-                }
-
             } else {
-                console.log(`  [CREATE] Creating new user: ${user.name}`);
-
+                // 3. Crear nuevo usuario si no existe
+                console.log(`  [NUEVO] Creando: ${user.name}`);
                 try {
-                    const newUser = await prisma.user.create({
+                    await prisma.user.create({
                         data: {
                             ...userData,
-                            // Create vehicles
                             vehicles: {
                                 create: (vehicles || []).map((v: any) => ({
                                     plate: v.plate,
-                                    brand: v.brand,
-                                    model: v.model,
+                                    brand: v.brand || "LPR",
+                                    model: v.model || "IMPORTED",
                                     color: v.color,
-                                    type: v.type,
+                                    type: v.type || "SEDAN",
                                 }))
                             },
-                            // Create credentials
                             credentials: {
                                 create: (credentials || []).map((c: any) => {
-                                    const val = c.value || c.code || (c.type === 'PLATE' ? vehicles?.[0]?.plate : undefined);
-                                    if (!val) {
-                                        // If still no value, we mock it to avoid the 'value missing' error 
-                                        // but ideally the export should have it.
-                                        return null;
-                                    }
+                                    // REGLA DE ORO: El valor es obligatorio
+                                    const val = c.value || c.code || (c.type === 'PLATE' ? (vehicles?.[0]?.plate) : null);
+                                    if (!val) return null; // Saltar si no hay valor real
                                     return {
                                         type: c.type,
-                                        value: val,
-                                        notes: c.notes || `Imported ${c.type}`
+                                        value: String(val),
+                                        notes: c.notes || `Importado ${c.type}`
                                     };
                                 }).filter(Boolean) as any
                             }
                         }
                     });
                     newRecords++;
-                } catch (createError) {
-                    console.error(`  -> Failed to create user ${user.name}:`, createError);
+                } catch (e: any) {
+                    errors++;
+                    console.error(`  [ERROR] No se pudo crear a ${user.name}: ${e.message}`);
                 }
             }
         }
 
-        console.log("------------------------------------------------");
-        console.log(`Import completed. Created: ${newRecords}, Updated: ${updatedRecords}`);
+        console.log("================================================");
+        console.log(`RESULTADO FINAL:`);
+        console.log(`- Creados: ${newRecords}`);
+        console.log(`- Patentes vinculadas: ${updatedRecords}`);
+        console.log(`- Errores: ${errors}`);
+        console.log("================================================");
 
     } catch (e) {
-        console.error("Error importing users:", e);
+        console.error("Error crítico:", e);
     } finally {
         await prisma.$disconnect();
     }
