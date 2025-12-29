@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { UserRole } from "@prisma/client";
+import { addDevicePlate } from "./devices";
 
 export async function getUsers(options?: { take?: number, skip?: number }) {
     const users = await prisma.user.findMany({
@@ -51,6 +52,7 @@ export async function createUser(formData: FormData) {
 
     const apartment = formData.get("apartment") as string;
     const parkingSlotId = formData.get("parkingSlotId") as string;
+    const syncDeviceIds = formData.getAll("syncDeviceId") as string[];
 
     const userPayload: any = {
         name,
@@ -87,6 +89,17 @@ export async function createUser(formData: FormData) {
                 userId: newUser.id
             }
         });
+
+        // Sync with selected LPR devices
+        if (syncDeviceIds.length > 0) {
+            for (const deviceId of syncDeviceIds) {
+                try {
+                    await addDevicePlate(deviceId, plate.toUpperCase().trim());
+                } catch (err) {
+                    console.error(`Failed to sync plate to device ${deviceId}:`, err);
+                }
+            }
+        }
     }
 
     // Handle Access Tags (RFID) creation
@@ -134,6 +147,7 @@ export async function updateUser(id: string, formData: FormData) {
 
     const apartment = formData.get("apartment") as string;
     const parkingSlotId = formData.get("parkingSlotId") as string;
+    const syncDeviceIds = formData.getAll("syncDeviceId") as string[];
 
     const userPayload: any = {
         name,
@@ -199,6 +213,17 @@ export async function updateUser(id: string, formData: FormData) {
                         userId: id
                     }
                 });
+            }
+        }
+
+        // Sync with selected LPR devices on update
+        if (plate.trim() !== "" && syncDeviceIds.length > 0) {
+            for (const deviceId of syncDeviceIds) {
+                try {
+                    await addDevicePlate(deviceId, plate.toUpperCase().trim());
+                } catch (err) {
+                    console.error(`Failed to sync plate to device ${deviceId} on update:`, err);
+                }
             }
         }
     }

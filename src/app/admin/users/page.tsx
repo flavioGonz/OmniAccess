@@ -6,6 +6,7 @@ import { getUsers, deleteUser } from "@/app/actions/users";
 import { getUnits } from "@/app/actions/units";
 import { getAccessGroups } from "@/app/actions/groups";
 import { getParkingSlots } from "@/app/actions/parking";
+import { getDevices } from "@/app/actions/devices";
 import { UserRole } from "@prisma/client";
 import {
     Table,
@@ -84,6 +85,7 @@ export default function UsersPage() {
     const [units, setUnits] = useState<any[]>([]);
     const [groups, setGroups] = useState<any[]>([]);
     const [parkingSlots, setParkingSlots] = useState<any[]>([]);
+    const [devices, setDevices] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [filterRole, setFilterRole] = useState<string | null>(null);
     const [selectedUser, setSelectedUser] = useState<UserWithRelations | null>(null);
@@ -109,16 +111,18 @@ export default function UsersPage() {
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [usersData, unitsData, groupsData, parkingData] = await Promise.all([
+            const [usersData, unitsData, groupsData, parkingData, devicesData] = await Promise.all([
                 getUsers(),
                 getUnits(),
                 getAccessGroups(),
-                getParkingSlots()
+                getParkingSlots(),
+                getDevices()
             ]);
             setUsers(usersData as UserWithRelations[]);
             setUnits(unitsData);
             setGroups(groupsData);
             setParkingSlots(parkingData);
+            setDevices(devicesData);
             setVisibleUsers(usersData.slice(0, pageSize) as UserWithRelations[]);
         } catch (error) {
             console.error("Error loading data:", error);
@@ -464,6 +468,7 @@ export default function UsersPage() {
                 user={selectedUser || undefined}
                 units={units}
                 groups={groups}
+                devices={devices}
                 parkingSlots={parkingSlots}
                 onSuccess={() => {
                     loadData();

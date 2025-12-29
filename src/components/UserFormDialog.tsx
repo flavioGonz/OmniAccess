@@ -62,6 +62,7 @@ interface UserFormDialogProps {
     user?: UserWithRelations;
     units: Unit[];
     groups: AccessGroup[];
+    devices: any[];
     parkingSlots?: any[];
     onSuccess: () => void;
     open: boolean;
@@ -84,6 +85,7 @@ export function UserFormDialog({ user, units, groups, parkingSlots = [], onSucce
     const [plateValue, setPlateValue] = useState(user?.credentials?.find(c => c.type === 'PLATE')?.value || "");
     const [pinValue, setPinValue] = useState(user?.credentials?.find(c => c.type === 'PIN')?.value || "");
     const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+    const [selectedDeviceIds, setSelectedDeviceIds] = useState<string[]>([]);
     const [selectedUnitId, setSelectedUnitId] = useState<string>("none");
     const [activeTab, setActiveTab] = useState("general");
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -107,6 +109,7 @@ export function UserFormDialog({ user, units, groups, parkingSlots = [], onSucce
             setSelectedFile(null);
             setSelectedGroupIds(user?.accessGroups?.map(g => g.id) || []);
             setSelectedUnitId(user?.unitId || "none");
+            setSelectedDeviceIds([]); // Reset on open
         }
     }, [open, user]);
 
@@ -481,10 +484,10 @@ export function UserFormDialog({ user, units, groups, parkingSlots = [], onSucce
                                     </TabsContent>
 
                                     {/* --- TAB: SYNC --- */}
-                                    <TabsContent value="sync" forceMount={true} className="mt-0 space-y-4 data-[state=inactive]:hidden">
+                                    <TabsContent value="sync" forceMount={true} className="mt-0 space-y-6 data-[state=inactive]:hidden">
                                         <div className="space-y-3">
                                             <div className="flex items-center gap-2 text-[10px] font-black text-neutral-600 uppercase tracking-widest border-b border-neutral-800 pb-1">
-                                                <Server size={12} /> Equipos Sincronizados
+                                                <Server size={12} /> Equipos con Acceso (por Grupos)
                                             </div>
                                             <div className="bg-neutral-900/50 rounded-lg p-3 border border-white/5">
                                                 {(user?.accessGroups?.length ?? 0) > 0 ? (
@@ -510,6 +513,60 @@ export function UserFormDialog({ user, units, groups, parkingSlots = [], onSucce
                                                     </div>
                                                 )}
                                             </div>
+                                        </div>
+
+                                        {/* Manual LPR Sync Selection */}
+                                        <div className="space-y-3">
+                                            <div className="flex items-center gap-2 text-[10px] font-black text-neutral-600 uppercase tracking-widest border-b border-neutral-800 pb-1">
+                                                <Camera size={12} /> Sincronización Manual (Cámaras LPR)
+                                            </div>
+                                            <div className="grid grid-cols-1 gap-2">
+                                                {devices.filter(d => d.deviceType === 'LPR_CAMERA').length > 0 ? (
+                                                    devices.filter(d => d.deviceType === 'LPR_CAMERA').map(device => {
+                                                        const isSelected = selectedDeviceIds.includes(device.id);
+                                                        return (
+                                                            <div
+                                                                key={device.id}
+                                                                onClick={() => setSelectedDeviceIds(prev =>
+                                                                    isSelected ? prev.filter(id => id !== device.id) : [...prev, device.id]
+                                                                )}
+                                                                className={cn(
+                                                                    "p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all",
+                                                                    isSelected
+                                                                        ? "bg-emerald-500/10 border-emerald-500/30 ring-1 ring-emerald-500/20"
+                                                                        : "bg-neutral-900/40 border-neutral-800 hover:border-neutral-700"
+                                                                )}
+                                                            >
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className={cn(
+                                                                        "p-2 rounded-lg",
+                                                                        isSelected ? "bg-emerald-500/20 text-emerald-400" : "bg-neutral-800 text-neutral-500"
+                                                                    )}>
+                                                                        <Camera size={14} />
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-[11px] font-black text-white uppercase tracking-tight">{device.name}</p>
+                                                                        <p className="text-[10px] font-mono text-neutral-500">{device.ip}</p>
+                                                                    </div>
+                                                                </div>
+                                                                {isSelected && <Check size={16} className="text-emerald-500" />}
+                                                            </div>
+                                                        );
+                                                    })
+                                                ) : (
+                                                    <p className="text-[10px] text-neutral-600 italic p-2 text-center">No hay cámaras LPR registradas.</p>
+                                                )}
+                                            </div>
+                                            {selectedDeviceIds.map(id => (
+                                                <input key={id} type="hidden" name="syncDeviceId" value={id} />
+                                            ))}
+                                            {selectedDeviceIds.length > 0 && (
+                                                <div className="p-2 bg-blue-500/5 border border-blue-500/10 rounded-lg">
+                                                    <p className="text-[9px] text-blue-400 font-bold uppercase text-center tracking-widest animate-pulse">
+                                                        La matrícula se enviará a {selectedDeviceIds.length} equipo(s) al guardar
+                                                    </p>
+                                                </div>
+                                            )}
                                         </div>
                                     </TabsContent>
                                 </div>
