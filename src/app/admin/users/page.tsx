@@ -535,20 +535,18 @@ export default function UsersPage() {
             />
 
 
-            {userToDelete && (
-                <DeleteConfirmDialog
-                    id={userToDelete.id}
-                    title="Eliminar Usuario"
-                    description={`¿Estás seguro de eliminar a ${userToDelete.name}? Esta acción revocará todos sus permisos de acceso.`}
-                    onDelete={deleteUser}
-                    onSuccess={() => {
-                        loadData();
-                        setUserToDelete(null);
-                    }}
-                >
-                    <div />
-                </DeleteConfirmDialog>
-            )}
+            <DeleteConfirmDialog
+                id={userToDelete?.id || ""}
+                open={!!userToDelete}
+                onOpenChange={(open) => !open && setUserToDelete(null)}
+                title="Eliminar Usuario"
+                description={`¿Estás seguro de eliminar a ${userToDelete?.name}? Esta acción revocará todos sus permisos de acceso.`}
+                onDelete={deleteUser}
+                onSuccess={() => {
+                    loadData();
+                    setUserToDelete(null);
+                }}
+            />
 
             <style jsx global>{`
                 .custom-scrollbar::-webkit-scrollbar {

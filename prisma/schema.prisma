@@ -214,7 +214,7 @@ model AccessEvent {
   accessType    CredentialType? // Enriquecemos con el tipo (PLATE, FACE, TAG)
   credentialId  String?
   userId        String?
-  user          User?           @relation(fields: [userId], references: [id])
+  user          User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
   deviceId      String?
   device        Device?         @relation(fields: [deviceId], references: [id], onDelete: SetNull, map: "AccessEvent_deviceId_fkey_v2")
   imagePath     String?

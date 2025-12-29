@@ -20,11 +20,17 @@ interface DeleteConfirmDialogProps {
     description?: string;
     onDelete: (id: string) => Promise<void>;
     onSuccess: () => void;
-    children: React.ReactNode;
+    children?: React.ReactNode;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
 }
 
-export function DeleteConfirmDialog({ id, title, description, onDelete, onSuccess, children }: DeleteConfirmDialogProps) {
-    const [open, setOpen] = useState(false);
+export function DeleteConfirmDialog({ id, title, description, onDelete, onSuccess, children, open: controlledOpen, onOpenChange }: DeleteConfirmDialogProps) {
+    const [internalOpen, setInternalOpen] = useState(false);
+
+    const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+    const setOpen = onOpenChange !== undefined ? onOpenChange : setInternalOpen;
+
     const [isDeleting, setIsDeleting] = useState(false);
 
     const handleDelete = async () => {
