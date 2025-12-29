@@ -5,36 +5,57 @@ import path from 'path';
 
 const prisma = new PrismaClient();
 
-async function exportUsers() {
+async function exportEverything() {
     try {
-        console.log("Connecting to database...");
+        console.log("--- EXPORTADOR TOTAL OMNIACCESS ---");
+
+        // 1. Exportar Grupos de Acceso
+        const accessGroups = await prisma.accessGroup.findMany();
+
+        // 2. Exportar Unidades / Lotes
+        const units = await prisma.unit.findMany();
+
+        // 3. Exportar Usuarios con todas sus relaciones
         const users = await prisma.user.findMany({
             include: {
-                accessGroups: true,
+                accessGroups: {
+                    select: { id: true, name: true }
+                },
                 credentials: true,
                 vehicles: true,
+                unit: true
             }
         });
 
-        console.log(`Found ${users.length} users.`);
+        const exportData = {
+            metadata: {
+                version: "2.0",
+                exportedAt: new Date().toISOString(),
+                totalUsers: users.length,
+                totalUnits: units.length,
+                totalGroups: accessGroups.length
+            },
+            accessGroups,
+            units,
+            users
+        };
 
         const exportPath = path.join(process.cwd(), 'users_export.json');
+        fs.writeFileSync(exportPath, JSON.stringify(exportData, null, 2));
 
-        // Remove sensitive or unnecessary data if needed (like IDs if we want them regenerated, but keeping IDs is strictly better for references if tables serve same purpose, IF IDs are uuid. If IDs are auto-increment int, we should remove them or handle with care. Prisma schema uses String @id @default(cuid()) or uuid usually. Let's check schema).
-        // Checking user schema previously: model User { id String @id @default(cuid()) ... }
-        // So we can keep IDs to preserve references if we want, OR better, let new IDs be generated and match by email/dni to avoid conflicts if prod already has data.
-        // For a full migration to empty DB, keeping IDs is fine. For merging, remove IDs.
-        // Let's assume merging strategy: Match by EMAIL or DNI. If exists, update or skip. If not, create.
+        console.log("================================================");
+        console.log(`¡Exportación Exitosa!`);
+        console.log(`- Usuarios: ${users.length}`);
+        console.log(`- Unidades: ${units.length}`);
+        console.log(`- Grupos: ${accessGroups.length}`);
+        console.log(`Archivo: ${exportPath}`);
+        console.log("================================================");
 
-        const data = JSON.stringify(users, null, 2);
-        fs.writeFileSync(exportPath, data);
-
-        console.log(`Exported users to ${exportPath}`);
     } catch (e) {
-        console.error("Error exporting users:", e);
+        console.error("Error en la exportación:", e);
     } finally {
         await prisma.$disconnect();
     }
 }
 
-exportUsers();
+exportEverything();

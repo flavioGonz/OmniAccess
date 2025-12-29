@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Search, Plus, Edit, Trash2, UserPlus, UserMinus, X, CreditCard, Users as UsersIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { deleteTag, assignTag, unassignTag, createTag } from "@/app/actions/tags";
+import { deleteTag, assignTag, unassignTag, createTag, purgeTags } from "@/app/actions/tags";
 import { cn } from "@/lib/utils";
 import {
     Select,
@@ -85,6 +85,17 @@ export function TagList({ initialTags, users }: TagListProps) {
         window.location.reload();
     };
 
+    const handlePurge = async () => {
+        if (confirm("⚠️ CUIDADO: ¿Estás seguro de que quieres ELIMINAR TODOS los tags del sistema? Esta acción no se puede deshacer.")) {
+            const res = await purgeTags();
+            if (res.success) {
+                window.location.reload();
+            } else {
+                alert(res.error);
+            }
+        }
+    };
+
     return (
         <div className="space-y-6">
             {/* Toolbar */}
@@ -118,6 +129,15 @@ export function TagList({ initialTags, users }: TagListProps) {
                             <SelectItem value="unassigned">Disponibles</SelectItem>
                         </SelectContent>
                     </Select>
+
+                    <Button
+                        variant="outline"
+                        onClick={handlePurge}
+                        className="border-red-500/20 bg-red-500/5 text-red-500 hover:bg-red-500 hover:text-white"
+                    >
+                        <Trash2 size={16} className="mr-2" />
+                        Purgar Datos
+                    </Button>
 
                     <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
                         <DialogTrigger asChild>

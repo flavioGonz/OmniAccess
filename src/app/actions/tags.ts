@@ -101,3 +101,18 @@ export async function unassignTag(tagId: string) {
         return { success: false, error: "Error al desasignar el tag" };
     }
 }
+
+export async function purgeTags() {
+    try {
+        await prisma.credential.deleteMany({
+            where: {
+                type: "TAG"
+            }
+        });
+        revalidatePath("/admin/rfid");
+        return { success: true };
+    } catch (error) {
+        console.error("Error purging tags:", error);
+        return { success: false, error: "Error al purgar los tags" };
+    }
+}
