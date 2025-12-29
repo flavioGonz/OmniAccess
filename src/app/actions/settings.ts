@@ -160,3 +160,13 @@ export async function testS3Connection(bucketType: "lpr" | "face" = "lpr") {
         };
     }
 }
+
+export async function testDbConnection() {
+    try {
+        await prisma.$queryRaw`SELECT 1`;
+        return { success: true, message: "Conexión a base de datos exitosa" };
+    } catch (error: any) {
+        console.error("DB Connection Failed:", error);
+        return { success: false, message: error.message };
+    }
+}

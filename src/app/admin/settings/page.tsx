@@ -23,7 +23,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { DriverDetailsDialog } from "@/components/DriverDetailsDialog";
 import { DRIVER_MODELS, type DeviceBrand } from "@/lib/driver-models";
-import { updateSetting, getSetting, testS3Connection, getBucketLifecycle, updateBucketLifecycle } from "@/app/actions/settings";
+import { updateSetting, getSetting, testS3Connection, getBucketLifecycle, updateBucketLifecycle, testDbConnection } from "@/app/actions/settings";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
@@ -82,7 +82,7 @@ export default function SettingsPage() {
     const [modelSearch, setModelSearch] = useState("");
 
     return (
-        <div className="p-6 space-y-8 animate-in fade-in duration-700">
+        <div className="h-full overflow-y-auto p-6 space-y-8 animate-in fade-in duration-700 custom-scrollbar">
             {/* Header */}
             <div className="mb-8">
                 <div className="flex items-center gap-4 mb-2">
@@ -237,6 +237,24 @@ export default function SettingsPage() {
 }
 
 function DatabaseSection() {
+    const [testing, setTesting] = useState(false);
+
+    const handleTestDb = async () => {
+        setTesting(true);
+        try {
+            const res = await testDbConnection();
+            if (res.success) {
+                toast.success("¡Conexión Exitosa con PostgreSQL!");
+            } else {
+                toast.error(`Error de conexión: ${res.message}`);
+            }
+        } catch (err) {
+            toast.error("Error crítico al intentar conectar con la base de datos");
+        } finally {
+            setTesting(false);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-8">
@@ -244,10 +262,6 @@ function DatabaseSection() {
                     <div>
                         <h2 className="text-2xl font-black text-white">PostgreSQL Database</h2>
                         <p className="text-sm text-neutral-500 mt-1">Gestión y configuración de la base de datos</p>
-                    </div>
-                    <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                        <span className="text-xs font-bold text-emerald-400">CONECTADO</span>
                     </div>
                 </div>
 
@@ -257,21 +271,20 @@ function DatabaseSection() {
                             <div className="p-2 bg-blue-500/10 rounded-lg">
                                 <Database className="text-blue-400" size={20} />
                             </div>
-                            <h3 className="font-bold text-white">Conexión Actual</h3>
+                            <h3 className="font-bold text-white">Estado de Conexión</h3>
                         </div>
-                        <div className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                                <span className="text-neutral-500">Host:</span>
-                                <span className="text-white font-mono">192.168.99.111</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-neutral-500">Puerto:</span>
-                                <span className="text-white font-mono">5432</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-neutral-500">Base de Datos:</span>
-                                <span className="text-white font-mono">lpr_db</span>
-                            </div>
+                        <div className="space-y-4">
+                            <p className="text-sm text-neutral-400">
+                                Verifica que la aplicación pueda leer y escribir en la base de datos PostgreSQL configurada.
+                            </p>
+                            <Button
+                                onClick={handleTestDb}
+                                disabled={testing}
+                                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold h-10 transition-all shadow-lg shadow-blue-900/20"
+                            >
+                                {testing ? <RefreshCcw className="animate-spin mr-2" size={16} /> : <Activity className="mr-2" size={16} />}
+                                PROBAR CONEXIÓN AHORA
+                            </Button>
                         </div>
                     </div>
 
@@ -283,13 +296,13 @@ function DatabaseSection() {
                             <h3 className="font-bold text-white">Acciones Rápidas</h3>
                         </div>
                         <div className="space-y-2">
-                            <Button variant="outline" className="w-full justify-start text-xs h-9 bg-neutral-900 border-neutral-700 hover:bg-neutral-800">
+                            <Button variant="outline" className="w-full justify-start text-xs h-9 bg-neutral-900 border-neutral-700 hover:bg-neutral-800 text-neutral-400 cursor-not-allowed opacity-50">
                                 <Database size={14} className="mr-2" />
-                                Crear Nueva Base de Datos
+                                Crear Nueva Base de Datos (Próximamente)
                             </Button>
-                            <Button variant="outline" className="w-full justify-start text-xs h-9 bg-neutral-900 border-neutral-700 hover:bg-neutral-800">
+                            <Button variant="outline" className="w-full justify-start text-xs h-9 bg-neutral-900 border-neutral-700 hover:bg-neutral-800 text-neutral-400 cursor-not-allowed opacity-50">
                                 <Cloud size={14} className="mr-2" />
-                                Conectar Base Externa
+                                Conectar Base Externa (Próximamente)
                             </Button>
                         </div>
                     </div>
