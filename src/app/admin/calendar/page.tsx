@@ -39,7 +39,7 @@ type FullAccessEvent = AccessEvent & {
         id: string;
         name: string;
         email: string | null;
-        phone: string;
+        phone: string | null;
         dni: string | null;
         apartment: string | null;
         cara: string | null;

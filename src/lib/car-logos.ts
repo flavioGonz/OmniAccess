@@ -55,6 +55,7 @@ const BRAND_ALIASES: Record<string, string> = {
     '1775': 'Isuzu',
     '1128': 'Mitsubishi',
     '1108': 'Maserati',
+    '1112': 'Mazda',
     '1849': 'Mini',
 };
 

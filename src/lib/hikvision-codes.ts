@@ -46,6 +46,7 @@ export const HIKVISION_VEHICLE_BRANDS: { [key: number]: string } = {
     // ... más marcas según necesidad
     1030: 'Porsche',
     1064: 'Ford',
+    1112: 'Mazda',
     1144: 'Volvo',
     1559: 'Foton',
     1775: 'Isuzu',

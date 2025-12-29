@@ -55,7 +55,7 @@ interface UserWithRelations {
     id: string;
     name: string;
     email: string | null;
-    phone: string;
+    phone: string | null;
     dni: string | null;
     cara: string | null;
     role: UserRole;

@@ -34,6 +34,7 @@ import { Badge } from "@/components/ui/badge";
 import { EventDetailsDialog } from "@/components/dashboard/EventDetailsDialog";
 import { cn } from "@/lib/utils";
 import { getCarLogo } from "@/lib/car-logos";
+import { ExportHistoryDialog } from "@/components/history/ExportHistoryDialog";
 
 type FullAccessEvent = AccessEvent & {
     user: (User & { unit: Unit | null, cara?: string | null }) | null;
@@ -52,7 +53,7 @@ export default function HistoryPage() {
     // Advanced Filters
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
-    const [unitFilter, setUnitFilter] = useState("");
+    const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
 
     // Pagination State
     const [page, setPage] = useState(0);
@@ -66,7 +67,7 @@ export default function HistoryPage() {
             loadData(0, true);
         }, 500); // 500ms debounce
         return () => clearTimeout(timer);
-    }, [searchTerm, filterDecision, filterType, filterDirection, startDate, endDate, unitFilter]);
+    }, [searchTerm, filterDecision, filterType, filterDirection, startDate, endDate]);
 
     // Infinite Scroll Observer
     const observer = useRef<IntersectionObserver | null>(null);
@@ -101,7 +102,6 @@ export default function HistoryPage() {
                 decision: filterDecision,
                 type: filterType,
                 direction: filterDirection,
-                unit: unitFilter,
                 from: startDate ? new Date(startDate) : undefined,
                 to: endDate ? new Date(endDate) : undefined
             });
@@ -135,35 +135,7 @@ export default function HistoryPage() {
         }
     }
 
-    const handleDownload = () => {
-        const headers = ["ID", "Fecha", "Hora", "Patente", "Sujeto", "Lote", "Dispositivo", "Sentido", "Decisión"];
-        const rows = events.map(e => [
-            e.id,
-            new Date(e.timestamp).toLocaleDateString(),
-            new Date(e.timestamp).toLocaleTimeString(),
-            e.plateDetected || "-------",
-            e.user?.name || "Desconocido",
-            e.user?.unit?.name || "Externo",
-            e.device?.name || "Nodo LPR",
-            e.device?.direction === "ENTRY" ? "Entrada" : "Salida",
-            e.decision === "GRANT" ? "PERMITIDO" : "DENEGADO"
-        ]);
-
-        const csvContent = [
-            headers.join(","),
-            ...rows.map(row => row.join(","))
-        ].join("\n");
-
-        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        link.setAttribute("download", `historial_accesos_${new Date().toISOString().split('T')[0]}.csv`);
-        link.style.visibility = "hidden";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
+    // handleDownload removed, use ExportHistoryDialog instead
 
     return (
         <div className="p-6 space-y-8 animate-in fade-in duration-700 h-full flex flex-col overflow-hidden">
@@ -183,57 +155,52 @@ export default function HistoryPage() {
                     </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-                    {/* Date Filters */}
-                    <div className="flex items-center gap-2 bg-white/5 p-1 rounded-xl border border-white/10">
-                        <div className="flex items-center gap-1.5 px-3">
-                            <CalendarIcon size={14} className="text-neutral-500" />
-                            <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">Periodo</span>
-                        </div>
-                        <input
-                            type="date"
-                            value={startDate}
-                            onChange={(e) => setStartDate(e.target.value)}
-                            className="bg-transparent border-none text-[11px] font-bold text-white focus:outline-none w-28 uppercase"
-                        />
-                        <span className="text-neutral-600 text-[11px]">-</span>
-                        <input
-                            type="date"
-                            value={endDate}
-                            onChange={(e) => setEndDate(e.target.value)}
-                            className="bg-transparent border-none text-[11px] font-bold text-white focus:outline-none w-28 uppercase"
-                        />
-                    </div>
-
-                    {/* Unit/Lot Filter */}
-                    <div className="relative">
-                        <Building2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+                <div className="flex flex-wrap items-center gap-2 bg-black/40 p-2 rounded-2xl border border-white/5 shadow-2xl backdrop-blur-xl">
+                    {/* Universal Search - Merged Plate and Unit */}
+                    <div className="relative lg:w-64 group">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500 group-focus-within:text-red-400 transition-colors" size={14} />
                         <Input
-                            placeholder="Lote / Unidad..."
-                            value={unitFilter}
-                            onChange={(e) => setUnitFilter(e.target.value)}
-                            className="pl-9 bg-white/5 border-white/10 h-11 w-40 rounded-xl focus:ring-red-500/20 transition-all font-medium text-[11px] text-white uppercase"
-                        />
-                    </div>
-
-                    {/* Search Input */}
-                    <div className="relative lg:w-48">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500" size={14} />
-                        <Input
-                            placeholder="Buscar..."
+                            placeholder="Buscar Patente, Unidad o Residente..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-10 bg-white/5 border-white/10 h-11 rounded-xl focus:ring-red-500/20 transition-all font-medium text-[11px] text-white"
+                            className="pl-11 bg-white/[0.03] border-white/5 h-11 rounded-xl focus:border-red-500/30 transition-all font-medium text-[11px] text-white placeholder:text-neutral-600 focus:ring-0"
                         />
                     </div>
 
-                    {/* Filter Type Group */}
-                    <div className="flex bg-white/5 p-1 rounded-xl border border-white/10 shrink-0">
+                    <div className="w-px h-6 bg-white/10 mx-1 hidden lg:block" />
+
+                    {/* Date Filters - Consistent style */}
+                    <div className="flex items-center gap-1 bg-white/[0.03] p-1 rounded-xl border border-white/5">
+                        <div className="flex items-center gap-1.5 px-3">
+                            <CalendarIcon size={14} className="text-neutral-500" />
+                            <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest hidden sm:inline">Periodo</span>
+                        </div>
+                        <div className="flex items-center h-9">
+                            <input
+                                type="date"
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                className="bg-transparent border-none text-[10px] font-bold text-white focus:outline-none w-24 uppercase appearance-none"
+                            />
+                            <span className="text-neutral-700 text-[11px] mx-1">-</span>
+                            <input
+                                type="date"
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                                className="bg-transparent border-none text-[10px] font-bold text-white focus:outline-none w-24 uppercase appearance-none"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="w-px h-6 bg-white/10 mx-1 hidden lg:block" />
+
+                    {/* Filter Type Group - Stylized */}
+                    <div className="flex bg-white/[0.03] p-1 rounded-xl border border-white/5 shrink-0 h-11 items-center">
                         <button
                             onClick={() => setFilterType("ALL")}
                             className={cn(
-                                "px-2 py-1.5 rounded-lg text-[9px] font-bold uppercase transition-all",
-                                filterType === "ALL" ? "bg-white/10 text-white shadow-sm" : "text-neutral-500 hover:text-neutral-300"
+                                "h-full px-3 rounded-lg text-[9px] font-bold uppercase transition-all tracking-widest",
+                                filterType === "ALL" ? "bg-white/10 text-white shadow-lg" : "text-neutral-600 hover:text-neutral-300"
                             )}
                         >
                             Todos
@@ -241,33 +208,39 @@ export default function HistoryPage() {
                         <button
                             onClick={() => setFilterType("PLATE")}
                             className={cn(
-                                "px-2 py-1.5 rounded-lg text-[9px] font-bold uppercase transition-all flex items-center gap-1.5",
-                                filterType === "PLATE" ? "bg-orange-500/20 text-orange-400 border border-orange-500/30" : "text-neutral-500 hover:text-neutral-300"
+                                "h-full px-3 rounded-lg text-[9px] font-bold uppercase transition-all flex items-center gap-2",
+                                filterType === "PLATE" ? "bg-red-500/20 text-red-100 border border-red-500/20 shadow-lg" : "text-neutral-600 hover:text-neutral-300"
                             )}
                         >
-                            <Car size={10} />
+                            <Car size={12} />
                             LPR
                         </button>
                         <button
                             onClick={() => setFilterType("FACE")}
                             className={cn(
-                                "px-2 py-1.5 rounded-lg text-[9px] font-bold uppercase transition-all flex items-center gap-1.5",
-                                filterType === "FACE" ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "text-neutral-500 hover:text-neutral-300"
+                                "h-full px-3 rounded-lg text-[9px] font-bold uppercase transition-all flex items-center gap-2",
+                                filterType === "FACE" ? "bg-emerald-500/20 text-emerald-100 border border-emerald-500/20 shadow-lg" : "text-neutral-600 hover:text-neutral-300"
                             )}
                         >
-                            <UserIcon size={10} />
+                            <UserIcon size={12} />
                             Facial
                         </button>
                     </div>
 
+                    <div className="w-px h-6 bg-white/10 mx-1 hidden lg:block" />
+
+                    {/* Export Button */}
                     <button
-                        onClick={handleDownload}
-                        className="h-11 w-11 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 text-neutral-400 hover:text-white transition-all active:scale-90 shadow-lg"
+                        onClick={() => setIsExportDialogOpen(true)}
+                        title="Exportar Reporte Excel"
+                        className="h-11 w-11 flex items-center justify-center rounded-xl bg-red-600/10 border border-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-all active:scale-95 shadow-lg group"
                     >
-                        <Download size={18} />
+                        <Download size={18} className="group-hover:translate-y-0.5 transition-transform" />
                     </button>
                 </div>
             </header>
+
+            <ExportHistoryDialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen} />
 
             {/* Content Table Area - Transparent and fused with background */}
             <div className="flex-1 min-h-0 overflow-hidden">
