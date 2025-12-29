@@ -19,68 +19,100 @@ async function importUsers() {
 
         console.log(`Loaded ${users.length} users from file.`);
 
-        for (const user of users) {
-            console.log(`Processing user: ${user.name} (${user.email || 'No Email'})`);
+        let newRecords = 0;
+        let updatedRecords = 0;
 
+        for (const user of users) {
             // 1. Check if user exists
-            const existing = await prisma.user.findFirst({
+            let existing = await prisma.user.findFirst({
                 where: {
                     OR: [
                         { email: user.email },
-                        { dni: user.dni } // Assuming DNI is unique too
+                        { dni: user.dni }
                     ]
-                }
+                },
+                include: { vehicles: true }
             });
 
-            if (existing) {
-                console.log(`  -> User already exists (ID: ${existing.id}). Skipping.`);
-                continue;
-            }
-
-            // 2. Prepare data for creation
-            // We need to detach ID to let Prisma generate a new one if we want to avoid conflicts, 
-            // OR keep it if we are sure. Let's regenerate ID to be safe and avoid primary key collisions if prod isn't empty.
-            // But we need to handle relations.
-
+            // Clean data for processing
             const { id, accessGroups, credentials, vehicles, ...userData } = user;
 
-            // TODO: AccessGroups handling. We need to find valid Group IDs in DB or create them.
-            // For now, let's skip group linking or try to find by name if Group model has unique name.
-            // Assuming AccessGroup has 'name'.
+            // Filter invalid data (empty strings that should be null)
+            if (userData.dni === "") userData.dni = null;
+            if (userData.email === "") userData.email = null;
 
-            try {
-                const newUser = await prisma.user.create({
-                    data: {
-                        ...userData,
-                        // Re-create vehicles
-                        vehicles: {
-                            create: vehicles.map((v: any) => ({
-                                plate: v.plate,
-                                brand: v.brand,
-                                model: v.model,
-                                color: v.color,
-                                type: v.type,
-                                // photos...
-                            }))
-                        },
-                        // Re-create credentials
-                        credentials: {
-                            create: credentials.map((c: any) => ({
-                                type: c.type,
-                                code: c.code,
-                                status: c.status,
-                                // ... other fields except ID and userId
-                            }))
+            if (existing) {
+                console.log(`  [UPDATE] User ${user.name} exists. Checking vehicles...`);
+
+                // Add missing vehicles
+                if (vehicles && vehicles.length > 0) {
+                    for (const v of vehicles) {
+                        // Check if user already has this plate
+                        const hasPlate = existing.vehicles.some((ev: any) => ev.plate === v.plate);
+
+                        if (!hasPlate) {
+                            try {
+                                await prisma.vehicle.create({
+                                    data: {
+                                        plate: v.plate,
+                                        brand: v.brand,
+                                        model: v.model,
+                                        color: v.color,
+                                        type: v.type,
+                                        accessStatus: v.accessStatus || "ALLOWED",
+                                        userId: existing.id
+                                    }
+                                });
+                                console.log(`     + Added plate ${v.plate} to ${user.name}`);
+                                updatedRecords++;
+                            } catch (err) {
+                                console.error(`     ! Failed to add plate ${v.plate}:`, err);
+                            }
                         }
                     }
-                });
-                console.log(`  -> Created user: ${newUser.id}`);
-            } catch (createError) {
-                console.error(`  -> Failed to create user ${user.name}:`, createError);
+                }
+
+            } else {
+                console.log(`  [CREATE] Creating new user: ${user.name}`);
+
+                try {
+                    const newUser = await prisma.user.create({
+                        data: {
+                            ...userData,
+                            // Create vehicles
+                            vehicles: {
+                                create: vehicles ? vehicles.map((v: any) => ({
+                                    plate: v.plate,
+                                    brand: v.brand,
+                                    model: v.model,
+                                    color: v.color,
+                                    type: v.type,
+                                    accessStatus: v.accessStatus || "ALLOWED",
+                                    // photos optional
+                                })) : []
+                            },
+                            // Create credentials
+                            credentials: {
+                                create: credentials ? credentials.map((c: any) => ({
+                                    type: c.type,
+                                    code: c.code,
+                                    status: c.status,
+                                    facilityCode: c.facilityCode
+                                })) : []
+                            }
+                            // We are NOT linking accessGroups by default to avoid ID conflicts, 
+                            // unless you want to match by name.
+                        }
+                    });
+                    newRecords++;
+                } catch (createError) {
+                    console.error(`  -> Failed to create user ${user.name}:`, createError);
+                }
             }
         }
 
-        console.log("Import completed.");
+        console.log("------------------------------------------------");
+        console.log(`Import completed. Created: ${newRecords}, Updated (Vehicles): ${updatedRecords}`);
 
     } catch (e) {
         console.error("Error importing users:", e);
