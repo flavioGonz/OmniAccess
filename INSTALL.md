@@ -32,6 +32,8 @@ sudo apt install -y git
 
 ### 2. Configurar PostgreSQL
 
+#### Opción A: Base de Datos Local (en el mismo servidor)
+
 ```bash
 # Acceder a PostgreSQL
 sudo -u postgres psql
@@ -52,6 +54,71 @@ local   omniaccess      omniaccess_user                     md5
 Reiniciar PostgreSQL:
 ```bash
 sudo systemctl restart postgresql
+```
+
+#### Opción B: Base de Datos Remota (en otro servidor por IP)
+
+**En el servidor de PostgreSQL remoto:**
+
+1. **Editar `postgresql.conf`** para permitir conexiones externas:
+```bash
+sudo nano /etc/postgresql/14/main/postgresql.conf
+```
+
+Buscar y modificar:
+```conf
+# Cambiar de:
+# listen_addresses = 'localhost'
+# A:
+listen_addresses = '*'
+```
+
+2. **Editar `pg_hba.conf`** para permitir tu IP:
+```bash
+sudo nano /etc/postgresql/14/main/pg_hba.conf
+```
+
+Añadir al final (reemplazar con la IP de tu servidor de aplicación):
+```conf
+# Permitir conexión desde el servidor de aplicación
+host    omniaccess    omniaccess_user    IP_SERVIDOR_APP/32    md5
+
+# O permitir desde toda una red (ejemplo: 192.168.1.0/24)
+host    omniaccess    omniaccess_user    192.168.1.0/24        md5
+```
+
+3. **Crear base de datos y usuario**:
+```bash
+sudo -u postgres psql
+
+CREATE DATABASE omniaccess;
+CREATE USER omniaccess_user WITH ENCRYPTED PASSWORD 'TU_PASSWORD_SEGURO';
+GRANT ALL PRIVILEGES ON DATABASE omniaccess TO omniaccess_user;
+\q
+```
+
+4. **Configurar firewall** para permitir PostgreSQL (puerto 5432):
+```bash
+sudo ufw allow from IP_SERVIDOR_APP to any port 5432
+# O para toda la red:
+sudo ufw allow from 192.168.1.0/24 to any port 5432
+```
+
+5. **Reiniciar PostgreSQL**:
+```bash
+sudo systemctl restart postgresql
+```
+
+**Verificar conexión desde el servidor de aplicación:**
+```bash
+# Instalar cliente PostgreSQL si no está instalado
+sudo apt install -y postgresql-client
+
+# Probar conexión
+psql -h IP_SERVIDOR_POSTGRES -U omniaccess_user -d omniaccess
+
+# Si conecta correctamente, verás el prompt de PostgreSQL:
+# omniaccess=>
 ```
 
 ### 3. Clonar el Repositorio
@@ -78,9 +145,9 @@ cp .env.example .env
 nano .env
 ```
 
-**Configuración mínima para producción:**
+**Configuración para Base de Datos LOCAL:**
 ```env
-# Database (IMPORTANTE: Cambiar estos valores)
+# Database (servidor local)
 DATABASE_URL="postgresql://omniaccess_user:TU_PASSWORD_SEGURO@localhost:5432/omniaccess"
 
 # MinIO / S3 (Opcional - dejar comentado si no usas)
@@ -96,6 +163,40 @@ HOST=0.0.0.0
 # Next.js (Cambiar por la IP/dominio del servidor)
 NEXT_PUBLIC_API_URL=http://TU_IP_SERVIDOR:10001
 ```
+
+**Configuración para Base de Datos REMOTA:**
+```env
+# Database (servidor remoto por IP)
+DATABASE_URL="postgresql://omniaccess_user:TU_PASSWORD_SEGURO@IP_SERVIDOR_POSTGRES:5432/omniaccess"
+
+# Ejemplo con IP real:
+# DATABASE_URL="postgresql://omniaccess_user:MiPassword123@192.168.1.100:5432/omniaccess"
+
+# MinIO / S3 (Opcional)
+# S3_ENDPOINT="http://192.168.1.100:9000"
+# S3_ACCESS_KEY="minioadmin"
+# S3_SECRET_KEY="minioadmin"
+# S3_BUCKET_NAME="access-control"
+
+# Webhook Server
+WEBHOOK_PORT=10000
+HOST=0.0.0.0
+
+# Next.js
+NEXT_PUBLIC_API_URL=http://TU_IP_SERVIDOR:10001
+```
+
+**Formato de DATABASE_URL:**
+```
+postgresql://[USUARIO]:[PASSWORD]@[HOST]:[PUERTO]/[NOMBRE_BD]
+```
+
+Donde:
+- `USUARIO`: omniaccess_user (o el que creaste)
+- `PASSWORD`: La contraseña que configuraste
+- `HOST`: `localhost` (local) o `192.168.1.100` (remota)
+- `PUERTO`: `5432` (puerto por defecto de PostgreSQL)
+- `NOMBRE_BD`: `omniaccess`
 
 ### 5. Instalar Dependencias y Configurar Base de Datos
 
