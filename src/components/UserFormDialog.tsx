@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -47,6 +48,8 @@ import {
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { createUser, updateUser } from "@/app/actions/users";
+import { addDevicePlate } from "@/app/actions/devices";
+import { Loader2 } from "lucide-react";
 
 type UserWithRelations = User & {
     unit: Unit | null;
@@ -88,6 +91,7 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
     const [selectedDeviceIds, setSelectedDeviceIds] = useState<string[]>([]);
     const [selectedUnitId, setSelectedUnitId] = useState<string>("none");
     const [activeTab, setActiveTab] = useState("general");
+    const [syncStatus, setSyncStatus] = useState<{ total: number, current: number, currentName: string } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const isEdit = !!user;
@@ -173,6 +177,34 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
                 if (!uploadRes.ok) {
                     console.error("Face upload failed:", await uploadRes.text());
                 }
+            }
+
+            // --- LPR MANUAL SYNC PROCESS ---
+            const syncDeviceIds = formData.getAll("syncDeviceId") as string[];
+            const plate = formData.get("plate") as string;
+
+            if (plate && plate.trim() !== "" && syncDeviceIds.length > 0) {
+                setActiveTab("sync");
+                setSyncStatus({ total: syncDeviceIds.length, current: 0, currentName: "" });
+
+                for (let i = 0; i < syncDeviceIds.length; i++) {
+                    const devId = syncDeviceIds[i];
+                    const device = devices.find(d => d.id === devId);
+                    setSyncStatus({
+                        total: syncDeviceIds.length,
+                        current: i,
+                        currentName: device?.name || "Equipo"
+                    });
+
+                    try {
+                        await addDevicePlate(devId, plate.toUpperCase().trim());
+                    } catch (err) {
+                        console.error(`Sync error for ${device?.name}:`, err);
+                    }
+                }
+                setSyncStatus({ total: syncDeviceIds.length, current: syncDeviceIds.length, currentName: "Sincronización Finalizada" });
+                // Short delay to show completion
+                await new Promise(resolve => setTimeout(resolve, 800));
             }
 
             onOpenChange(false);
@@ -562,9 +594,28 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
                                             ))}
                                             {selectedDeviceIds.length > 0 && (
                                                 <div className="p-2 bg-blue-500/5 border border-blue-500/10 rounded-lg">
-                                                    <p className="text-[9px] text-blue-400 font-bold uppercase text-center tracking-widest animate-pulse">
+                                                    <p className="text-[9px] text-blue-400 font-bold uppercase text-center tracking-widest">
                                                         La matrícula se enviará a {selectedDeviceIds.length} equipo(s) al guardar
                                                     </p>
+                                                </div>
+                                            )}
+
+                                            {syncStatus && (
+                                                <div className="mt-4 p-4 bg-black/40 border border-emerald-500/20 rounded-xl space-y-3 animate-in zoom-in duration-300">
+                                                    <div className="flex justify-between items-center">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                                            <span className="text-[10px] font-black text-white uppercase tracking-tight">Sincronizando matrícula...</span>
+                                                        </div>
+                                                        <span className="text-[10px] font-mono text-emerald-400">{Math.round((syncStatus.current / syncStatus.total) * 100)}%</span>
+                                                    </div>
+                                                    <Progress value={(syncStatus.current / syncStatus.total) * 100} indicatorClassName="bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+                                                    <div className="flex items-center gap-2">
+                                                        <Loader2 className="w-3 h-3 text-neutral-500 animate-spin" />
+                                                        <p className="text-[9px] font-bold text-neutral-500 uppercase italic">
+                                                            {syncStatus.current === syncStatus.total ? "Sincronización Finalizada" : `Enviando a: ${syncStatus.currentName}`}
+                                                        </p>
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
