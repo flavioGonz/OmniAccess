@@ -6,7 +6,7 @@ import { getUsers, deleteUser } from "@/app/actions/users";
 import { getUnits } from "@/app/actions/units";
 import { getAccessGroups } from "@/app/actions/groups";
 import { getParkingSlots } from "@/app/actions/parking";
-import { getDevices } from "@/app/actions/devices";
+import { getDevices, getLprSyncMap } from "@/app/actions/devices";
 import { UserRole } from "@prisma/client";
 import {
     Table,
@@ -86,6 +86,8 @@ export default function UsersPage() {
     const [groups, setGroups] = useState<any[]>([]);
     const [parkingSlots, setParkingSlots] = useState<any[]>([]);
     const [devices, setDevices] = useState<any[]>([]);
+    const [lprSyncMap, setLprSyncMap] = useState<Record<string, string[]>>({});
+    const [isSyncLoading, setIsSyncLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [filterRole, setFilterRole] = useState<string | null>(null);
     const [selectedUser, setSelectedUser] = useState<UserWithRelations | null>(null);
@@ -128,6 +130,18 @@ export default function UsersPage() {
             console.error("Error loading data:", error);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const fetchSyncMap = async () => {
+        setIsSyncLoading(true);
+        try {
+            const data = await getLprSyncMap();
+            setLprSyncMap(data);
+        } catch (error) {
+            console.error("Error fetching sync map:", error);
+        } finally {
+            setIsSyncLoading(false);
         }
     };
 
@@ -183,6 +197,14 @@ export default function UsersPage() {
                         <p className="text-xs font-bold uppercase tracking-widest text-neutral-400">Directorio Maestro de Residentes y Staff</p>
                     </div>
                 </div>
+                <Button
+                    onClick={fetchSyncMap}
+                    disabled={isSyncLoading}
+                    className="bg-neutral-900 hover:bg-neutral-800 text-neutral-400 h-12 px-6 rounded-lg font-black uppercase tracking-widest transition-all border border-white/5"
+                >
+                    {isSyncLoading ? <Loader2 size={20} className="animate-spin" /> : <Camera size={20} className="mr-2" />}
+                    {isSyncLoading ? "Escaneando..." : "Escanear Hardware"}
+                </Button>
                 <Button
                     onClick={() => {
                         setSelectedUser(null);
@@ -275,6 +297,7 @@ export default function UsersPage() {
                                 <TableHead className="text-neutral-500 font-black uppercase text-[10px] tracking-widest py-6 px-4">Usuario & Perfil</TableHead>
                                 <TableHead className="text-neutral-500 font-black uppercase text-[10px] tracking-widest px-4">Grupos de Acceso</TableHead>
                                 <TableHead className="text-neutral-500 font-black uppercase text-[10px] tracking-widest px-4">Dispositivos Cargados</TableHead>
+                                <TableHead className="text-neutral-500 font-black uppercase text-[10px] tracking-widest px-4">Sincro Hardware</TableHead>
                                 <TableHead className="text-neutral-500 font-black uppercase text-[10px] tracking-widest px-4">Origen de Datos</TableHead>
                                 <TableHead className="text-neutral-500 font-black uppercase text-[10px] tracking-widest text-right px-8">Acciones</TableHead>
                             </TableRow>
@@ -282,7 +305,7 @@ export default function UsersPage() {
                         <TableBody>
                             {isLoading ? (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="h-64 text-center">
+                                    <TableCell colSpan={6} className="h-64 text-center">
                                         <div className="flex flex-col items-center justify-center gap-4 py-20 grayscale opacity-20">
                                             <Loader2 className="animate-spin text-white" size={48} />
                                             <p className="text-xs font-black uppercase tracking-[0.5em]">Cargando Base de Datos...</p>
@@ -291,7 +314,7 @@ export default function UsersPage() {
                                 </TableRow>
                             ) : usersToDisplay.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="h-64 text-center">
+                                    <TableCell colSpan={6} className="h-64 text-center">
                                         <div className="flex flex-col items-center justify-center gap-4 py-20 opacity-20">
                                             <UserX size={64} />
                                             <p className="text-xs font-black uppercase tracking-[0.5em]">No se encontraron usuarios</p>
@@ -390,6 +413,40 @@ export default function UsersPage() {
                                                     </div>
                                                 </TableCell>
                                                 <TableCell className="px-4">
+                                                    <div className="flex flex-wrap gap-1 max-w-[150px]">
+                                                        {user.vehicles && user.vehicles.length > 0 ? (
+                                                            user.vehicles.map((v: any) => {
+                                                                const normPlate = v.plate.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+                                                                const devicesPresent = lprSyncMap[normPlate] || [];
+
+                                                                if (devicesPresent.length === 0) {
+                                                                    return (
+                                                                        <div key={v.id} className="flex flex-col gap-0.5 mb-1 last:mb-0">
+                                                                            <span className="text-[7px] font-black text-neutral-700 uppercase tracking-tight">{v.plate}</span>
+                                                                            <Badge className="bg-red-500/5 text-red-500/40 border-none text-[6px] px-1 py-0 h-3 leading-none uppercase">Desconectado</Badge>
+                                                                        </div>
+                                                                    );
+                                                                }
+
+                                                                return (
+                                                                    <div key={v.id} className="flex flex-col gap-0.5 mb-1 last:mb-0">
+                                                                        <span className="text-[7px] font-black text-white/40 uppercase tracking-tight">{v.plate}</span>
+                                                                        <div className="flex flex-wrap gap-0.5">
+                                                                            {devicesPresent.map((dev: string) => (
+                                                                                <Badge key={dev} className="bg-emerald-500/10 text-emerald-400 border-none text-[6px] px-1 py-0 h-3 leading-none uppercase">
+                                                                                    {dev}
+                                                                                </Badge>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })
+                                                        ) : (
+                                                            <span className="text-[9px] text-neutral-800 font-black uppercase tracking-widest italic">N/A</span>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="px-4">
                                                     <div className="flex items-center gap-2">
                                                         {isImported ? (
                                                             <>
@@ -440,7 +497,7 @@ export default function UsersPage() {
                                     {/* Sentinel for Infinite Scroll */}
                                     {!isLoading && !searchQuery && !filterRole && visibleUsers.length < users.length && (
                                         <TableRow>
-                                            <TableCell colSpan={5} className="p-0 border-0">
+                                            <TableCell colSpan={6} className="p-0 border-0">
                                                 <div ref={observerTarget} className="h-24 w-full flex items-center justify-center">
                                                     <div className="flex items-center gap-2 opacity-30">
                                                         <Loader2 className="animate-spin text-white" size={20} />
@@ -451,7 +508,7 @@ export default function UsersPage() {
                                         </TableRow>
                                     )}
                                     {/* Spacer for Fade Effect */}
-                                    <TableRow><TableCell colSpan={5} className="h-32 border-0 p-0" /></TableRow>
+                                    <TableRow><TableCell colSpan={6} className="h-32 border-0 p-0" /></TableRow>
                                 </>
                             )}
                         </TableBody>

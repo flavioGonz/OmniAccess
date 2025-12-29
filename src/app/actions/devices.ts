@@ -427,3 +427,41 @@ export async function getPlatesEnrichment() {
         return {};
     }
 }
+
+export async function getLprSyncMap() {
+    try {
+        const devices = await prisma.device.findMany({
+            where: { deviceType: 'LPR_CAMERA' }
+        });
+
+        const syncMap: Record<string, string[]> = {};
+        const driver = new HikvisionDriver();
+
+        // Normalize helper
+        const normalize = (s: string) => s.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+        await Promise.all(devices.map(async (device) => {
+            if (device.brand === 'HIKVISION') {
+                try {
+                    // We use getPlatesPage with a large max or just getPlates if it exists
+                    const plates = await driver.getPlates(device);
+                    plates.forEach(p => {
+                        const plate = normalize(p);
+                        if (!plate) return;
+                        if (!syncMap[plate]) syncMap[plate] = [];
+                        if (!syncMap[plate].includes(device.name)) {
+                            syncMap[plate].push(device.name);
+                        }
+                    });
+                } catch (err) {
+                    console.error(`Error fetching plates from ${device.name}:`, err);
+                }
+            }
+        }));
+
+        return syncMap;
+    } catch (error) {
+        console.error("Global Sync Map error:", error);
+        return {};
+    }
+}

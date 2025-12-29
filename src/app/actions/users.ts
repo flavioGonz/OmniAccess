@@ -89,17 +89,6 @@ export async function createUser(formData: FormData) {
                 userId: newUser.id
             }
         });
-
-        // Sync with selected LPR devices
-        if (syncDeviceIds.length > 0) {
-            for (const deviceId of syncDeviceIds) {
-                try {
-                    await addDevicePlate(deviceId, plate.toUpperCase().trim());
-                } catch (err) {
-                    console.error(`Failed to sync plate to device ${deviceId}:`, err);
-                }
-            }
-        }
     }
 
     // Handle Access Tags (RFID) creation
@@ -213,17 +202,6 @@ export async function updateUser(id: string, formData: FormData) {
                         userId: id
                     }
                 });
-            }
-        }
-
-        // Sync with selected LPR devices on update
-        if (plate.trim() !== "" && syncDeviceIds.length > 0) {
-            for (const deviceId of syncDeviceIds) {
-                try {
-                    await addDevicePlate(deviceId, plate.toUpperCase().trim());
-                } catch (err) {
-                    console.error(`Failed to sync plate to device ${deviceId} on update:`, err);
-                }
             }
         }
     }
