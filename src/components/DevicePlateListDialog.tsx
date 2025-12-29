@@ -136,10 +136,10 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
             const normalize = (s: string) => s.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
 
             while (keepFetching) {
-                const res = await getDevicePlatesPage(device.id, searchId, start);
+                const res = await getDevicePlatesPage(device.id, searchId, start) as any;
                 if (!res.success) throw new Error(res.message);
 
-                const normalizedBatch = res.plates.map(p => normalize(p));
+                const normalizedBatch = res.plates.map((p: string) => normalize(p));
                 allCamPlates = [...allCamPlates, ...normalizedBatch];
 
                 setPlates(Array.from(new Set(allCamPlates)));

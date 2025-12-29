@@ -64,8 +64,13 @@ export async function getAccessEvents(options?: {
                     select: {
                         id: true,
                         name: true,
+                        email: true,
+                        phone: true,
+                        dni: true,
+                        apartment: true,
                         cara: true,
-                        unit: true
+                        unit: true,
+                        parkingSlotId: true
                     }
                 },
                 device: true,

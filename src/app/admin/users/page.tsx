@@ -6,6 +6,7 @@ import { getUsers, deleteUser } from "@/app/actions/users";
 import { getUnits } from "@/app/actions/units";
 import { getAccessGroups } from "@/app/actions/groups";
 import { getParkingSlots } from "@/app/actions/parking";
+import { UserRole } from "@prisma/client";
 import {
     Table,
     TableBody,
@@ -49,11 +50,25 @@ import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { cn } from "@/lib/utils";
 
 // Mock User with relations until prisma generate is ready
-interface UserWithRelations extends any {
+interface UserWithRelations {
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string;
+    dni: string | null;
+    cara: string | null;
+    role: UserRole;
+    apartment: string | null;
+    accessTags: string[];
+    createdAt: Date;
+    updatedAt: Date;
+    unitId: string | null;
+    parkingSlotId: string | null;
     unit: any | null;
     credentials: any[];
     accessGroups: any[];
     vehicles: any[];
+    [key: string]: any; // Allow additional properties
 }
 
 const ROLE_LABELS: Record<string, { label: string, color: string, icon: any }> = {
@@ -73,7 +88,6 @@ export default function UsersPage() {
     const [filterRole, setFilterRole] = useState<string | null>(null);
     const [selectedUser, setSelectedUser] = useState<UserWithRelations | null>(null);
     const [isFormOpen, setIsFormOpen] = useState(false);
-    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
     const [userToDelete, setUserToDelete] = useState<UserWithRelations | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const observerTarget = useRef(null);
@@ -124,13 +138,6 @@ export default function UsersPage() {
         }
     };
 
-    const handleDelete = async () => {
-        if (!userToDelete) return;
-        await deleteUser(userToDelete.id);
-        await loadData();
-        setIsDeleteDialogOpen(false);
-        setUserToDelete(null);
-    };
 
     const filteredUsers = users.filter(user => {
         const query = searchQuery.toLowerCase();
@@ -406,10 +413,7 @@ export default function UsersPage() {
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
-                                                            onClick={() => {
-                                                                setUserToDelete(user);
-                                                                setIsDeleteDialogOpen(true);
-                                                            }}
+                                                            onClick={() => setUserToDelete(user)}
                                                             className="h-10 w-10 p-0 bg-white/5 backdrop-blur-md hover:bg-red-600 hover:text-white rounded-md transition-all"
                                                         >
                                                             <Trash2 size={16} />
@@ -447,7 +451,7 @@ export default function UsersPage() {
             <UserFormDialog
                 open={isFormOpen}
                 onOpenChange={setIsFormOpen}
-                user={selectedUser}
+                user={selectedUser || undefined}
                 units={units}
                 groups={groups}
                 parkingSlots={parkingSlots}
@@ -458,16 +462,21 @@ export default function UsersPage() {
                 }}
             />
 
-            <DeleteConfirmDialog
-                isOpen={isDeleteDialogOpen}
-                onClose={() => {
-                    setIsDeleteDialogOpen(false);
-                    setUserToDelete(null);
-                }}
-                onConfirm={handleDelete}
-                title="Eliminar Usuario"
-                description={`¿Estás seguro de eliminar a ${userToDelete?.name}? Esta acción revocará todos sus permisos de acceso.`}
-            />
+
+            {userToDelete && (
+                <DeleteConfirmDialog
+                    id={userToDelete.id}
+                    title="Eliminar Usuario"
+                    description={`¿Estás seguro de eliminar a ${userToDelete.name}? Esta acción revocará todos sus permisos de acceso.`}
+                    onDelete={deleteUser}
+                    onSuccess={() => {
+                        loadData();
+                        setUserToDelete(null);
+                    }}
+                >
+                    <div />
+                </DeleteConfirmDialog>
+            )}
 
             <style jsx global>{`
                 .custom-scrollbar::-webkit-scrollbar {

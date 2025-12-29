@@ -2,7 +2,7 @@ import {
     BookOpen, Book, AlertCircle, Server, Code, FileCode, Workflow,
     ShieldCheck, Zap, Car, LayoutDashboard, Calendar, History,
     Users, Cpu, Key, LayoutGrid, Settings, Activity, Home,
-    ChevronLeft, ExternalLink, Shield, Lock, Bell, CheckCircle2
+    ChevronLeft, ExternalLink, Shield, Lock, Bell, CheckCircle2, CreditCard
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";

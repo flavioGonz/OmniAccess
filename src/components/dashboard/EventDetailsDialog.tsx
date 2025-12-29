@@ -92,7 +92,7 @@ export function EventDetailsDialog({ event, children }: EventDetailsDialogProps)
     const logoUrl = getCarLogo(meta.Marca);
 
     // Get the proper image URL
-    const eventImageUrl = getImageUrl(event.plateImagePath || event.snapshotPath || event.user?.cara);
+    const eventImageUrl = getImageUrl(event.imagePath || event.snapshotPath || event.user?.cara);
     const userImageUrl = event.user?.cara ? getImageUrl(event.user.cara) : null;
 
     // Format timestamp
@@ -287,7 +287,7 @@ export function EventDetailsDialog({ event, children }: EventDetailsDialogProps)
                                                     const histDate = new Date(hist.timestamp);
                                                     const histTimeStr = histDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                                                     const histDateStr = histDate.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
-                                                    const histImageUrl = getImageUrl(hist.snapshotPath || hist.plateImagePath);
+                                                    const histImageUrl = getImageUrl(hist.snapshotPath || hist.imagePath);
 
                                                     return (
                                                         <div key={hist.id} className="flex items-center gap-3 p-2 bg-neutral-900/50 rounded-lg border border-neutral-800/50 hover:border-neutral-700 transition-colors">

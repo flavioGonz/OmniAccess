@@ -79,7 +79,7 @@ const VEHICLE_TYPES = [
 
 export function UserFormDialog({ user, units, groups, parkingSlots = [], onSuccess, open, onOpenChange }: UserFormDialogProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [previewUrl, setPreviewUrl] = useState<string | null>(user?.faceImagePath || null);
+    const [previewUrl, setPreviewUrl] = useState<string | null>(user?.cara || null);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [plateValue, setPlateValue] = useState(user?.credentials?.find(c => c.type === 'PLATE')?.value || "");
     const [pinValue, setPinValue] = useState(user?.credentials?.find(c => c.type === 'PIN')?.value || "");
@@ -97,7 +97,7 @@ export function UserFormDialog({ user, units, groups, parkingSlots = [], onSucce
     useEffect(() => {
         if (open) {
             setActiveTab("general");
-            let path = user?.faceImagePath || null;
+            let path = user?.cara || null;
             if (path && !path.startsWith('http') && !path.startsWith('/')) {
                 path = '/' + path;
             }
@@ -487,12 +487,12 @@ export function UserFormDialog({ user, units, groups, parkingSlots = [], onSucce
                                                 <Server size={12} /> Equipos Sincronizados
                                             </div>
                                             <div className="bg-neutral-900/50 rounded-lg p-3 border border-white/5">
-                                                {user?.accessGroups?.length > 0 ? (
+                                                {(user?.accessGroups?.length ?? 0) > 0 ? (
                                                     <div className="space-y-2">
                                                         <p className="text-[9px] text-neutral-500 font-bold uppercase">Dispositivos con acceso Permitido:</p>
                                                         <div className="flex flex-wrap gap-2">
-                                                            {user.accessGroups.flatMap(g => g.devices || []).length > 0 ? (
-                                                                user.accessGroups.flatMap(g => g.devices || []).map((dev, i) => (
+                                                            {user!.accessGroups.flatMap(g => (g as any).devices || []).length > 0 ? (
+                                                                user!.accessGroups.flatMap(g => (g as any).devices || []).map((dev: any, i: number) => (
                                                                     <div key={i} className="flex items-center gap-2 px-2 py-1 bg-blue-500/5 border border-blue-500/10 rounded text-[9px] text-blue-400">
                                                                         <div className="w-1 h-1 rounded-full bg-blue-500 animate-pulse" />
                                                                         {dev.name} ({dev.ip})

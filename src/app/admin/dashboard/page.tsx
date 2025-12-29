@@ -28,11 +28,21 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { EventDetailsDialog } from "@/components/dashboard/EventDetailsDialog";
 import Image from "next/image";
-import { AccessEvent, User, Device, Unit } from "@prisma/client";
+import { AccessEvent, Device, Unit } from "@prisma/client";
 import { getCarLogo } from "@/lib/car-logos";
 
 interface FullAccessEvent extends AccessEvent {
-    user: (User & { unit: Unit | null, cara?: string | null }) | null;
+    user: {
+        id: string;
+        name: string;
+        email: string | null;
+        phone: string;
+        dni: string | null;
+        apartment: string | null;
+        cara: string | null;
+        unit: Unit | null;
+        parkingSlotId: string | null;
+    } | null;
     device: Device | null;
 }
 
@@ -94,7 +104,7 @@ export default function AccessDashboard() {
     // Derived columns
     const entryEvents = filteredEvents.filter(e => e.direction === 'ENTRY');
     const exitEvents = filteredEvents.filter(e => e.direction === 'EXIT');
-    const captureEvents = filteredEvents.filter(e => e.plateImagePath || e.snapshotPath || e.user?.cara);
+    const captureEvents = filteredEvents.filter(e => e.imagePath || e.snapshotPath || e.user?.cara);
 
     const EventItem = ({ event }: { event: FullAccessEvent }) => {
         const typeConfig = {
@@ -269,7 +279,7 @@ export default function AccessDashboard() {
                             <EventDetailsDialog key={event.id} event={event}>
                                 <div className="relative aspect-video rounded-2xl overflow-hidden border border-white/10 group cursor-pointer shadow-lg hover:border-indigo-500/50 transition-all duration-500">
                                     <Image
-                                        src={event.plateImagePath || event.snapshotPath || event.user?.cara || "/placeholder-camera.jpg"}
+                                        src={event.imagePath || event.snapshotPath || event.user?.cara || "/placeholder-camera.jpg"}
                                         alt="Access Capture"
                                         fill
                                         sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"

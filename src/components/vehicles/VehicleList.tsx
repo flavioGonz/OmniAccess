@@ -41,7 +41,7 @@ export function VehicleList({ initialVehicles, initialTotal, users }: VehicleLis
     const [historyLoading, setHistoryLoading] = useState(false);
     const [triggerFetch, setTriggerFetch] = useState(0);
 
-    const observer = useRef<IntersectionObserver>();
+    const observer = useRef<IntersectionObserver | null>(null);
     const lastElementRef = useCallback((node: HTMLDivElement) => {
         if (loading) return;
         if (observer.current) observer.current.disconnect();

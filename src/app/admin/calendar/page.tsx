@@ -18,7 +18,7 @@ import {
     CreditCard,
     DoorOpen
 } from "lucide-react";
-import { AccessEvent, User, Unit, Device } from "@prisma/client";
+import { AccessEvent, Unit, Device } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,7 +35,17 @@ function getFirstDayOfMonth(year: number, month: number) {
 }
 
 type FullAccessEvent = AccessEvent & {
-    user: (User & { unit: Unit | null, cara?: string | null }) | null;
+    user: {
+        id: string;
+        name: string;
+        email: string | null;
+        phone: string;
+        dni: string | null;
+        apartment: string | null;
+        cara: string | null;
+        unit: Unit | null;
+        parkingSlotId: string | null;
+    } | null;
     device: Device | null;
 };
 
@@ -376,7 +386,7 @@ export default function CalendarPage() {
                                                     {evt.accessType === 'PLATE' && <Car size={12} className="text-blue-400 shrink-0" />}
                                                     {evt.accessType === 'FACE' && <UserIcon size={12} className="text-purple-400 shrink-0" />}
                                                     {evt.accessType === 'TAG' && <CreditCard size={12} className="text-amber-400 shrink-0" />}
-                                                    {evt.accessType === 'DOOR' && <DoorOpen size={12} className="text-emerald-400 shrink-0" />}
+                                                    {(evt.accessType as string) === 'DOOR' && <DoorOpen size={12} className="text-emerald-400 shrink-0" />}
 
                                                     <span className="text-xs font-black text-white truncate">
                                                         {evt.accessType === 'PLATE' && evt.plateDetected
@@ -385,7 +395,7 @@ export default function CalendarPage() {
                                                                 ? evt.user.name
                                                                 : evt.accessType === 'TAG' && evt.user?.name
                                                                     ? evt.user.name
-                                                                    : evt.accessType === 'DOOR'
+                                                                    : (evt.accessType as string) === 'DOOR'
                                                                         ? evt.decision === 'GRANT' ? 'Puerta Abierta' : 'Puerta Cerrada'
                                                                         : evt.user?.name || "Desconocido"
                                                         }

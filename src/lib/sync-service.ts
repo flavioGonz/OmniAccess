@@ -9,7 +9,7 @@ export async function syncPlates() {
 
     // 1. Get all LPR devices
     const devices = await prisma.device.findMany({
-        where: { type: "LPR_CAMERA" }
+        where: { deviceType: "LPR_CAMERA" }
     });
 
     if (devices.length === 0) {
@@ -19,7 +19,7 @@ export async function syncPlates() {
 
     // 2. Get all valid credentials from DB
     const dbCredentials = await prisma.credential.findMany({
-        where: { type: "PLATE", user: { isActive: true } }
+        where: { type: "PLATE" }
     });
     const dbPlates = new Set(dbCredentials.map(c => c.value));
 

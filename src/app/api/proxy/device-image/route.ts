@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
                 return new NextResponse("Image not found", { status: 404 });
             }
 
-            return new NextResponse(imageBuffer, {
+            return new NextResponse(imageBuffer as any, {
                 headers: {
                     "Content-Type": "image/jpeg",
                     "Cache-Control": "public, max-age=3600"

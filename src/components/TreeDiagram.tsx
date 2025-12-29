@@ -103,7 +103,7 @@ export function TreeDiagram({ data: initialData }: TreeDiagramProps) {
         });
 
         const height = x1 - x0 + dx * 2;
-        return { root: rootDataset, x0, x1, height };
+        return { root: rootDataset as d3.HierarchyPointNode<TreeNode>, x0, x1, height };
     }, [treeData]);
 
     // Zoom and Init

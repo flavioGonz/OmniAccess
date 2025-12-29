@@ -12,6 +12,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Force dynamic rendering for the entire application to avoid build-time DB access
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "SecureAccess - Control de Acceso",
   description: "Sistema de control de acceso LPR y Facial",

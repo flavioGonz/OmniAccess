@@ -153,8 +153,7 @@ async function main() {
                 username: 'admin',
                 password: 'Hik12345',
                 authType: 'DIGEST',
-                direction: 'ENTRY',
-                isActive: true
+                direction: 'ENTRY'
             }
         }),
         prisma.device.create({
@@ -167,8 +166,7 @@ async function main() {
                 username: 'admin',
                 password: 'Hik12345',
                 authType: 'DIGEST',
-                direction: 'EXIT',
-                isActive: true
+                direction: 'EXIT'
             }
         }),
         prisma.device.create({
@@ -181,8 +179,7 @@ async function main() {
                 username: 'api',
                 password: 'Api*2011',
                 authType: 'BASIC',
-                direction: 'ENTRY',
-                isActive: true
+                direction: 'ENTRY'
             }
         })
     ])
@@ -194,7 +191,6 @@ async function main() {
         prisma.accessGroup.create({
             data: {
                 name: 'Residentes Torre A',
-                description: 'Acceso completo para residentes de Torre A',
                 users: {
                     connect: [
                         { id: residents[0].id },
@@ -206,7 +202,6 @@ async function main() {
         prisma.accessGroup.create({
             data: {
                 name: 'Todos los Residentes',
-                description: 'Grupo general de residentes',
                 users: {
                     connect: residents.map(r => ({ id: r.id }))
                 }

@@ -11,13 +11,13 @@ export async function GET() {
         const driver = new AkuvoxDriver();
 
         // Call user/get
-        const userRes = await driver.request("POST", "/api/user/get",
+        const userRes = await (driver as any).request("POST", "/api/user/get",
             { "target": "user", "action": "get", "data": { "offset": 0, "num": 100 } },
             device
         );
 
         // Call face/list
-        const faceRes = await driver.request("POST", "/api/face/list",
+        const faceRes = await (driver as any).request("POST", "/api/face/list",
             { "target": "face", "action": "list", "data": { "offset": 0, "num": 100 } },
             device
         );

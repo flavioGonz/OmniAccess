@@ -2,7 +2,7 @@
 // Basado en la documentación de Hikvision ANPR
 
 // Códigos de Color de Vehículo
-export const HIKVISION_VEHICLE_COLORS = {
+export const HIKVISION_VEHICLE_COLORS: { [key: number]: string } = {
     0: 'Unknown',
     1: 'White',
     2: 'Silver',
@@ -21,7 +21,7 @@ export const HIKVISION_VEHICLE_COLORS = {
 };
 
 // Códigos de Marca de Vehículo (los más comunes)
-export const HIKVISION_VEHICLE_BRANDS = {
+export const HIKVISION_VEHICLE_BRANDS: { [key: number]: string } = {
     0: 'Unknown',
     1: 'Volkswagen',
     2: 'Buick',
@@ -53,7 +53,7 @@ export const HIKVISION_VEHICLE_BRANDS = {
 };
 
 // Códigos de Tipo de Vehículo
-export const HIKVISION_VEHICLE_TYPES = {
+export const HIKVISION_VEHICLE_TYPES: { [key: number]: string } = {
     0: 'Unknown',
     1: 'Passenger Car',
     2: 'Large Vehicle',

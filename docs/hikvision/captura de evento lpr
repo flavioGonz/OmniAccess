@@ -1,0 +1,150 @@
+[
+    2025-12-29T13: 21: 53.639Z
+] 📋 [ANPR-ALL-FIELDS
+] Complete ANPR object: {
+    "country": 222,
+    "licensePlate": "AC725PX",
+    "line": 1,
+    "direction": "forward",
+    "confidenceLevel": 97,
+    "plateType": "unknown",
+    "plateColor": "unknown",
+    "licenseBright": 63,
+    "dangmark": "no",
+    "twoWheelVehicle": "no",
+    "threeWheelVehicle": "no",
+    "plateCharBelieve": "99,99,99,99,99,99,99",
+    "vehicleType": "SUVMPV",
+    "detectDir": 8,
+    "detectType": 0,
+    "alarmDataType": 0,
+    "vehicleInfo": {
+        "index": 4295,
+        "colorDepth": 2,
+        "color": "blue",
+        "length": 0,
+        "vehicleLogoRecog": 1037,
+        "vehileSubLogoRecog": 0,
+        "vehileModel": 0
+    },
+    "pictureInfoList": {
+        "pictureInfo": [
+            {
+                "fileName": "licensePlatePicture.jpg",
+                "type": "licensePlatePicture",
+                "dataType": 0,
+                "picRecogMode": 0,
+                "absTime": "20251229102153337",
+                "pId": "2025122910215434600gIPp6BYYfOODU"
+            },
+            {
+                "fileName": "vehiclePicture.jpg",
+                "type": "vehiclePicture",
+                "dataType": 0,
+                "picRecogMode": 0,
+                "absTime": "20251229102153337",
+                "pId": "2025122910215434600lQncGbHApsbMY"
+            },
+            {
+                "fileName": "detectionPicture.jpg",
+                "type": "detectionPicture",
+                "dataType": 0,
+                "picRecogMode": 0,
+                "absTime": "20251229102153337",
+                "plateRect": {
+                    "X": 341,
+                    "Y": 261,
+                    "width": 56,
+                    "height": 33
+                },
+                "pId": "2025122910215434600qgFgc7TVdSFkv"
+            }
+        ]
+    },
+    "originalLicensePlate": "AC725PX",
+    "CRIndex": 222,
+    "vehicleListName": "allowList",
+    "plateSize": 0
+}-------
+
+
+[
+    2025-12-29T13: 31: 14.996Z
+] 📋 [ANPR-ALL-FIELDS
+] Complete ANPR object: {
+    "country": 222,
+    "licensePlate": "AH526CV",
+    "line": 1,
+    "direction": "forward",
+    "confidenceLevel": 97,
+    "plateType": "unknown",
+    "plateColor": "unknown",
+    "licenseBright": 82,
+    "dangmark": "no",
+    "twoWheelVehicle": "no",
+    "threeWheelVehicle": "no",
+    "plateCharBelieve": "99,99,99,99,99,99,99",
+    "vehicleType": "SUVMPV",
+    "detectDir": 8,
+    "detectType": 0,
+    "alarmDataType": 1,
+    "vehicleInfo": {
+        "index": 2292,
+        "colorDepth": 1,
+        "color": "gray",
+        "length": 0,
+        "vehicleLogoRecog": 1060,
+        "vehileSubLogoRecog": 0,
+        "vehileModel": 0
+    },
+    "pictureInfoList": {
+        "pictureInfo": [
+            {
+                "fileName": "licensePlatePicture.jpg",
+                "type": "licensePlatePicture",
+                "dataType": 0,
+                "picRecogMode": 0,
+                "absTime": 20251228164720964,
+                "pId": "2025122910311752900BAvMQG3CGh8wA"
+            },
+            {
+                "fileName": "vehiclePicture.jpg",
+                "type": "vehiclePicture",
+                "dataType": 0,
+                "picRecogMode": 0,
+                "absTime": 20251228164720964,
+                "pId": "2025122910311753300OOSgwg5Qm0TO8"
+            },
+            {
+                "fileName": "detectionPicture.jpg",
+                "type": "detectionPicture",
+                "dataType": 0,
+                "picRecogMode": 0,
+                "absTime": 20251228164720964,
+                "plateRect": {
+                    "X": 593,
+                    "Y": 160,
+                    "width": 41,
+                    "height": 19
+                },
+                "vehicelRect": {
+                    "X": 477,
+                    "Y": 3,
+                    "width": 199,
+                    "height": 236
+                },
+                "pId": "2025122910311753400WSYDgCKrPg7tU"
+            }
+        ]
+    },
+    "originalLicensePlate": "AH526CV",
+    "CRIndex": 222,
+    "vehicleListName": "otherList",
+    "plateSize": 0
+
+
+  ------
+
+
+  
+

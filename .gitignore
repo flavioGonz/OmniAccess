@@ -56,3 +56,20 @@ next-env.d.ts
 # database files
 *.sqlite
 *.db
+
+# test and debug scripts
+/scripts/tests/
+check-*.js
+check-*.ts
+test-*.js
+test-*.ts
+debug-*.js
+debug-*.ts
+simulate-*.js
+fix_*.js
+seed-*.js
+query_*.js
+get_*.js
+add-*.js
+update-*.ts
+lib-s3.js

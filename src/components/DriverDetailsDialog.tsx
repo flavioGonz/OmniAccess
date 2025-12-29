@@ -99,7 +99,7 @@ export function DriverDetailsDialog({ brand, isOpen, onClose }: DriverDetailsDia
         setIsAdding(false);
 
         if (result.success) {
-            setNewModel({ value: "", label: "", category: "" });
+            setNewModel({ value: "", label: "", category: "", photo: "" });
             // Reload page to get updated models
             window.location.reload();
         } else {

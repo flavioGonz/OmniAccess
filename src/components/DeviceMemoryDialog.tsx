@@ -36,13 +36,15 @@ import {
     User,
     HardDrive
 } from "lucide-react";
-import { getDeviceFaces, deleteDeviceFace, syncUserToDevice, importAllFromDevice, syncIdentityAction, exportAllToDevice } from "@/app/actions/deviceMemory";
+import { getDeviceFaces, deleteDeviceFace, syncUserToDevice, importAllFromDevice, syncIdentityAction, exportAllToDevice, getDatabaseStats } from "@/app/actions/deviceMemory";
 import { getUsers } from "@/app/actions/users";
 import { getUnits } from "@/app/actions/units";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface DeviceMemoryDialogProps {
+    device: any;
+    open: boolean;
     onOpenChange: (open: boolean) => void;
 }
 

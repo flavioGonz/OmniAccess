@@ -44,7 +44,7 @@ import {
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { createDevice, updateDevice } from "@/app/actions/devices";
-import { DRIVER_MODELS, type DeviceBrand } from "@/lib/driver-models";
+import { DRIVER_MODELS, type DeviceBrand as DriverDeviceBrand } from "@/lib/driver-models";
 import {
     Command,
     CommandEmpty,
@@ -229,7 +229,7 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
                                                         className="w-full justify-between bg-neutral-900 border-neutral-800 h-12 rounded-lg text-sm font-mono font-bold"
                                                     >
                                                         {formData.deviceModel
-                                                            ? DRIVER_MODELS[formData.brand as DeviceBrand]?.find((m) => m.value === formData.deviceModel)?.label
+                                                            ? DRIVER_MODELS[formData.brand as DriverDeviceBrand]?.find((m) => m.value === formData.deviceModel)?.label
                                                             : "Seleccionar modelo..."}
                                                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                                     </Button>
@@ -239,7 +239,7 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
                                                         <CommandInput placeholder="Filtrar modelos..." className="h-10" />
                                                         <CommandEmpty>No hay resultados.</CommandEmpty>
                                                         <CommandGroup className="max-h-60 overflow-y-auto custom-scrollbar">
-                                                            {DRIVER_MODELS[formData.brand as DeviceBrand]?.map((model) => (
+                                                            {DRIVER_MODELS[formData.brand as DriverDeviceBrand]?.map((model) => (
                                                                 <CommandItem
                                                                     key={model.value}
                                                                     value={model.value}

@@ -6,6 +6,7 @@
     "dev:web": "next dev -p 10001",
     "dev:webhooks": "node server.js",
     "build": "next build",
+    "start": "next start -p 10001",
     "start:web": "next start -p 10001",
     "start:webhooks": "node server.js",
     "lint": "eslint ."
