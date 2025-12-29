@@ -328,17 +328,33 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
                                             </div>
                                         </div>
 
-                                        <div className="space-y-3">
-                                            <Label className="text-neutral-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-                                                <MapPin size={10} /> Ubicación Física
-                                            </Label>
-                                            <Input
-                                                name="location"
-                                                value={formData.location}
-                                                onChange={handleInputChange}
-                                                placeholder="Lote 1030, Entrada B..."
-                                                className="bg-neutral-900 border-neutral-800 h-12 rounded-lg font-bold"
-                                            />
+                                        <div className="grid grid-cols-2 gap-8">
+                                            <div className="space-y-3">
+                                                <Label className="text-neutral-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                                                    <ArrowRightLeft size={10} /> Sentido del Flujo
+                                                </Label>
+                                                <Select value={formData.direction} onValueChange={(val) => handleSelectChange("direction", val)}>
+                                                    <SelectTrigger className="bg-neutral-900 border-neutral-800 h-12 rounded-lg font-bold">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="bg-[#0c0c0c] border-neutral-800 text-white rounded-2xl">
+                                                        <SelectItem value="ENTRY" className="py-3 font-bold">ENTRADA (Ingreso)</SelectItem>
+                                                        <SelectItem value="EXIT" className="py-3 font-bold">SALIDA (Egreso)</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="space-y-3">
+                                                <Label className="text-neutral-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                                                    <MapPin size={10} /> Ubicación Física
+                                                </Label>
+                                                <Input
+                                                    name="location"
+                                                    value={formData.location}
+                                                    onChange={handleInputChange}
+                                                    placeholder="Lote 1030, Entrada B..."
+                                                    className="bg-neutral-900 border-neutral-800 h-12 rounded-lg font-bold"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
                                 )}
