@@ -29,8 +29,8 @@ async function importEverything() {
             for (const g of exportData.accessGroups) {
                 await prisma.accessGroup.upsert({
                     where: { id: g.id },
-                    update: { name: g.name, description: g.description },
-                    create: { id: g.id, name: g.name, description: g.description }
+                    update: { name: g.name },
+                    create: { id: g.id, name: g.name }
                 });
             }
         }
