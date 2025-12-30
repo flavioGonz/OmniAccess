@@ -21,7 +21,10 @@ import {
     RefreshCw,
     Camera,
     LogIn,
-    LogOut
+    LogOut,
+    Truck,
+    Bus,
+    Bike
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,7 +39,7 @@ interface FullAccessEvent extends AccessEvent {
         id: string;
         name: string;
         email: string | null;
-        phone: string;
+        phone: string | null;
         dni: string | null;
         apartment: string | null;
         cara: string | null;
@@ -99,12 +102,47 @@ export default function AccessDashboard() {
         });
     }, [events, activeFilter, activeType]);
 
-    const successRate = stats.total > 0 ? ((stats.grants / stats.total) * 100).toFixed(1) : 0;
+    const plateCountsToday = useMemo(() => {
+        const counts: Record<string, number> = {};
+        events.forEach(e => {
+            const key = e.plateDetected && e.plateDetected !== 'unknown' && e.plateDetected !== 'NO_LEIDA' ? e.plateDetected : (e.user?.id || 'sys');
+            counts[key] = (counts[key] || 0) + 1;
+        });
+        return counts;
+    }, [events]);
 
-    // Derived columns
-    const entryEvents = filteredEvents.filter(e => e.direction === 'ENTRY');
-    const exitEvents = filteredEvents.filter(e => e.direction === 'EXIT');
-    const captureEvents = filteredEvents.filter(e => e.imagePath || e.snapshotPath || e.user?.cara);
+    const calculateDuration = (currentEvent: FullAccessEvent) => {
+        const plate = currentEvent.plateDetected;
+        if (!plate || plate === 'unknown' || plate === 'NO_LEIDA') return null;
+
+        const currentIndex = events.findIndex(e => e.id === currentEvent.id);
+        if (currentIndex === -1) return null;
+
+        const previousEvent = events.slice(currentIndex + 1).find(e =>
+            e.plateDetected === plate &&
+            e.direction !== currentEvent.direction // Ensure it's the opposite movement for accurate inside/outside
+        );
+
+        if (!previousEvent) return null;
+
+        const ms = Math.abs(new Date(currentEvent.timestamp).getTime() - new Date(previousEvent.timestamp).getTime());
+        const seconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+
+        let duration = "";
+        if (days > 0) duration = `${days}d ${hours % 24}h`;
+        else if (hours > 0) duration = `${hours}h ${minutes % 60}m`;
+        else if (minutes > 0) duration = `${minutes}m ${seconds % 60}s`;
+        else duration = `${seconds}s`;
+
+        return {
+            label: currentEvent.direction === 'EXIT' ? 'DENTRO' : 'FUERA',
+            value: duration,
+            color: currentEvent.direction === 'EXIT' ? 'text-indigo-400' : 'text-orange-400'
+        };
+    };
 
     const EventItem = ({ event }: { event: FullAccessEvent }) => {
         const typeConfig = {
@@ -126,11 +164,14 @@ export default function AccessDashboard() {
             });
         }
         const logoUrl = getCarLogo(meta.Marca);
+        const plateKey = event.plateDetected && event.plateDetected !== 'unknown' && event.plateDetected !== 'NO_LEIDA' ? event.plateDetected : (event.user?.id || 'sys');
+        const plateCount = plateCountsToday[plateKey] || 0;
 
         return (
             <EventDetailsDialog event={event}>
                 <div className="p-4 hover:bg-white/5 cursor-pointer transition-all group border-b border-white/5 last:border-0 border-l-2 border-l-transparent hover:border-l-indigo-500">
                     <div className="flex items-center gap-3">
+                        {/* LEFT: LOGO/ICON */}
                         <div className={cn("rounded-lg shrink-0 flex items-center justify-center p-1.5", "bg-white border border-white/10 shadow-sm", "w-11 h-11")}>
                             {logoUrl ? (
                                 <div className="relative w-full h-full">
@@ -148,6 +189,8 @@ export default function AccessDashboard() {
                                 </div>
                             )}
                         </div>
+
+                        {/* CENTER: PRIMARY DATA */}
                         <div className="min-w-0 flex-1">
                             <div className="flex flex-col">
                                 <div className="flex items-center gap-2">
@@ -163,31 +206,47 @@ export default function AccessDashboard() {
                                             {event.user?.name || event.plateDetected || "ID: " + event.id.slice(-4)}
                                         </p>
                                     )}
-                                    {meta.Color && event.accessType !== "PLATE" && (
-                                        <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: meta.Color.toLowerCase() === 'blanco' ? '#fff' : meta.Color.toLowerCase() === 'negro' ? '#000' : meta.Color }} />
+                                </div>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest truncate italic">
+                                        {event.accessType === 'PLATE' ? (
+                                            `${meta.Marca || ''} ${meta.Modelo || ''} ${meta.Tipo ? `• ${meta.Tipo}` : ''}`.trim() || 'Vehículo Detectado'
+                                        ) : (
+                                            event.user?.unit?.name || 'Acceso Manual'
+                                        )}
+                                    </p>
+                                    {meta.Color && (
+                                        <div className="w-2 h-2 rounded-full border border-white/20" style={{ backgroundColor: meta.Color.toLowerCase() === 'blanco' ? '#fff' : meta.Color.toLowerCase() === 'negro' ? '#000' : meta.Color }} />
                                     )}
                                 </div>
-                                <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mt-1 truncate italic">
-                                    {event.accessType === 'PLATE' ? (
-                                        `${meta.Marca || ''} ${meta.Modelo || ''} ${meta.Tipo ? `• ${meta.Tipo}` : ''}`.trim() || 'Vehículo Detectado'
-                                    ) : (
-                                        event.user?.unit?.name || 'Acceso Manual'
-                                    )}
-                                </p>
+                                {event.user?.name && event.accessType === "PLATE" && (
+                                    <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-0.5">
+                                        {event.user.name}
+                                    </p>
+                                )}
                             </div>
-                            <span className="text-[10px] font-mono text-neutral-500 mt-1.5 block">
+                        </div>
+
+                        {/* RIGHT: DECISION & TIME */}
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                            <div className="flex items-center gap-2">
+                                {plateCount > 1 && event.plateDetected !== "NO_LEIDA" && event.plateDetected !== "unknown" && (
+                                    <Badge className="bg-white/5 text-neutral-400 border-white/10 text-[9px] font-black px-1.5 h-5 flex items-center justify-center">
+                                        {plateCount}x Hoy
+                                    </Badge>
+                                )}
+                                <div className={cn(
+                                    "w-24 py-1.5 rounded-lg font-black text-[10px] uppercase text-center tracking-tighter shadow-lg",
+                                    event.decision === "GRANT"
+                                        ? "bg-emerald-600 text-white shadow-emerald-900/40 border border-emerald-500/30"
+                                        : "bg-red-600 text-white shadow-red-900/40 border border-red-500/30"
+                                )}>
+                                    {event.decision === "GRANT" ? "PERMITIDO" : "DENEGADO"}
+                                </div>
+                            </div>
+                            <span className="text-[10px] font-mono text-neutral-500 font-bold">
                                 {new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                             </span>
-                        </div>
-                        <div className="flex items-center ml-2">
-                            <div className={cn(
-                                "w-24 py-2 rounded-lg font-black text-[10px] uppercase text-center tracking-tighter shadow-lg",
-                                event.decision === "GRANT"
-                                    ? "bg-emerald-600 text-white shadow-emerald-900/40 border border-emerald-500/30"
-                                    : "bg-red-600 text-white shadow-red-900/40 border border-red-500/30"
-                            )}>
-                                {event.decision === "GRANT" ? "PERMITIDO" : "DENEGADO"}
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -195,9 +254,12 @@ export default function AccessDashboard() {
         );
     };
 
+    const entryEvents = filteredEvents.filter(e => e.direction === 'ENTRY');
+    const exitEvents = filteredEvents.filter(e => e.direction === 'EXIT');
+    const captureEvents = filteredEvents.filter(e => e.imagePath || e.snapshotPath || e.user?.cara);
+
     return (
         <div className="h-full p-6 overflow-hidden animate-in fade-in duration-700">
-            {/* Main 3-Column Layout - Forced 3 columns with equal width and full height */}
             <div className="grid grid-cols-3 gap-6 h-full">
 
                 {/* COLUMN 1: ENTRADAS */}
@@ -213,8 +275,6 @@ export default function AccessDashboard() {
                             </div>
                             <Badge className="bg-indigo-500 text-white font-black text-[10px]">{entryEvents.length}</Badge>
                         </div>
-
-                        {/* Iconic Filter Strip */}
                         <div className="flex items-center gap-2 bg-black/40 p-1.5 rounded-xl border border-white/5">
                             <Filter size={11} className="text-neutral-600 shrink-0 mx-1" />
                             <div className="flex-1 flex justify-center gap-1 border-x border-white/5 px-2">
@@ -228,7 +288,6 @@ export default function AccessDashboard() {
                                                 ? (f === 'GRANT' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-900/40' : f === 'DENY' ? 'bg-red-500 text-white shadow-lg shadow-red-900/40' : 'bg-indigo-500 text-white shadow-lg shadow-indigo-900/40')
                                                 : "text-neutral-600 hover:text-neutral-400 hover:bg-white/5"
                                         )}
-                                        title={f === 'ALL' ? 'Todos' : f === 'GRANT' ? 'Autorizados' : 'Denegados'}
                                     >
                                         {f === 'ALL' ? <Activity size={12} /> : f === 'GRANT' ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
                                     </button>
@@ -241,11 +300,8 @@ export default function AccessDashboard() {
                                         onClick={() => setActiveType(t)}
                                         className={cn(
                                             "w-7 h-7 flex items-center justify-center rounded-lg transition-all",
-                                            activeType === t
-                                                ? "bg-white/10 text-indigo-400 border border-indigo-500/30 shadow-[0_0_10px_rgba(99,102,241,0.1)]"
-                                                : "text-neutral-600 hover:text-neutral-400 hover:bg-white/5"
+                                            activeType === t ? "bg-white/10 text-indigo-400 border border-indigo-500/30" : "text-neutral-600 hover:text-neutral-400 hover:bg-white/5"
                                         )}
-                                        title={t}
                                     >
                                         {t === 'ALL' ? <Zap size={12} /> : t === 'PLATE' ? <Car size={12} /> : t === 'FACE' ? <UserIcon size={12} /> : <CreditCard size={12} />}
                                     </button>
@@ -255,12 +311,11 @@ export default function AccessDashboard() {
                     </div>
                     <div className="flex-1 overflow-y-auto divide-y divide-white/5 custom-scrollbar">
                         {entryEvents.map(event => <EventItem key={event.id} event={event} />)}
-                        {entryEvents.length === 0 && <div className="p-10 text-center text-neutral-600 font-bold text-[10px] uppercase tracking-widest mt-10">No hay entradas recientes</div>}
                     </div>
                 </div>
 
-                {/* COLUMN 2: ULTIMAS CAPTURAS (HIGHLIGHTS) */}
-                <div className="flex flex-col h-full bg-neutral-900/60 border border-indigo-500/20 rounded-xl overflow-hidden shadow-indigo-900/20 shadow-xl scale-[1.02] z-10">
+                {/* COLUMN 2: CAPTURAS */}
+                <div className="flex flex-col h-full bg-neutral-900/60 border border-indigo-500/20 rounded-xl overflow-hidden shadow-xl scale-[1.02] z-10">
                     <div className="p-5 border-b border-white/10 bg-white/5 flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <div className="p-2 bg-indigo-500/20 rounded-lg"><Camera className="text-indigo-400" size={18} /></div>
@@ -269,108 +324,108 @@ export default function AccessDashboard() {
                                 <p className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest">Evidencia Visual</p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-black text-indigo-400 animate-pulse">LIVE</span>
-                            <Badge className="bg-indigo-500/20 text-indigo-400 border-indigo-500/30 font-black">{captureEvents.length}</Badge>
-                        </div>
+                        <Badge className="bg-indigo-500/20 text-indigo-400 border-indigo-500/30 font-black">{captureEvents.length}</Badge>
                     </div>
                     <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-black/40">
-                        {captureEvents.map(event => (
-                            <EventDetailsDialog key={event.id} event={event}>
-                                <div className="relative aspect-video rounded-2xl overflow-hidden border border-white/10 group cursor-pointer shadow-lg hover:border-indigo-500/50 transition-all duration-500">
-                                    <Image
-                                        src={event.imagePath || event.snapshotPath || event.user?.cara || "/placeholder-camera.jpg"}
-                                        alt="Access Capture"
-                                        fill
-                                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                                        priority={events.indexOf(event) < 3}
-                                        className="object-cover group-hover:scale-110 transition-transform duration-1000"
-                                    />
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
-                                    <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
-                                        <div className="min-w-0 flex-1">
-                                            <div className="flex flex-col w-fit">
-                                                {/* Mercosur-style plate look */}
-                                                <div className="flex flex-col bg-white border-2 border-neutral-800 rounded-sm overflow-hidden shadow-2xl drop-shadow-[0_0_15px_rgba(255,255,255,0.3)] min-w-[100px]">
-                                                    <div className="h-1 bg-blue-600 w-full" />
-                                                    <p className="text-[16px] font-black text-black tracking-[0.2em] uppercase px-3 py-0.5 text-center font-mono">
-                                                        {event.accessType === "PLATE" ? event.plateDetected : event.user?.name}
-                                                    </p>
-                                                </div>
+                        {captureEvents.map(event => {
+                            const marca = event.details?.split(',').find(p => p.trim().startsWith('Marca:'))?.split(':')[1]?.trim();
+                            const color = event.details?.split(',').find(p => p.trim().startsWith('Color:'))?.split(':')[1]?.trim();
+                            let tipo = event.details?.split(',').find(p => p.trim().startsWith('Tipo:'))?.split(':')[1]?.trim()?.toUpperCase();
+                            if (tipo === 'VEHICLE' || tipo === 'CAR') tipo = 'AUTO';
+                            if (tipo === 'PICKUPTRUCK') tipo = 'PICKUP';
+
+                            const logoUrl = getCarLogo(marca);
+                            const getVehicleIcon = (t: string | undefined) => {
+                                if (!t) return <Car size={14} />;
+                                if (t.includes('VAN')) return <Bus size={14} />;
+                                if (t.includes('TRUCK')) return <Truck size={14} />;
+                                if (t.includes('BUS')) return <Bus size={14} />;
+                                if (t.includes('MOTO')) return <Bike size={14} />;
+                                return <Car size={14} />;
+                            };
+
+                            return (
+                                <EventDetailsDialog key={event.id} event={event}>
+                                    <div className={cn(
+                                        "relative aspect-video rounded-2xl overflow-hidden border group cursor-pointer shadow-lg transition-all duration-500",
+                                        event.decision === "GRANT" ? "border-emerald-500/30 shadow-emerald-900/20" : "border-red-500/30 shadow-red-900/20"
+                                    )}>
+                                        <Image
+                                            src={event.imagePath || event.snapshotPath || event.user?.cara || "/placeholder-camera.jpg"}
+                                            alt="Capture"
+                                            fill
+                                            className="object-cover group-hover:scale-105 transition-transform duration-700"
+                                        />
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
+
+                                        {/* Decision Overlay */}
+                                        <div className="absolute bottom-3 right-3">
+                                            <div className={cn(
+                                                "min-w-[40px] h-10 flex flex-col items-center justify-center rounded-xl shadow-2xl backdrop-blur-md border",
+                                                event.decision === "GRANT" ? "bg-emerald-500/80 border-emerald-400 text-white" : "bg-red-500/80 border-red-400 text-white"
+                                            )}>
+                                                {event.decision === "GRANT" ? <CheckCircle2 size={18} strokeWidth={3} /> : <XCircle size={18} strokeWidth={3} />}
+                                                <span className="text-[7px] font-black mt-0.5">{event.decision === "GRANT" ? "AUT" : "DEN"}</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Plate Overlay */}
+                                        <div className="absolute bottom-3 left-3 flex flex-col items-start">
+                                            {(() => {
+                                                const duration = calculateDuration(event);
+                                                if (!duration) return null;
+                                                return (
+                                                    <div className="flex items-center gap-1.5 mb-1 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10">
+                                                        <Clock size={8} className={duration.color} />
+                                                        <span className="text-[7px] font-black text-white/40 uppercase tracking-widest">{duration.label}:</span>
+                                                        <span className={cn("text-[8px] font-black uppercase tracking-tight", duration.color)}>{duration.value}</span>
+                                                    </div>
+                                                );
+                                            })()}
+                                            <div className="flex flex-col bg-white border-2 border-neutral-800 rounded-sm overflow-hidden shadow-2xl min-w-[100px]">
+                                                <div className="h-1 bg-blue-600 w-full" />
+                                                <p className="text-[16px] font-black text-black tracking-[0.2em] uppercase px-3 py-0.5 text-center font-mono">
+                                                    {event.accessType === "PLATE" ? (event.plateDetected === "NO_LEIDA" ? "S/P" : event.plateDetected) : event.user?.name}
+                                                </p>
                                             </div>
                                             <p className="text-[8px] text-neutral-400 font-bold uppercase tracking-[0.2em] mt-1 drop-shadow-lg">
                                                 {event.device?.name} • {new Date(event.timestamp).toLocaleTimeString()}
                                             </p>
                                         </div>
-                                        <div className={cn(
-                                            "w-6 h-6 flex items-center justify-center rounded-lg shadow-2xl",
-                                            event.decision === "GRANT" ? "bg-emerald-500 text-white" : "bg-red-500 text-white"
-                                        )}>
-                                            {event.decision === "GRANT" ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
+
+                                        {/* Direction Badge */}
+                                        <div className="absolute top-3 right-3">
+                                            <Badge className={cn("text-[8px] font-black px-2 py-1 border-none", event.direction === 'ENTRY' ? "bg-indigo-600" : "bg-orange-600")}>
+                                                {event.direction === 'ENTRY' ? "ENTRADA" : "SALIDA"}
+                                            </Badge>
                                         </div>
-                                    </div>
 
-                                    {/* Direction indicator on capture - Larger with icon */}
-                                    <div className="absolute top-3 right-3">
-                                        <Badge className={cn(
-                                            "text-[9px] font-black px-3 py-1.5 border-none shadow-2xl flex items-center gap-2",
-                                            event.direction === 'ENTRY' ? "bg-indigo-600/90" : "bg-orange-600/90"
-                                        )}>
-                                            {event.direction === 'ENTRY' ? (
-                                                <>
-                                                    <LogIn size={12} />
-                                                    <span>ENTRADA</span>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <LogOut size={12} />
-                                                    <span>SALIDA</span>
-                                                </>
+                                        {/* Attributes Overlay */}
+                                        <div className="absolute top-3 left-3 flex flex-col gap-2">
+                                            {logoUrl && (
+                                                <div className="bg-white rounded-lg p-1.5 shadow-2xl w-10 h-10 flex items-center justify-center">
+                                                    <div className="relative w-7 h-7"><Image src={logoUrl} alt="Logo" fill className="object-contain" /></div>
+                                                </div>
                                             )}
-                                        </Badge>
-                                    </div>
-
-                                    {/* Brand & Color Overlay - Together in the top-left corner */}
-                                    {event.accessType === 'PLATE' && event.details && (() => {
-                                        const marca = event.details.split(',').find(p => p.trim().startsWith('Marca:'))?.split(':')[1]?.trim();
-                                        const color = event.details.split(',').find(p => p.trim().startsWith('Color:'))?.split(':')[1]?.trim();
-                                        const logoUrl = getCarLogo(marca);
-                                        return (
-                                            <div className="absolute top-3 left-3 flex flex-col gap-2 z-20">
-                                                {logoUrl && (
-                                                    <div className="bg-white rounded-lg p-2 border border-white/10 shadow-2xl flex items-center justify-center w-[44px] h-[44px]">
-                                                        <div className="relative w-7 h-7 flex items-center justify-center">
-                                                            <Image
-                                                                src={logoUrl}
-                                                                alt={marca || "Logo"}
-                                                                fill
-                                                                sizes="28px"
-                                                                className="object-contain"
-                                                            />
-                                                        </div>
+                                            <div className="flex flex-col gap-1 items-start pl-1 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                                                {color && (
+                                                    <div className="flex items-center gap-1.5">
+                                                        <div className="w-2 h-2 rounded-full border border-white/40" style={{ backgroundColor: color.toLowerCase() === 'blanco' ? '#fff' : color.toLowerCase() === 'negro' ? '#000' : color }} />
+                                                        <span className="text-[9px] font-black text-white uppercase tracking-wider">{color}</span>
                                                     </div>
                                                 )}
-                                                {color && (
-                                                    <div
-                                                        className="px-2 py-1 rounded-lg border border-white/10 shadow-xl flex items-center justify-center text-center min-w-[44px]"
-                                                        style={{
-                                                            backgroundColor: color.toLowerCase() === 'blanco' ? '#ffffff' :
-                                                                color.toLowerCase() === 'negro' ? '#111111' :
-                                                                    color.toLowerCase() === 'plata' || color.toLowerCase() === 'plateado' ? '#C0C0C0' :
-                                                                        color.toLowerCase() === 'gray' || color.toLowerCase() === 'gris' || color.toLowerCase() === 'plata' ? '#808080' : color,
-                                                            color: (color.toLowerCase() === 'blanco' || color.toLowerCase() === 'plata' || color.toLowerCase() === 'plateado') ? '#000' : '#fff'
-                                                        }}
-                                                    >
-                                                        <span className="text-[8px] font-black uppercase tracking-tighter drop-shadow-sm line-clamp-1">{color}</span>
+                                                {tipo && (
+                                                    <div className="flex items-center gap-1.5 text-white">
+                                                        {getVehicleIcon(tipo)}
+                                                        <span className="text-[9px] font-black uppercase tracking-wider">{tipo}</span>
                                                     </div>
                                                 )}
                                             </div>
-                                        );
-                                    })()}
-                                </div>
-                            </EventDetailsDialog>
-                        ))}
-                        {captureEvents.length === 0 && <div className="p-10 text-center text-neutral-600 font-bold text-[10px] uppercase tracking-widest mt-20">Esperando flujos...</div>}
+                                        </div>
+                                    </div>
+                                </EventDetailsDialog>
+                            );
+                        })}
                     </div>
                 </div>
 
@@ -387,49 +442,9 @@ export default function AccessDashboard() {
                             </div>
                             <Badge className="bg-orange-600 text-white font-black text-[10px]">{exitEvents.length}</Badge>
                         </div>
-
-                        {/* Iconic Filter Strip */}
-                        <div className="flex items-center gap-2 bg-black/40 p-1.5 rounded-xl border border-white/5">
-                            <Filter size={11} className="text-neutral-600 shrink-0 mx-1" />
-                            <div className="flex-1 flex justify-center gap-1 border-x border-white/5 px-2">
-                                {(["ALL", "GRANT", "DENY"] as const).map((f) => (
-                                    <button
-                                        key={f}
-                                        onClick={() => setActiveFilter(f)}
-                                        className={cn(
-                                            "w-7 h-7 flex items-center justify-center rounded-lg transition-all",
-                                            activeFilter === f
-                                                ? (f === 'GRANT' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-900/40' : f === 'DENY' ? 'bg-red-500 text-white shadow-lg shadow-red-900/40' : 'bg-indigo-500 text-white shadow-lg shadow-indigo-900/40')
-                                                : "text-neutral-600 hover:text-neutral-400 hover:bg-white/5"
-                                        )}
-                                        title={f === 'ALL' ? 'Todos' : f === 'GRANT' ? 'Autorizados' : 'Denegados'}
-                                    >
-                                        {f === 'ALL' ? <Activity size={12} /> : f === 'GRANT' ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="flex gap-1 pr-1">
-                                {(["ALL", "PLATE", "FACE", "TAG"] as const).map((t) => (
-                                    <button
-                                        key={t}
-                                        onClick={() => setActiveType(t)}
-                                        className={cn(
-                                            "w-7 h-7 flex items-center justify-center rounded-lg transition-all",
-                                            activeType === t
-                                                ? "bg-white/10 text-orange-400 border border-orange-500/30 shadow-[0_0_10px_rgba(249,115,22,0.1)]"
-                                                : "text-neutral-600 hover:text-neutral-400 hover:bg-white/5"
-                                        )}
-                                        title={t}
-                                    >
-                                        {t === 'ALL' ? <Zap size={12} /> : t === 'PLATE' ? <Car size={12} /> : t === 'FACE' ? <UserIcon size={12} /> : <CreditCard size={12} />}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
                     </div>
                     <div className="flex-1 overflow-y-auto divide-y divide-white/5 custom-scrollbar">
                         {exitEvents.map(event => <EventItem key={event.id} event={event} />)}
-                        {exitEvents.length === 0 && <div className="p-10 text-center text-neutral-600 font-bold text-[10px] uppercase tracking-widest mt-10">No hay salidas recientes</div>}
                     </div>
                 </div>
 

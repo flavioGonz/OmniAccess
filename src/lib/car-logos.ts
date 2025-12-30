@@ -57,6 +57,8 @@ const BRAND_ALIASES: Record<string, string> = {
     '1108': 'Maserati',
     '1112': 'Mazda',
     '1849': 'Mini',
+    '1552': 'Dongfeng',
+    '1031': 'Buick',
 };
 
 /**

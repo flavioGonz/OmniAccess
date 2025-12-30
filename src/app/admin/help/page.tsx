@@ -1,299 +1,490 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import {
-    HelpCircle,
-    LayoutDashboard,
-    Calendar,
-    History,
-    Home,
-    Users,
-    Car,
-    Cpu,
-    Key,
-    ShieldCheck,
-    CreditCard,
-    LayoutGrid,
-    Settings,
-    Activity,
-    ChevronRight,
-    Search,
-    Info,
-    ArrowRight,
-    Layers,
-    ExternalLink
+    HelpCircle, LayoutDashboard, Calendar, History, Home, Users, Car, Cpu, Key,
+    ShieldCheck, CreditCard, LayoutGrid, Settings, Activity, ChevronRight,
+    Search, Info, ArrowRight, Layers, ExternalLink, Edit2, Save, X, Plus,
+    Trash2, Upload, Play, ChevronDown, ChevronUp, Image as ImageIcon, Video
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+import { getHelpDocs, updateHelpDocs, uploadHelpMedia, type HelpDoc, type FaqItem } from "@/app/actions/help";
 
-const DOCS = [
-    {
-        id: "dashboard",
-        title: "Panel de Control",
-        icon: LayoutDashboard,
-        color: "text-blue-400",
-        bg: "bg-blue-500/10",
-        description: "Vista centralizada en tiempo real de todos los eventos perimetrales.",
-        details: "El Dashboard es el corazón de la plataforma. Aquí puedes ver el flujo en vivo de vehículos y peatones. Incluye estadísticas de ocupación de estacionamiento, alertas de seguridad de último minuto y un panel de 'Acciones Rápidas' para abrir barreras o puertas manualmente desde cualquier lugar.",
-        features: ["Streaming de eventos", "Estadísticas de ocupación", "Alertas en tiempo real", "Acciones de relé"],
-        image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=800"
-    },
-    {
-        id: "calendar",
-        title: "Calendario",
-        icon: Calendar,
-        color: "text-indigo-400",
-        bg: "bg-indigo-500/10",
-        description: "Gestión de reservaciones y eventos programados.",
-        details: "El módulo de calendario permite programar visitas, reservar espacios de estacionamiento y visualizar eventos de mantenimiento. Puedes sincronizar horarios con los grupos de acceso para que los permisos se activen o desactiven automáticamente según fechas específicas.",
-        features: ["Reservas de parking", "Visitas programadas", "Mantenimiento preventivo"],
-        image: "https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&q=80&w=800"
-    },
-    {
-        id: "history",
-        title: "Historial de Accesos",
-        icon: History,
-        color: "text-emerald-400",
-        bg: "bg-emerald-500/10",
-        description: "Auditoría forense de entradas y salidas.",
-        details: "El historial almacena cada evento capturado por las cámaras LPR y terminales faciales. Incluye fotos de las matrículas, rostros, marca del vehículo y decisión de acceso (Permitido/Denegado). Puedes exportar informes resumidos para auditorías de seguridad.",
-        features: ["Filtros por fecha/matrícula", "Fotos de evidencia", "Exportación CSV/PDF"],
-        image: "https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&q=80&w=800"
-    },
-    {
-        id: "units",
-        title: "Unidades Operativas",
-        icon: Home,
-        color: "text-amber-400",
-        bg: "bg-amber-500/10",
-        description: "Organización física del complejo (Edificios, Casas).",
-        details: "Define la jerarquía de tu complejo. Puedes registrar edificios, departamentos, lotes o casas. Cada unidad es el nexo para vincular a los residentes y sus respectivos vehículos y dispositivos asociados.",
-        features: ["Gestión catastral", "Vínculo residente-unidad", "Mapa de niveles"],
-        image: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&q=80&w=800"
-    },
-    {
-        id: "users",
-        title: "Gestión de Usuarios",
-        icon: Users,
-        color: "text-violet-400",
-        bg: "bg-violet-500/10",
-        description: "Administración de identidades y roles.",
-        details: "Registra residentes, visitas permanentes, empleados o proveedores. Aquí se gestionan los datos biométricos y se asignan los roles que determinarán qué puertas o barreras pueden abrir y en qué horarios.",
-        features: ["Perfiles biométricos", "Roles de seguridad", "Gestión de visitas"],
-        image: "https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&q=80&w=800"
-    },
-    {
-        id: "vehicles",
-        title: "Vehículos & Patentes",
-        icon: Car,
-        color: "text-rose-400",
-        bg: "bg-rose-500/10",
-        description: "Control maestro de flotas y patentes.",
-        details: "Vincula matrículas a usuarios específicos. El sistema reconoce automáticamente estos vehículos cuando se acercan a una cámara LPR, permitiendo o denegando el paso basándose en las reglas del grupo de acceso del propietario.",
-        features: ["Reconocimiento de marca/modelo", "Historial por vehículo", "Listas blancas/negras"],
-        image: "https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&q=80&w=800"
-    },
-    {
-        id: "devices",
-        title: "Infraestructura Hardware",
-        icon: Cpu,
-        color: "text-cyan-400",
-        bg: "bg-cyan-500/10",
-        description: "Configuración de terminales y sensores.",
-        details: "Configuración técnica de cámaras LPR, lectores faciales Akuvox, y controladores de relé. Aquí gestionas las IPs, protocolos de autenticación y el monitoreo de estado 'Online' de cada dispositivo físico del perímetro.",
-        features: ["Gestión IP ISAPI/SIP", "Estado de conexión", "Configuración de dirección (E/S)"],
-        image: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
-    },
-    {
-        id: "credentials",
-        title: "Credenciales",
-        icon: Key,
-        color: "text-orange-400",
-        bg: "bg-orange-500/10",
-        description: "Llaves digitales, biometría y TAGs.",
-        details: "Gestión centralizada de todos los métodos de apertura. Desde pins numéricos y tarjetas RFID hasta plantillas faciales y huellas dactilares cargadas remotamente en los dispositivos.",
-        features: ["Carga remota de rostros", "Control de TAGs RFID", "Pins temporales"],
-        image: "https://images.unsplash.com/photo-1614064641938-3bbee52942c7?auto=format&fit=crop&q=80&w=800"
-    },
-    {
-        id: "groups",
-        title: "Grupos de Acceso",
-        icon: ShieldCheck,
-        color: "text-sky-400",
-        bg: "bg-sky-500/10",
-        description: "Motor de reglas por zonas y jerarquías.",
-        details: "Define quién puede entrar a qué lugar. Crea grupos como 'Residentes Zona Norte' o 'Personal de Limpieza', vincula los dispositivos correspondientes y asigna los horarios permitidos para automatizar la seguridad.",
-        features: ["Políticas de horario", "Accesos por zonas", "Reglas dinámicas"],
-        image: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800"
-    },
-    {
-        id: "plazas",
-        title: "Estacionamiento",
-        icon: LayoutGrid,
-        color: "text-purple-400",
-        bg: "bg-purple-500/10",
-        description: "Mapa de ocupación y control de espacios.",
-        details: "Visualiza el estado de cada plaza de estacionamiento. Vincula plazas a unidades o usuarios específicos y monitorea infracciones de parqueo mediante la correlación de eventos LPR.",
-        features: ["Mapa interactivo 2D", "Control de rotación", "Indicadores de disponibilidad"],
-        image: "https://images.unsplash.com/photo-1506521781263-d8422e82f27a?auto=format&fit=crop&q=80&w=800"
-    },
-    {
-        id: "settings",
-        title: "Configuración",
-        icon: Settings,
-        color: "text-slate-400",
-        bg: "bg-slate-500/10",
-        description: "Ajustes globales y auditoría de sistema.",
-        details: "Parámetros críticos: tiempos de apertura de relé, configuración del servidor de webhooks, backups de base de datos y personalización visual de la plataforma.",
-        features: ["Configuración API", "Variables de servidor", "Personalización UI"],
-        image: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&q=80&w=800"
-    },
-    {
-        id: "debug",
-        title: "Consola de Diagnóstico",
-        icon: Activity,
-        color: "text-red-400",
-        bg: "bg-red-500/10",
-        description: "Monitor de bajo nivel y depuración de red.",
-        details: "Herramienta exclusiva para administradores técnicos. Muestra los payloads crudos de los webhooks entrantes, logs de conexión a base de datos y latencia de los dispositivos en red.",
-        features: ["Raw JSON logs", "Test de conectividad", "Consola de eventos ISAPI"],
-        image: "https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&q=80&w=800"
-    }
-];
+const ICON_MAP: Record<string, any> = {
+    LayoutDashboard, Calendar, History, Home, Users, Car, Cpu, Key,
+    ShieldCheck, CreditCard, LayoutGrid, Settings, Activity
+};
 
 export default function HelpPage() {
-    const [selectedDocs, setSelectedDocs] = useState(DOCS[0]);
+    const [docs, setDocs] = useState<HelpDoc[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [isEditing, setIsEditing] = useState(false);
+    const [editingDoc, setEditingDoc] = useState<HelpDoc | null>(null);
+    const [uploading, setUploading] = useState(false);
+
+    useEffect(() => {
+        loadDocs();
+    }, []);
+
+    const loadDocs = async () => {
+        setLoading(true);
+        const data = await getHelpDocs();
+        setDocs(data);
+        if (data.length > 0 && !selectedDocId) {
+            setSelectedDocId(data[0].id);
+        }
+        setLoading(false);
+    };
+
+    const selectedDoc = docs.find(d => d.id === selectedDocId) || docs[0];
+
+    const filteredDocs = docs.filter(doc => {
+        const query = searchQuery.toLowerCase();
+        return (
+            doc.title.toLowerCase().includes(query) ||
+            doc.description.toLowerCase().includes(query) ||
+            doc.features.some(f => f.toLowerCase().includes(query))
+        );
+    });
+
+    const handleSave = async () => {
+        if (!editingDoc) return;
+        const newDocs = docs.map(d => d.id === editingDoc.id ? editingDoc : d);
+        setDocs(newDocs);
+        const res = await updateHelpDocs(newDocs);
+        if (res.success) {
+            toast.success("Documentación actualizada");
+            setIsEditing(false);
+        } else {
+            toast.error("Error al guardar");
+        }
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') => {
+        const file = e.target.files?.[0];
+        if (!file || !editingDoc) return;
+
+        setUploading(true);
+        const formData = new FormData();
+        formData.append("file", file);
+
+        try {
+            const res = await uploadHelpMedia(formData);
+            if (res.success && res.url) {
+                if (type === 'image') {
+                    setEditingDoc({ ...editingDoc, image: res.url });
+                } else {
+                    setEditingDoc({ ...editingDoc, videoUrl: res.url });
+                }
+                toast.success("Archivo subido correctamente");
+            } else {
+                toast.error("Error en la subida");
+            }
+        } catch (err) {
+            toast.error("Error crítico de subida");
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    if (loading) return (
+        <div className="h-full flex items-center justify-center bg-[#0a0a0a]">
+            <Activity className="animate-spin text-blue-500" size={40} />
+        </div>
+    );
 
     return (
-        <div className="p-6 flex flex-col gap-8 pb-20 max-w-[1400px] mx-auto animate-in fade-in duration-700">
-            {/* Header Hero */}
-            <section className="relative overflow-hidden bg-neutral-900 border border-white/5 p-12 rounded-[2.5rem] shadow-2xl flex flex-col md:flex-row items-center gap-10">
-                <div className="absolute top-0 right-0 p-8 opacity-5">
-                    <HelpCircle size={300} />
-                </div>
-                <div className="relative z-10 w-24 h-24 rounded-3xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-2xl shadow-blue-500/20 shrink-0">
-                    <Info size={48} className="text-white" />
-                </div>
-                <div className="relative z-10 flex-1 text-center md:text-left">
-                    <h1 className="text-5xl font-black text-white uppercase tracking-tighter leading-none mb-4">
-                        Centro de <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-indigo-400">Documentación</span>
-                    </h1>
-                    <p className="text-neutral-500 text-lg font-medium max-w-2xl leading-relaxed">
-                        Explora los módulos de la plataforma LPR-NODE. Haz clic en una sección para ver la guía detallada de funcionamiento.
-                    </p>
-                    <div className="flex flex-wrap justify-center md:justify-start gap-4 mt-8">
-                        <button className="h-12 px-6 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-2">
-                            Guía Rápida <ArrowRight size={16} />
-                        </button>
-                        <a href="/admin/help/structure" className="h-12 px-6 bg-white/5 hover:bg-white/10 text-white border border-white/5 rounded-xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-2">
-                            Mapa de Estructura <Layers size={16} />
-                        </a>
+        <div className="flex flex-col h-full bg-[#0a0a0a] animate-in fade-in duration-700 overflow-hidden">
+            {/* Header */}
+            <header className="shrink-0 border-b border-white/5 bg-neutral-900/50 backdrop-blur-md px-8 py-8">
+                <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row md:items-end justify-between gap-6">
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-3 text-blue-500 mb-1">
+                            <div className="p-2 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                                <HelpCircle size={20} />
+                            </div>
+                            <span className="text-[10px] font-black uppercase tracking-[0.3em]">Centro de Soporte Técnico</span>
+                        </div>
+                        <h1 className="text-4xl font-black text-white tracking-tight uppercase">
+                            Documentación <span className="text-neutral-600">OmniAccess</span>
+                        </h1>
                     </div>
-                </div>
-            </section>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                {/* Navigation Menu */}
-                <aside className="lg:col-span-3 space-y-2 lg:sticky lg:top-8">
-                    <p className="text-[10px] font-black text-neutral-600 uppercase tracking-[0.2em] px-4 mb-4">Secciones del Sistema</p>
-                    {DOCS.map((doc) => (
-                        <button
-                            key={doc.id}
-                            onClick={() => setSelectedDocs(doc)}
+                    <div className="flex items-center gap-4">
+                        <div className="relative w-64 group">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-600 group-focus-within:text-blue-500 transition-colors" size={16} />
+                            <input
+                                type="text"
+                                placeholder="Buscar en la guía..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full h-11 pl-12 pr-4 bg-white/[0.03] border border-white/10 rounded-xl text-xs text-white placeholder:text-neutral-700 focus:outline-none focus:border-blue-500/50 focus:bg-white/[0.05] transition-all"
+                            />
+                        </div>
+                        <Button
+                            onClick={() => {
+                                setIsEditing(!isEditing);
+                                setEditingDoc(selectedDoc);
+                            }}
                             className={cn(
-                                "w-full flex items-center gap-4 p-4 rounded-2xl transition-all duration-300 text-left border",
-                                selectedDocs.id === doc.id
-                                    ? "bg-neutral-800/50 border-white/10 shadow-xl"
-                                    : "bg-transparent border-transparent text-neutral-500 hover:bg-white/5"
+                                "h-11 px-6 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all",
+                                isEditing ? "bg-red-500 hover:bg-red-600 text-white" : "bg-white/5 hover:bg-white text-white hover:text-black border border-white/10"
                             )}
                         >
-                            <div className={cn(
-                                "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border transition-colors",
-                                selectedDocs.id === doc.id ? doc.bg + " " + doc.color + " border-white/10" : "bg-neutral-900 border-neutral-800"
-                            )}>
-                                <doc.icon size={20} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className={cn(
-                                    "text-sm font-black uppercase tracking-tight truncate",
-                                    selectedDocs.id === doc.id ? "text-white" : "text-neutral-500"
-                                )}>
-                                    {doc.title}
-                                </p>
-                            </div>
-                            {selectedDocs.id === doc.id && (
-                                <ChevronRight size={16} className="text-white/20" />
-                            )}
-                        </button>
-                    ))}
-                </aside>
+                            {isEditing ? <X className="mr-2" size={14} /> : <Edit2 className="mr-2" size={14} />}
+                            {isEditing ? "Cancelar" : "Modo Editor"}
+                        </Button>
+                    </div>
+                </div>
+            </header>
 
-                {/* Main Content Viewer */}
-                <main className="lg:col-span-9 space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
-                    <div className="bg-neutral-900 border border-white/5 rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col md:flex-row">
-                        {/* Image Placeholder */}
-                        <div className="md:w-[45%] h-64 md:h-auto relative bg-neutral-800 overflow-hidden">
-                            <Image
-                                src={selectedDocs.image}
-                                alt={selectedDocs.title}
-                                fill
-                                className="object-cover opacity-60 grayscale group-hover:grayscale-0 transition-all duration-700"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-neutral-900 via-transparent to-transparent" />
-                            <div className="absolute top-6 left-6 p-3 bg-black/50 backdrop-blur-xl border border-white/10 rounded-2xl">
-                                <selectedDocs.icon size={32} className={selectedDocs.color} />
+            <div className="flex-1 overflow-hidden">
+                <div className="max-w-[1400px] mx-auto h-full grid grid-cols-1 lg:grid-cols-12">
+                    {/* Navigation Sidebar */}
+                    <aside className="lg:col-span-3 border-r border-white/5 bg-neutral-900/20 overflow-y-auto custom-scrollbar p-6 space-y-8">
+                        <div>
+                            <p className="text-[10px] font-black text-neutral-600 uppercase tracking-widest px-3 mb-4">Módulos</p>
+                            <div className="space-y-1">
+                                {filteredDocs.map((doc) => {
+                                    const Icon = ICON_MAP[doc.icon] || HelpCircle;
+                                    const isActive = selectedDocId === doc.id;
+                                    return (
+                                        <button
+                                            key={doc.id}
+                                            onClick={() => {
+                                                setSelectedDocId(doc.id);
+                                                if (isEditing) setEditingDoc(doc);
+                                            }}
+                                            className={cn(
+                                                "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all group relative overflow-hidden",
+                                                isActive
+                                                    ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20 scale-[1.02]"
+                                                    : "text-neutral-500 hover:bg-white/5 hover:text-white"
+                                            )}
+                                        >
+                                            <Icon size={18} className={cn("transition-transform", isActive ? "scale-110" : "group-hover:scale-110")} />
+                                            <span className="text-xs font-bold uppercase tracking-tight truncate flex-1 text-left">
+                                                {doc.title}
+                                            </span>
+                                            {isActive && <div className="absolute left-0 top-0 bottom-0 w-1 bg-white" />}
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
 
-                        {/* Content */}
-                        <div className="p-10 flex-1 space-y-6">
-                            <div>
-                                <h2 className="text-3xl font-black text-white uppercase tracking-tighter mb-2">{selectedDocs.title}</h2>
-                                <p className="text-lg text-neutral-400 font-medium leading-relaxed">{selectedDocs.description}</p>
-                            </div>
-
-                            <div className="h-px bg-white/5 w-full" />
-
-                            <div className="space-y-4">
-                                <p className="text-[10px] font-black text-neutral-600 uppercase tracking-widest">Funcionamiento Técnico</p>
-                                <p className="text-neutral-500 leading-relaxed font-medium">
-                                    {selectedDocs.details}
-                                </p>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
-                                {selectedDocs.features.map((feature, i) => (
-                                    <div key={i} className="flex items-center gap-3 bg-white/[0.02] border border-white/5 p-3 rounded-xl">
-                                        <div className="w-2 h-2 rounded-full bg-blue-500" />
-                                        <span className="text-xs font-black text-neutral-400 uppercase tracking-tight">{feature}</span>
+                        <div className="pt-6 border-t border-white/5 space-y-4">
+                            <Link
+                                href="/admin/help/structure"
+                                className="w-full flex items-center justify-between p-4 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-600/20 rounded-xl group transition-all"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-blue-600/20 rounded-lg text-blue-400">
+                                        <Layers size={16} />
                                     </div>
-                                ))}
-                            </div>
+                                    <span className="text-[10px] font-black text-white uppercase tracking-widest">Core Architecture</span>
+                                </div>
+                                <ChevronRight size={14} className="text-blue-500" />
+                            </Link>
+                        </div>
+                    </aside>
 
-                            <div className="pt-8">
-                                <button className="inline-flex items-center gap-2 text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] group">
-                                    Ver documentación técnica completa <ExternalLink size={14} className="group-hover:translate-x-1 transition-transform" />
-                                </button>
+                    {/* Content Area */}
+                    <main className="lg:col-span-9 overflow-y-auto custom-scrollbar p-10 bg-black/40">
+                        {isEditing ? (
+                            <div className="max-w-4xl space-y-12 animate-in fade-in slide-in-from-right-4 duration-500 pb-20">
+                                <DocEditor
+                                    doc={editingDoc!}
+                                    setDoc={setEditingDoc}
+                                    onSave={handleSave}
+                                    onUpload={handleFileUpload}
+                                    uploading={uploading}
+                                />
                             </div>
+                        ) : (
+                            <div className="max-w-4xl space-y-16 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                <DocViewer doc={selectedDoc} />
+                                <FaqSection faqs={selectedDoc?.faqs || []} />
+                            </div>
+                        )}
+                    </main>
+                </div>
+            </div>
+
+            <style jsx global>{`
+                .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.05); border-radius: 10px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.1); }
+            `}</style>
+        </div>
+    );
+}
+
+function DocViewer({ doc }: { doc: HelpDoc }) {
+    const Icon = ICON_MAP[doc?.icon] || HelpCircle;
+
+    return (
+        <div className="space-y-12">
+            <div className="flex flex-col md:flex-row gap-10 items-start">
+                <div className="md:w-1/2 space-y-6">
+                    <div className={cn(
+                        "w-16 h-16 rounded-2xl flex items-center justify-center border shadow-2xl transition-all",
+                        doc.bg, doc.color, "border-white/10"
+                    )}>
+                        <Icon size={32} />
+                    </div>
+                    <div className="space-y-2">
+                        <h2 className="text-5xl font-black text-white uppercase tracking-tighter leading-none">
+                            {doc.title}
+                        </h2>
+                        <div className="flex items-center gap-2">
+                            <div className="h-0.5 w-12 bg-blue-600" />
+                            <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">Technical Spec</span>
                         </div>
                     </div>
+                    <p className="text-xl text-neutral-400 font-medium leading-relaxed">
+                        {doc.description}
+                    </p>
+                </div>
 
-                    {/* Bottom Info Card */}
-                    <div className="bg-gradient-to-br from-blue-600/20 to-indigo-600/20 border border-blue-500/20 rounded-3xl p-8 flex items-center justify-between">
-                        <div className="flex items-center gap-6">
-                            <div className="w-16 h-16 rounded-2xl bg-blue-500/20 flex items-center justify-center text-blue-400 shrink-0">
-                                <Activity size={32} />
+                <div className="md:w-1/2 space-y-4">
+                    <div className="aspect-video bg-neutral-900 rounded-2xl border border-white/10 overflow-hidden relative shadow-2xl group">
+                        {doc.videoUrl ? (
+                            <video
+                                src={doc.videoUrl}
+                                controls
+                                className="w-full h-full object-cover"
+                                poster={doc.image}
+                            />
+                        ) : (
+                            <Image
+                                src={doc.image}
+                                alt={doc.title}
+                                fill
+                                className="object-cover opacity-60 group-hover:scale-110 transition-transform duration-1000 grayscale group-hover:grayscale-0"
+                            />
+                        )}
+                        {!doc.videoUrl && <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />}
+                        {doc.videoUrl && <div className="absolute top-4 right-4 p-2 bg-blue-600 rounded-lg shadow-xl"><Video size={16} className="text-white" /></div>}
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-white mb-2">
+                        <Info size={18} className="text-blue-500" />
+                        <h3 className="text-xs font-black uppercase tracking-widest">Resumen General</h3>
+                    </div>
+                    <p className="text-neutral-500 text-sm leading-relaxed font-medium whitespace-pre-wrap">
+                        {doc.details}
+                    </p>
+                </div>
+
+                <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-white mb-2">
+                        <Activity size={18} className="text-emerald-500" />
+                        <h3 className="text-xs font-black uppercase tracking-widest">Funciones Clave</h3>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2">
+                        {doc.features.map((feature, i) => (
+                            <div key={i} className="flex items-center gap-3 bg-white/[0.02] border border-white/5 px-4 py-3 rounded-xl group hover:bg-white/5 transition-all">
+                                <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
+                                <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-tight group-hover:text-white transition-colors">{feature}</span>
                             </div>
-                            <div>
-                                <p className="text-white font-black uppercase tracking-tight">Consola de Desarrollo</p>
-                                <p className="text-sm text-neutral-400 font-medium">Puedes habilitar el modo depuración para ver eventos ISAPI en vivo.</p>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function FaqSection({ faqs }: { faqs: FaqItem[] }) {
+    const [openIndex, setOpenIndex] = useState<number | null>(0);
+
+    return (
+        <div className="space-y-8 pt-8 border-t border-white/5">
+            <div className="flex items-center gap-4">
+                <div className="h-px flex-1 bg-white/5" />
+                <h3 className="text-sm font-black text-blue-500 uppercase tracking-[0.2em] whitespace-nowrap">Preguntas Frecuentes (FAQ)</h3>
+                <div className="h-px flex-1 bg-white/5" />
+            </div>
+
+            <div className="space-y-3">
+                {faqs.map((faq, i) => (
+                    <div
+                        key={i}
+                        className={cn(
+                            "border border-white/5 rounded-2xl overflow-hidden transition-all duration-300",
+                            openIndex === i ? "bg-white/[0.03] border-blue-500/20 shadow-2xl" : "bg-transparent hover:bg-white/[0.01]"
+                        )}
+                    >
+                        <button
+                            onClick={() => setOpenIndex(openIndex === i ? null : i)}
+                            className="w-full flex items-center justify-between p-6 text-left"
+                        >
+                            <span className="text-sm font-bold text-white tracking-tight uppercase">{faq.question}</span>
+                            <div className={cn(
+                                "p-2 rounded-lg transition-all",
+                                openIndex === i ? "bg-blue-600 text-white" : "bg-white/5 text-neutral-500"
+                            )}>
+                                {openIndex === i ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                             </div>
-                        </div>
-                        <button className="h-12 px-6 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-500 transition-all">
-                            Ir a Debug
                         </button>
+                        {openIndex === i && (
+                            <div className="px-6 pb-6 animate-in slide-in-from-top-2 duration-300">
+                                <p className="text-sm text-neutral-400 leading-relaxed font-medium">
+                                    {faq.answer}
+                                </p>
+                            </div>
+                        )}
                     </div>
-                </main>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function DocEditor({ doc, setDoc, onSave, onUpload, uploading }: {
+    doc: HelpDoc,
+    setDoc: (d: HelpDoc) => void,
+    onSave: () => void,
+    onUpload: (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') => void,
+    uploading: boolean
+}) {
+    return (
+        <div className="space-y-8">
+            <div className="bg-neutral-900/50 p-8 rounded-3xl border border-white/5 shadow-3xl space-y-6">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-black text-white uppercase tracking-tighter">Editor de Contenido</h3>
+                    <Button onClick={onSave} className="bg-blue-600 hover:bg-blue-500 text-white font-black px-8">
+                        <Save size={16} className="mr-2" /> GUARDAR TODO
+                    </Button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">Título Módulo</label>
+                        <Input
+                            value={doc.title}
+                            onChange={e => setDoc({ ...doc, title: e.target.value })}
+                            className="bg-black border-white/10 h-12 font-bold uppercase"
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">Descripción Corta</label>
+                        <Input
+                            value={doc.description}
+                            onChange={e => setDoc({ ...doc, description: e.target.value })}
+                            className="bg-black border-white/10 h-12"
+                        />
+                    </div>
+                </div>
+
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">Detalle Extendido</label>
+                    <Textarea
+                        value={doc.details}
+                        onChange={e => setDoc({ ...doc, details: e.target.value })}
+                        className="bg-black border-white/10 min-h-[150px] leading-relaxed"
+                    />
+                </div>
+
+                <div className="grid grid-cols-2 gap-10 pt-4">
+                    <div className="space-y-4">
+                        <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4">Multimedia (Imágenes)</h4>
+                        <div className="aspect-video bg-black rounded-2xl border border-dashed border-white/10 relative overflow-hidden group">
+                            {doc.image && <img src={doc.image} className="w-full h-full object-cover opacity-50" />}
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <label className="cursor-pointer bg-white/5 hover:bg-white text-white hover:text-black p-4 rounded-xl transition-all border border-white/10 flex flex-col items-center gap-2">
+                                    {uploading ? <Activity className="animate-spin" /> : <Upload size={20} />}
+                                    <span className="text-[10px] font-black uppercase">Subir Imagen</span>
+                                    <input type="file" className="hidden" accept="image/*" onChange={e => onUpload(e, 'image')} disabled={uploading} />
+                                </label>
+                            </div>
+                        </div>
+                        <Input
+                            placeholder="O pega URL de imagen..."
+                            value={doc.image}
+                            onChange={e => setDoc({ ...doc, image: e.target.value })}
+                            className="bg-black border-white/10 text-[10px]"
+                        />
+                    </div>
+
+                    <div className="space-y-4">
+                        <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-4">Video (MP4)</h4>
+                        <div className="aspect-video bg-black rounded-2xl border border-dashed border-white/10 relative overflow-hidden group">
+                            {doc.videoUrl && <div className="w-full h-full flex items-center justify-center text-blue-500"><Play size={40} /></div>}
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <label className="cursor-pointer bg-white/5 hover:bg-white text-white hover:text-black p-4 rounded-xl transition-all border border-white/10 flex flex-col items-center gap-2">
+                                    {uploading ? <Activity className="animate-spin" /> : <Upload size={20} />}
+                                    <span className="text-[10px] font-black uppercase">Subir Video</span>
+                                    <input type="file" className="hidden" accept="video/*" onChange={e => onUpload(e, 'video')} disabled={uploading} />
+                                </label>
+                            </div>
+                        </div>
+                        <Input
+                            placeholder="O pega URL de video (YouTube/MP4)..."
+                            value={doc.videoUrl || ""}
+                            onChange={e => setDoc({ ...doc, videoUrl: e.target.value })}
+                            className="bg-black border-white/10 text-[10px]"
+                        />
+                    </div>
+                </div>
+
+                {/* FAQ Editor */}
+                <div className="pt-8 border-t border-white/5 space-y-6">
+                    <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">Gestor de Preguntas Frecuentes</h4>
+                    {doc.faqs.map((faq, i) => (
+                        <div key={i} className="bg-black/40 p-6 rounded-2xl border border-white/5 space-y-4 relative group">
+                            <button
+                                onClick={() => {
+                                    const newFaqs = doc.faqs.filter((_, idx) => idx !== i);
+                                    setDoc({ ...doc, faqs: newFaqs });
+                                }}
+                                className="absolute top-4 right-4 text-neutral-700 hover:text-red-500 transition-colors"
+                            >
+                                <Trash2 size={16} />
+                            </button>
+                            <Input
+                                placeholder="Pregunta..."
+                                value={faq.question}
+                                onChange={e => {
+                                    const newFaqs = [...doc.faqs];
+                                    newFaqs[i].question = e.target.value;
+                                    setDoc({ ...doc, faqs: newFaqs });
+                                }}
+                                className="bg-neutral-900 border-white/5 font-bold"
+                            />
+                            <Textarea
+                                placeholder="Respuesta..."
+                                value={faq.answer}
+                                onChange={e => {
+                                    const newFaqs = [...doc.faqs];
+                                    newFaqs[i].answer = e.target.value;
+                                    setDoc({ ...doc, faqs: newFaqs });
+                                }}
+                                className="bg-neutral-900 border-white/5 text-neutral-400"
+                            />
+                        </div>
+                    ))}
+                    <Button
+                        onClick={() => setDoc({ ...doc, faqs: [...doc.faqs, { question: "", answer: "" }] })}
+                        className="w-full bg-white/5 hover:bg-white/10 text-white border border-dashed border-white/10 rounded-2xl h-14 font-black uppercase tracking-widest"
+                    >
+                        <Plus size={16} className="mr-2" /> AÑADIR PREGUNTA
+                    </Button>
+                </div>
             </div>
         </div>
     );

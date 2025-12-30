@@ -17,10 +17,15 @@ export async function createUnit(formData: FormData) {
     const deviceType = formData.get("deviceType") as string;
     const coordinates = formData.get("coordinates") as string;
 
+    const mapPoints = formData.get("mapPoints") as string;
+    const contactName = formData.get("contactName") as string;
+    const contactEmail = formData.get("contactEmail") as string;
+    const parentId = formData.get("parentId") as string;
+
     // Description can be mapped from address or kept empty
     const description = address ? `Ubicado en ${address}` : null;
 
-    await prisma.unit.create({
+    const unit = await prisma.unit.create({
         data: {
             name,
             description,
@@ -32,11 +37,16 @@ export async function createUnit(formData: FormData) {
             adminPhone,
             deviceCount,
             deviceType,
-            coordinates
+            coordinates,
+            mapPoints,
+            contactName,
+            contactEmail,
+            parentId: parentId || null
         },
     });
 
     revalidatePath("/admin/units");
+    return unit;
 }
 
 export async function updateUnit(id: string, formData: FormData) {
@@ -50,6 +60,11 @@ export async function updateUnit(id: string, formData: FormData) {
     const deviceCount = formData.get("deviceCount") ? parseInt(formData.get("deviceCount") as string) : 0;
     const deviceType = formData.get("deviceType") as string;
     const coordinates = formData.get("coordinates") as string;
+
+    const mapPoints = formData.get("mapPoints") as string;
+    const contactName = formData.get("contactName") as string;
+    const contactEmail = formData.get("contactEmail") as string;
+    const parentId = formData.get("parentId") as string;
 
     const description = address ? `Ubicado en ${address}` : null;
 
@@ -66,7 +81,11 @@ export async function updateUnit(id: string, formData: FormData) {
             adminPhone,
             deviceCount,
             deviceType,
-            coordinates
+            coordinates,
+            mapPoints,
+            contactName,
+            contactEmail,
+            parentId: parentId || null
         },
     });
 
@@ -85,7 +104,7 @@ export async function getUnits() {
 }
 
 export async function getUnitsWithDetails() {
-    return await prisma.unit.findMany({
+    const allUnits = await prisma.unit.findMany({
         include: {
             users: {
                 include: {
@@ -97,4 +116,85 @@ export async function getUnitsWithDetails() {
         },
         orderBy: { name: 'asc' }
     });
+
+    // Organize hierarchy manually to avoid Prisma Client sync issues on Windows
+    const unitMap = new Map();
+    allUnits.forEach(u => unitMap.set(u.id, { ...u, children: [] }));
+
+    allUnits.forEach(u => {
+        const unit = unitMap.get(u.id);
+        if (u.parentId && unitMap.has(u.parentId)) {
+            unitMap.get(u.parentId).children.push(unit);
+        }
+    });
+
+    return Array.from(unitMap.values());
+}
+
+export async function bulkCreateSubUnits(parentId: string, pattern: string) {
+    // pattern: "A-Z, 13"
+    // We will generate A01-A13, B01-B13... Z01-Z13
+    const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+    const count = 13;
+
+    const parent = await prisma.unit.findUnique({ where: { id: parentId } });
+    if (!parent) return;
+
+    for (const char of letters) {
+        for (let i = 1; i <= count; i++) {
+            const houseNum = i.toString().padStart(2, '0');
+            const unitName = `${char}${houseNum}`;
+            const label = `Lote ${char} Casa ${houseNum}`;
+
+            // Check if already exists for this parent
+            const exists = await prisma.unit.findFirst({
+                where: {
+                    parentId,
+                    name: unitName
+                }
+            });
+
+            if (!exists) {
+                await prisma.unit.create({
+                    data: {
+                        name: unitName,
+                        description: `Unidad del complejo ${parent.name}`,
+                        type: 'CASA',
+                        lot: char,
+                        houseNumber: houseNum,
+                        parentId: parentId,
+                        address: parent.address
+                    }
+                });
+            }
+        }
+    }
+
+    revalidatePath("/admin/units");
+}
+export async function getAvailableUsers() {
+    return await prisma.user.findMany({
+        where: {
+            unitId: null
+        },
+        orderBy: {
+            name: 'asc'
+        }
+    });
+}
+
+export async function assignUserToUnit(userId: string, unitId: string) {
+    await prisma.user.update({
+        where: { id: userId },
+        data: { unitId }
+    });
+    revalidatePath("/admin/units");
+}
+
+export async function unassignUserFromUnit(userId: string) {
+    await prisma.user.update({
+        where: { id: userId },
+        data: { unitId: null }
+    });
+    revalidatePath("/admin/units");
 }

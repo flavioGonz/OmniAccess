@@ -9,10 +9,12 @@ import {
     User, FileText, Key, ScanFace, Fingerprint, PlusCircle, CheckCircle2, XCircle,
     Camera, Code2, Webhook as WebhookIcon, Tablet, Lock, ListChecks, Clock,
     FileSpreadsheet, Image, Shield, Plus, Trash2, Edit2, Save, X, Home, CreditCard,
-    Maximize2, Minimize2, Zap, Info
+    Maximize2, Minimize2, Zap, Info, RefreshCcw
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
+import { updateProjectStructure } from "@/app/actions/structure";
+import { toast } from "sonner";
 
 interface TreeDiagramProps {
     data: TreeNode;
@@ -32,6 +34,7 @@ export function TreeDiagram({ data: initialData }: TreeDiagramProps) {
     const [treeData, setTreeData] = useState<TreeNode>(initialData);
     const [editingNode, setEditingNode] = useState<TreeNode | null>(null);
     const [isFullScreen, setIsFullScreen] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     // Tree Manipulation Helpers
     const addNode = (parentId: string) => {
@@ -53,7 +56,21 @@ export function TreeDiagram({ data: initialData }: TreeDiagramProps) {
             return node;
         };
 
-        setTreeData(updateTree({ ...treeData }));
+        const newTree = updateTree({ ...treeData });
+        setTreeData(newTree);
+        persistTree(newTree);
+    };
+
+    const persistTree = async (data: TreeNode) => {
+        setIsSaving(true);
+        try {
+            await updateProjectStructure(data);
+            toast.success("Arquitectura sincronizada");
+        } catch (error) {
+            toast.error("Error al guardar cambios");
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const removeNode = (id: string) => {
@@ -67,7 +84,10 @@ export function TreeDiagram({ data: initialData }: TreeDiagramProps) {
             return node;
         };
         const result = updateTree({ ...treeData });
-        if (result) setTreeData(result);
+        if (result) {
+            setTreeData(result);
+            persistTree(result);
+        }
     };
 
     const saveEdit = (updatedNode: Partial<TreeNode>) => {
@@ -80,7 +100,9 @@ export function TreeDiagram({ data: initialData }: TreeDiagramProps) {
             }
             return node;
         };
-        setTreeData(updateTree({ ...treeData }));
+        const newTree = updateTree({ ...treeData });
+        setTreeData(newTree);
+        persistTree(newTree);
         setEditingNode(null);
     };
 
@@ -148,6 +170,12 @@ export function TreeDiagram({ data: initialData }: TreeDiagramProps) {
                         <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)] animate-pulse" />
                         <span className="text-[9px] font-black text-white/60 uppercase tracking-widest">En Desarrollo</span>
                     </div>
+                    {isSaving && (
+                        <div className="mt-2 pt-2 border-t border-white/5 flex items-center gap-2">
+                            <RefreshCcw size={10} className="text-blue-400 animate-spin" />
+                            <span className="text-[8px] font-black text-blue-400 uppercase tracking-widest">Guardando...</span>
+                        </div>
+                    )}
                 </div>
             </div>
 

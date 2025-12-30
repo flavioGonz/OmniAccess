@@ -105,7 +105,7 @@ export function EventDetailsDialog({ event, children }: EventDetailsDialogProps)
             <DialogTrigger asChild>
                 {children}
             </DialogTrigger>
-            <DialogContent className="p-0 bg-neutral-950 border border-neutral-800 overflow-hidden max-w-[1100px] w-[95vw] rounded-2xl shadow-[0_20px_80px_rgba(0,0,0,0.9)]" aria-describedby="event-description">
+            <DialogContent className="p-0 bg-neutral-950 border border-neutral-800 overflow-hidden rounded-2xl shadow-[0_20px_80px_rgba(0,0,0,0.9)]" aria-describedby="event-description">
                 <DialogTitle className="sr-only">Ficha de Evento de Acceso</DialogTitle>
                 <p id="event-description" className="sr-only">
                     Detalles completos del evento de acceso incluyendo imagen de captura, información del residente y datos del vehículo
@@ -131,14 +131,14 @@ export function EventDetailsDialog({ event, children }: EventDetailsDialogProps)
                         </div>
                     )}
 
-                    {/* LEFT: VISUAL EVIDENCE AREA (70%) */}
+                    {/* LEFT: VISUAL EVIDENCE AREA (60%) */}
                     <div
-                        className="relative w-full lg:w-[70%] bg-neutral-900 border-r border-neutral-800"
+                        className="relative w-full lg:w-[60%] bg-neutral-900 border-r border-neutral-800"
                     >
 
                         {/* Main Image Container - Using standard img tag */}
                         <div
-                            className="relative w-full h-[500px] bg-black cursor-pointer group"
+                            className="relative w-full h-[360px] bg-black cursor-pointer group"
                             onMouseEnter={() => setIsImageHovered(true)}
                         >
                             <img
@@ -242,7 +242,7 @@ export function EventDetailsDialog({ event, children }: EventDetailsDialogProps)
                         {/* Plate History Timeline */}
                         {event.accessType === 'PLATE' && plateText !== 'SIN MATRICULA' && (
                             <div className="border-t border-neutral-800">
-                                <div className="p-6 pb-4">
+                                <div className="p-4 pb-2">
                                     <div className="flex items-center justify-between mb-4">
                                         <div className="flex items-center gap-4">
                                             <div className="flex items-center gap-2">
@@ -331,15 +331,15 @@ export function EventDetailsDialog({ event, children }: EventDetailsDialogProps)
                         )}
                     </div>
 
-                    {/* RIGHT: IDENTITY & DATA PANEL (30%) */}
-                    <div className="w-full lg:w-[30%] bg-neutral-950 flex flex-col">
+                    {/* RIGHT: IDENTITY & DATA PANEL (40%) */}
+                    <div className="w-full lg:w-[40%] bg-neutral-950 flex flex-col">
 
                         {/* Header Section */}
-                        <div className="bg-neutral-900 border-b border-neutral-800 p-6">
-                            <h2 className="text-lg font-black text-white uppercase tracking-tight mb-1">
+                        <div className="bg-neutral-900 border-b border-neutral-800 p-4">
+                            <h2 className="text-base font-black text-white uppercase tracking-tight mb-0.5">
                                 Información del Evento
                             </h2>
-                            <p className="text-xs text-neutral-500 font-bold uppercase tracking-wider">
+                            <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">
                                 Sistema de Control de Acceso
                             </p>
                         </div>
@@ -348,8 +348,8 @@ export function EventDetailsDialog({ event, children }: EventDetailsDialogProps)
                         <div className="p-6 border-b border-neutral-800">
                             <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-center gap-2">
-                                    <UserIcon size={14} className="text-neutral-500" />
-                                    <h3 className="text-xs font-black text-neutral-400 uppercase tracking-widest">
+                                    <UserIcon size={12} className="text-neutral-500" />
+                                    <h3 className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">
                                         Residente / Propietario
                                     </h3>
                                 </div>
@@ -440,7 +440,7 @@ export function EventDetailsDialog({ event, children }: EventDetailsDialogProps)
                         </div>
 
                         {/* Event Details Section */}
-                        <div className="p-6 flex-1">
+                        <div className="p-5 flex-1">
                             <div className="space-y-4">
                                 <div className="flex items-start gap-3">
                                     <Calendar size={16} className="text-neutral-500 mt-1 shrink-0" />
@@ -451,7 +451,7 @@ export function EventDetailsDialog({ event, children }: EventDetailsDialogProps)
                                         <p className="text-base font-black text-white font-mono">
                                             {dateStr}
                                         </p>
-                                        <p className="text-lg font-black text-white font-mono mt-1">
+                                        <p className="text-base font-black text-white font-mono mt-0.5">
                                             {timeStr}
                                         </p>
                                     </div>

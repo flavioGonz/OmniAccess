@@ -69,7 +69,9 @@ export async function getAccessEvents(options?: {
                         dni: true,
                         apartment: true,
                         cara: true,
-                        unit: true,
+                        unit: {
+                            select: { name: true }
+                        },
                         parkingSlotId: true
                     }
                 },
@@ -79,7 +81,37 @@ export async function getAccessEvents(options?: {
         prisma.accessEvent.count({ where: whereClause })
     ]);
 
-    return { events, total };
+    // Enrich events with duration logic
+    const enrichedEvents = await Promise.all(events.map(async (event) => {
+        const plate = event.plateDetected?.trim();
+
+        if (!plate || plate === 'unknown' || plate === 'NO_LEIDA') {
+            return { ...event, stayDuration: null, previousDirection: null };
+        }
+
+        // Buscamos cualquier evento previo para esta patente (sin importar decision por ahora para debug)
+        const previousEvent = await prisma.accessEvent.findFirst({
+            where: {
+                plateDetected: { equals: plate, mode: 'insensitive' },
+                timestamp: { lt: event.timestamp }
+            },
+            orderBy: { timestamp: 'desc' }
+        });
+
+        if (!previousEvent) {
+            return { ...event, stayDuration: null, previousDirection: null };
+        }
+
+        const durationMs = event.timestamp.getTime() - previousEvent.timestamp.getTime();
+
+        return {
+            ...event,
+            stayDuration: durationMs,
+            previousDirection: previousEvent.direction
+        };
+    }));
+
+    return { events: enrichedEvents, total };
 }
 
 export async function getEventsCountToday() {

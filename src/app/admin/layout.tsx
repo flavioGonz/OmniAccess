@@ -153,7 +153,7 @@ export default function AdminLayout({
             {/* Main Content */}
             <main
                 className={cn(
-                    "flex-1 overflow-hidden transition-all duration-300 ease-in-out font-sans h-screen",
+                    "flex-1 overflow-y-auto custom-scrollbar transition-all duration-300 ease-in-out font-sans h-screen",
                     collapsed ? "ml-[70px]" : "ml-64"
                 )}
             >

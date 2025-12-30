@@ -1,37 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Unit } from "@prisma/client";
+import { useState, useEffect, useMemo } from "react";
+import { Unit, UnitType, User } from "@prisma/client";
 import {
-    Building2,
-    Home,
-    MapPin,
-    LayoutGrid,
-    Pencil,
-    Trash2,
-    Plus,
-    Info,
-    Server,
-    Users,
-    ChevronRight,
-    Search,
-    Video,
-    ScanFace,
-    MoreVertical,
-    ArrowRight,
-    Check,
-    Layers,
-    Phone,
-    Hash,
-    Monitor,
-    ChevronLeft,
-    Globe,
-    UserCircle,
-    Building,
-    ExternalLink,
-    Map as MapIcon,
-    Navigation,
-    LocateFixed
+    Building2, Home, MapPin, LayoutGrid, Pencil, Trash2, Plus, Info, Server,
+    Users, ChevronRight, Search, Video, ScanFace, MoreVertical, ArrowRight,
+    Check, Layers, Phone, Hash, Monitor, ChevronLeft, Globe, UserCircle,
+    Building, ExternalLink, Map as MapIcon, Navigation, LocateFixed, Mail,
+    Contact, Clock, Activity, MapPin as MapPinIcon, X, Car
 } from "lucide-react";
 import dynamic from 'next/dynamic';
 
@@ -45,7 +21,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getUnits, deleteUnit, createUnit, updateUnit } from "@/app/actions/units";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { getUnits, deleteUnit, createUnit, updateUnit, getUnitsWithDetails, bulkCreateSubUnits, getAvailableUsers, assignUserToUnit, unassignUserFromUnit } from "@/app/actions/units";
+import { getUsers } from "@/app/actions/users";
 import { cn } from "@/lib/utils";
 import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import Image from "next/image";
@@ -62,62 +40,87 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+
+interface ExtendedUnit extends Unit {
+    users: User[];
+    children?: ExtendedUnit[];
+}
 
 export default function UnitsPage() {
-    const [units, setUnits] = useState<Unit[]>([]);
+    const [units, setUnits] = useState<ExtendedUnit[]>([]);
     const [loading, setLoading] = useState(true);
-    const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
+    const [selectedUnit, setSelectedUnit] = useState<ExtendedUnit | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
+    const [activeCategory, setActiveCategory] = useState<'all' | 'units' | 'complexes'>('units');
     const [mode, setMode] = useState<'list' | 'wizard'>('list');
-    const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
+    const [availableUsers, setAvailableUsers] = useState<any[]>([]);
+    const [searchAvailable, setSearchAvailable] = useState("");
+    const [showAssignDialog, setShowAssignDialog] = useState(false);
+    const [editingUnit, setEditingUnit] = useState<ExtendedUnit | null>(null);
     const [showEditDialog, setShowEditDialog] = useState(false);
-    const [activeEditTab, setActiveEditTab] = useState<'general' | 'structure' | 'location'>('general');
-    const [showLevelsDialog, setShowLevelsDialog] = useState(false);
-    const [showResidentsDialog, setShowResidentsDialog] = useState(false);
-    const [currentLevel, setCurrentLevel] = useState<number | null>(null);
+    const [activeEditTab, setActiveEditTab] = useState<'general' | 'contact' | 'location' | 'map' | 'units'>('general');
+    const [editingSubUnit, setEditingSubUnit] = useState<ExtendedUnit | null>(null);
 
-    // Wizard State
-    const [step, setStep] = useState(1);
+    // Form State
     const [formData, setFormData] = useState({
         name: "",
-        type: "EDIFICIO",
+        type: "BARRIO" as UnitType,
         floors: "",
         lot: "",
         houseNumber: "",
         address: "",
         adminPhone: "",
+        contactName: "",
+        contactEmail: "",
         deviceCount: "2",
         deviceType: "BOTH",
         coordinates: "-34.6037, -58.3816"
     });
 
+    const [step, setStep] = useState(1);
+
     const loadUnits = async () => {
         setLoading(true);
         try {
-            const data = await getUnits();
-            setUnits(data);
-            if (data.length > 0 && !selectedUnit) {
-                setSelectedUnit(data[0]);
+            const data = await getUnitsWithDetails();
+            setUnits(data as ExtendedUnit[]);
+            if (data.length > 0) {
+                if (selectedUnit) {
+                    const updated = data.find(u => u.id === selectedUnit.id);
+                    if (updated) setSelectedUnit(updated as ExtendedUnit);
+                } else {
+                    setSelectedUnit(data[0] as ExtendedUnit);
+                }
             }
         } finally {
             setLoading(false);
         }
     };
 
+    const loadAvailableUsers = async () => {
+        const u = await getAvailableUsers();
+        setAvailableUsers(u);
+    };
+
     useEffect(() => {
         loadUnits();
+        loadAvailableUsers();
     }, []);
 
     const handleCreateNew = () => {
         setEditingUnit(null);
         setFormData({
             name: "",
-            type: "EDIFICIO",
+            type: "BARRIO",
             floors: "",
             lot: "",
             houseNumber: "",
             address: "",
             adminPhone: "",
+            contactName: "",
+            contactEmail: "",
             deviceCount: "2",
             deviceType: "BOTH",
             coordinates: "-34.6037, -58.3816"
@@ -126,16 +129,18 @@ export default function UnitsPage() {
         setMode('wizard');
     };
 
-    const handleEdit = (unit: Unit) => {
+    const handleEdit = (unit: ExtendedUnit) => {
         setEditingUnit(unit);
         setFormData({
             name: unit.name,
             type: unit.type,
             floors: unit.floors?.toString() || "",
-            lot: (unit as any).lot || "",
-            houseNumber: (unit as any).houseNumber || "",
+            lot: unit.lot || "",
+            houseNumber: unit.houseNumber || "",
             address: unit.address || "",
             adminPhone: unit.adminPhone || "",
+            contactName: unit.contactName || "",
+            contactEmail: unit.contactEmail || "",
             deviceCount: unit.deviceCount?.toString() || "2",
             deviceType: unit.deviceType || "BOTH",
             coordinates: unit.coordinates || "-34.6037, -58.3816"
@@ -144,27 +149,7 @@ export default function UnitsPage() {
         setShowEditDialog(true);
     };
 
-
-
-    const handleQuickEdit = async () => {
-        if (!editingUnit) return;
-
-        const payload = new FormData();
-        Object.entries(formData).forEach(([key, value]) => {
-            payload.append(key, value);
-        });
-
-        try {
-            await updateUnit(editingUnit.id, payload);
-            setShowEditDialog(false);
-            loadUnits();
-        } catch (e) {
-            console.error(e);
-            alert("Error al actualizar");
-        }
-    };
-
-    const handleSubmitWizard = async () => {
+    const handleSave = async () => {
         const payload = new FormData();
         Object.entries(formData).forEach(([key, value]) => {
             payload.append(key, value);
@@ -173,259 +158,185 @@ export default function UnitsPage() {
         try {
             if (editingUnit) {
                 await updateUnit(editingUnit.id, payload);
+                toast.success("Propiedad actualizada");
             } else {
                 await createUnit(payload);
+                toast.success("Propiedad creada");
             }
+            setShowEditDialog(false);
             setMode('list');
-            setStep(1);
             loadUnits();
         } catch (e) {
-            console.error(e);
-            alert("Error al guardar");
+            toast.error("Error al guardar");
         }
     };
 
-    const getLevels = (count: number) => {
-        return Array.from({ length: count }, (_, i) => ({
-            number: i + 1,
-            label: `Nivel ${i + 1}`,
-            apartments: 4,
-            devices: i === 0 ? [{ name: "LPR Entrada", type: 'LPR' }, { name: "Face Hall", type: 'FACE' }] : []
-        }));
-    };
+    const filteredUnits = units.filter(u => {
+        const matchesSearch =
+            u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            u.lot?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            u.houseNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            u.contactName?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const filteredUnits = units.filter(u =>
-        u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        u.type.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+        if (!matchesSearch) return false;
 
-    // WIZARD MODE
+        if (activeCategory === 'units') {
+            return u.parentId !== null || u.type === 'CASA';
+        }
+        if (activeCategory === 'complexes') {
+            return u.parentId === null && (u.type === 'BARRIO' || u.type === 'EDIFICIO');
+        }
+        return true;
+    });
+
+    const displayedResidents = useMemo(() => {
+        if (!selectedUnit) return [];
+        const res = [...selectedUnit.users];
+        if (selectedUnit.type === 'BARRIO' && selectedUnit.children) {
+            selectedUnit.children.forEach(child => {
+                res.push(...(child.users || []));
+            });
+        }
+        return res;
+    }, [selectedUnit]);
+
     if (mode === 'wizard') {
         return (
-            <div className="max-w-4xl mx-auto py-10 space-y-8 animate-in zoom-in-95 duration-500">
+            <div className="max-w-4xl mx-auto py-10 space-y-8 animate-in zoom-in-95 duration-500 pb-20">
                 <div className="flex items-center justify-between mb-8">
                     <Button variant="ghost" onClick={() => setMode('list')} className="text-neutral-500 hover:text-white">
                         <ChevronLeft className="mr-2" /> Cancelar
                     </Button>
                     <div className="flex items-center gap-2">
-                        {[1, 2, 3].map((s) => (
+                        {[1, 2, 3, 4].map((s) => (
                             <div key={s} className={cn("h-1.5 w-12 rounded-full transition-all duration-500", step >= s ? "bg-blue-600" : "bg-neutral-800")} />
                         ))}
                     </div>
-                    <span className="text-xs font-black text-neutral-600 uppercase tracking-widest">PASO {step} DE 3</span>
+                    <span className="text-xs font-black text-neutral-600 uppercase tracking-widest">PASO {step} DE 4</span>
                 </div>
 
-                {/* STEP 1: TYPE */}
                 {step === 1 && (
-                    <div className="space-y-8">
-                        <div className="text-center space-y-2">
-                            <h2 className="text-3xl font-black text-white">¿Qué tipo de lugar vamos a administrar?</h2>
-                            <p className="text-neutral-400">Selecciona la categoría que mejor describa el entorno.</p>
+                    <div className="space-y-6">
+                        <div className="text-center space-y-1">
+                            <h2 className="text-2xl font-bold text-white uppercase tracking-tight">Tipo de Propiedad</h2>
+                            <p className="text-xs text-neutral-500">Define la categoría de la unidad.</p>
                         </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             {[
-                                { id: "BARRIO", icon: MapPin, label: "Barrio Cerrado", desc: "Múltiples lotes, calles internas y accesos perimetrales." },
-                                { id: "EDIFICIO", icon: Building2, label: "Edificio / Torre", desc: "Estructura vertical con departamentos y áreas comunes." },
-                                { id: "CASA", icon: Home, label: "Casa Inteligente", desc: "Unidad individual con domótica y control de acceso propio." }
+                                { id: "BARRIO", icon: MapPin, label: "Barrio / Lote", desc: "Parcelas y barrios cerrados." },
+                                { id: "EDIFICIO", icon: Building2, label: "Edificio", desc: "Torres y complejos verticales." },
+                                { id: "CASA", icon: Home, label: "Individual", desc: "Viviendas independientes." }
                             ].map((type) => (
                                 <Card
                                     key={type.id}
-                                    onClick={() => setFormData({ ...formData, type: type.id })}
+                                    onClick={() => setFormData({ ...formData, type: type.id as UnitType })}
                                     className={cn(
-                                        "bg-neutral-900 border-neutral-800 cursor-pointer transition-all hover:scale-105 hover:border-blue-500/50 group relative overflow-hidden",
-                                        formData.type === type.id ? "ring-2 ring-blue-500 border-transparent bg-neutral-900/80" : ""
+                                        "bg-neutral-900/50 border-neutral-800 cursor-pointer transition-all hover:border-blue-500/30 group relative",
+                                        formData.type === type.id ? "ring-1 ring-blue-500 border-transparent" : ""
                                     )}
                                 >
-                                    <CardContent className="p-8 flex flex-col items-center text-center space-y-4 relative z-10">
+                                    <CardContent className="p-6 flex flex-col items-center text-center space-y-3">
                                         <div className={cn(
-                                            "p-4 rounded-lg transition-colors",
-                                            formData.type === type.id ? "bg-blue-500 text-white shadow-lg" : "bg-neutral-800 text-neutral-400 group-hover:bg-neutral-700"
+                                            "p-3 rounded-xl transition-all duration-300",
+                                            formData.type === type.id ? "bg-blue-600 text-white shadow-lg" : "bg-neutral-800 text-neutral-500"
                                         )}>
-                                            <type.icon size={32} />
+                                            <type.icon size={24} />
                                         </div>
                                         <div>
-                                            <h3 className="font-bold text-white text-lg">{type.label}</h3>
-                                            <p className="text-xs text-neutral-500 mt-2 leading-relaxed">{type.desc}</p>
+                                            <h3 className="text-xs font-bold text-white uppercase tracking-wider">{type.label}</h3>
+                                            <p className="text-[9px] text-neutral-600 mt-1 uppercase tracking-widest">{type.desc}</p>
                                         </div>
-                                        {formData.type === type.id && (
-                                            <div className="absolute top-4 right-4 text-blue-500">
-                                                <Check size={20} />
-                                            </div>
-                                        )}
                                     </CardContent>
-                                    {formData.type === type.id && <div className="absolute inset-0 bg-blue-500/5 pointer-events-none" />}
                                 </Card>
                             ))}
                         </div>
                     </div>
                 )}
 
-                {/* STEP 2: DETAILS */}
                 {step === 2 && (
-                    <div className="space-y-8">
-                        <div className="text-center space-y-2">
-                            <h2 className="text-3xl font-black text-white">Detalles de la Infraestructura</h2>
-                            <p className="text-neutral-400">Configura las dimensiones y características operativas.</p>
+                    <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
+                        <div className="text-center space-y-1">
+                            <h2 className="text-2xl font-bold text-white uppercase tracking-tight">Detalles del Lugar</h2>
+                            <p className="text-xs text-neutral-500">Información básica de identificación.</p>
                         </div>
-
-                        <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-8 space-y-8">
-                            <div className="grid grid-cols-2 gap-8">
+                        <div className="bg-neutral-900/30 border border-white/5 p-6 rounded-2xl space-y-6">
+                            <div className="grid grid-cols-2 gap-6">
                                 <div className="space-y-2 col-span-2">
-                                    <Label className="text-xs font-black text-neutral-500 uppercase tracking-widest">Nombre del Lugar</Label>
+                                    <Label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Nombre Completo</Label>
                                     <Input
                                         value={formData.name}
                                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                        placeholder="Ej: Torres del Sol"
-                                        className="bg-neutral-950 border-neutral-800 h-12 rounded-xl text-lg font-bold"
+                                        placeholder="Ej: Loteo Los Alerces"
+                                        className="bg-black/40 border-white/5 h-10 rounded-lg text-sm font-semibold uppercase"
                                     />
                                 </div>
-
-                                {formData.type === 'EDIFICIO' && (
-                                    <>
-                                        <div className="space-y-2">
-                                            <Label className="text-xs font-black text-neutral-500 uppercase tracking-widest flex items-center gap-2">
-                                                <Layers size={14} /> Cantidad de Niveles
-                                            </Label>
-                                            <Input
-                                                type="number"
-                                                value={formData.floors}
-                                                onChange={(e) => setFormData({ ...formData, floors: e.target.value })}
-                                                placeholder="Ej: 10"
-                                                className="bg-neutral-950 border-neutral-800 h-12 rounded-xl font-mono"
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label className="text-xs font-black text-neutral-500 uppercase tracking-widest flex items-center gap-2">
-                                                <Phone size={14} /> Contacto Admin
-                                            </Label>
-                                            <Input
-                                                value={formData.adminPhone}
-                                                onChange={(e) => setFormData({ ...formData, adminPhone: e.target.value })}
-                                                placeholder="+54 9 ..."
-                                                className="bg-neutral-950 border-neutral-800 h-12 rounded-xl"
-                                            />
-                                        </div>
-                                    </>
-                                )}
-
-                                {formData.type === 'BARRIO' && (
-                                    <>
-                                        <div className="space-y-2">
-                                            <Label className="text-xs font-black text-neutral-500 uppercase tracking-widest flelx items-center gap-2">
-                                                Lote / Parcela
-                                            </Label>
-                                            <Input
-                                                value={formData.lot}
-                                                onChange={(e) => setFormData({ ...formData, lot: e.target.value })}
-                                                placeholder="Ej: B12 o 45"
-                                                className="bg-neutral-950 border-neutral-800 h-12 rounded-xl"
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label className="text-xs font-black text-neutral-500 uppercase tracking-widest">
-                                                Número de Casa
-                                            </Label>
-                                            <Input
-                                                value={formData.houseNumber}
-                                                onChange={(e) => setFormData({ ...formData, houseNumber: e.target.value })}
-                                                placeholder="Ej: 154"
-                                                className="bg-neutral-950 border-neutral-800 h-12 rounded-xl"
-                                            />
-                                        </div>
-                                    </>
-                                )}
-
-                                {formData.type === 'CASA' && (
-                                    <div className="space-y-2 col-span-2">
-                                        <Label className="text-xs font-black text-neutral-500 uppercase tracking-widest">Número de Vivienda</Label>
-                                        <Input
-                                            value={formData.houseNumber}
-                                            onChange={(e) => setFormData({ ...formData, houseNumber: e.target.value })}
-                                            placeholder="Ej: 450"
-                                            className="bg-neutral-950 border-neutral-800 h-12 rounded-xl"
-                                        />
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="p-6 bg-neutral-950/50 rounded-lg border border-neutral-800 space-y-6">
-                                <div className="flex items-center gap-3 text-emerald-400 mb-2">
-                                    <Monitor size={20} />
-                                    <h4 className="font-bold text-sm uppercase tracking-wider">Hardware de Acceso</h4>
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Identificador Lote</Label>
+                                    <Input
+                                        value={formData.lot}
+                                        onChange={(e) => setFormData({ ...formData, lot: e.target.value })}
+                                        placeholder="Ej: A-45"
+                                        className="bg-black/40 border-white/5 h-10 rounded-lg text-blue-500 font-bold"
+                                    />
                                 </div>
-
-                                <div className="grid grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <Label className="text-xs font-black text-neutral-500 uppercase tracking-widest flex items-center gap-2">
-                                            <Hash size={14} /> Dispositivos
-                                        </Label>
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Nº Casa / Puerta</Label>
+                                    <Input
+                                        value={formData.houseNumber}
+                                        onChange={(e) => setFormData({ ...formData, houseNumber: e.target.value })}
+                                        placeholder="Ej: 154"
+                                        className="bg-black/40 border-white/5 h-10 rounded-lg"
+                                    />
+                                </div>
+                                {formData.type === 'EDIFICIO' && (
+                                    <div className="space-y-2 col-span-2">
+                                        <Label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Cantidad de Pisos</Label>
                                         <Input
                                             type="number"
-                                            value={formData.deviceCount}
-                                            onChange={(e) => setFormData({ ...formData, deviceCount: e.target.value })}
-                                            className="bg-neutral-900 border-neutral-800 h-10 rounded-lg font-mono text-emerald-400"
+                                            value={formData.floors}
+                                            onChange={(e) => setFormData({ ...formData, floors: e.target.value })}
+                                            className="bg-black/40 border-white/5 h-10 rounded-lg"
                                         />
                                     </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-xs font-black text-neutral-500 uppercase tracking-widest">Tecnología Principal</Label>
-                                        <Select
-                                            value={formData.deviceType}
-                                            onValueChange={(v) => setFormData({ ...formData, deviceType: v })}
-                                        >
-                                            <SelectTrigger className="bg-neutral-900 border-neutral-800 h-10 rounded-lg">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent className="bg-neutral-900 border-neutral-800 text-white rounded-lg">
-                                                <SelectItem value="LPR"><div className="flex items-center gap-2"><Video size={14} /> Solo Patentes (LPR)</div></SelectItem>
-                                                <SelectItem value="FACE"><div className="flex items-center gap-2"><ScanFace size={14} /> Solo Facial</div></SelectItem>
-                                                <SelectItem value="BOTH"><div className="flex items-center gap-2"><LayoutGrid size={14} /> Híbrido (LPR + Facial)</div></SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
+                                )}
                             </div>
                         </div>
                     </div>
                 )}
 
-                {/* STEP 3: LOCATION */}
                 {step === 3 && (
-                    <div className="space-y-8">
-                        <div className="text-center space-y-2">
-                            <h2 className="text-3xl font-black text-white">Geolocalización</h2>
-                            <p className="text-neutral-400">¿Dónde se encuentra ubicado?</p>
+                    <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
+                        <div className="text-center space-y-1">
+                            <h2 className="text-2xl font-bold text-white uppercase tracking-tight">Contacto</h2>
+                            <p className="text-xs text-neutral-500">Información del propietario o administración.</p>
                         </div>
-
-                        <div className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
-                            <div className="h-64 bg-neutral-800 relative group cursor-crosshair">
-                                <div className="absolute inset-0 opacity-20 bg-[url('https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/World_map_blank_without_borders.svg/2000px-World_map_blank_without_borders.svg.png')] bg-cover bg-center grayscale" />
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                    <div className="text-center space-y-4">
-                                        <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto animate-pulse">
-                                            <MapPin size={32} className="text-blue-500" />
-                                        </div>
-                                        <p className="text-xs font-black text-neutral-500 uppercase tracking-widest">Vista de Mapa (Simulada)</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="p-8 space-y-6">
-                                <div className="space-y-2">
-                                    <Label className="text-xs font-black text-neutral-500 uppercase tracking-widest">Dirección Física</Label>
+                        <div className="bg-neutral-900/30 border border-white/5 p-6 rounded-2xl space-y-6">
+                            <div className="grid grid-cols-2 gap-6">
+                                <div className="space-y-2 col-span-2">
+                                    <Label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Persona de Contacto</Label>
                                     <Input
-                                        value={formData.address}
-                                        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                                        placeholder="Calle 123, Ciudad, País"
-                                        className="bg-neutral-950 border-neutral-800 h-12 rounded-xl"
+                                        value={formData.contactName}
+                                        onChange={(e) => setFormData({ ...formData, contactName: e.target.value })}
+                                        placeholder="Nombre completo"
+                                        className="bg-black/40 border-white/5 h-10 rounded-lg text-sm"
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label className="text-xs font-black text-neutral-500 uppercase tracking-widest text-blue-500">Coordenadas GPS</Label>
+                                    <Label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Teléfono / WhatsApp</Label>
                                     <Input
-                                        value={formData.coordinates}
-                                        onChange={(e) => setFormData({ ...formData, coordinates: e.target.value })}
-                                        className="bg-blue-500/5 border-blue-500/20 h-10 rounded-lg text-sm font-mono text-blue-400"
+                                        value={formData.adminPhone}
+                                        onChange={(e) => setFormData({ ...formData, adminPhone: e.target.value })}
+                                        placeholder="+54 9 ..."
+                                        className="bg-black/40 border-white/5 h-10 rounded-lg text-sm"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Email</Label>
+                                    <Input
+                                        value={formData.contactEmail}
+                                        onChange={(e) => setFormData({ ...formData, contactEmail: e.target.value })}
+                                        placeholder="email@ejemplo.com"
+                                        className="bg-black/40 border-white/5 h-10 rounded-lg text-sm"
                                     />
                                 </div>
                             </div>
@@ -433,527 +344,560 @@ export default function UnitsPage() {
                     </div>
                 )}
 
-                {/* Navigation */}
-                <div className="flex justify-between pt-8 border-t border-neutral-800/50">
-                    <Button
-                        variant="outline"
-                        onClick={() => setStep(step - 1)}
-                        disabled={step === 1}
-                        className="h-12 px-8 rounded-xl border-neutral-800 hover:bg-neutral-800 text-neutral-400 font-bold"
-                    >
-                        Atrás
-                    </Button>
+                {step === 4 && (
+                    <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
+                        <div className="text-center space-y-1">
+                            <h2 className="text-2xl font-bold text-white uppercase tracking-tight">Localización</h2>
+                            <p className="text-xs text-neutral-500">Coordenadas y dirección física.</p>
+                        </div>
+                        <div className="bg-neutral-900/30 border border-white/5 p-6 rounded-2xl space-y-4">
+                            <LocationPicker
+                                coords={formData.coordinates}
+                                onChange={(val) => setFormData({ ...formData, coordinates: val })}
+                            />
+                            <div className="space-y-2">
+                                <Label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Dirección Escrita</Label>
+                                <Input
+                                    value={formData.address}
+                                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                                    placeholder="Calle, Ciudad, Provincia"
+                                    className="bg-black/40 border-white/5 h-10 rounded-lg text-sm"
+                                />
+                            </div>
+                            <div className="space-y-2 pt-2">
+                                <Label className="text-[10px] font-bold text-blue-500/50 uppercase tracking-widest">Puntos del Polígono (Opcional)</Label>
+                                <Textarea
+                                    value={formData.mapPoints}
+                                    onChange={(e) => setFormData({ ...formData, mapPoints: e.target.value })}
+                                    placeholder='[[lat,lng], ...]'
+                                    className="bg-black/40 border-white/5 h-16 text-[10px] font-mono"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
 
-                    {step < 3 ? (
+                {/* Navigation Bar */}
+                <div className="fixed bottom-0 left-0 right-0 bg-neutral-950/50 backdrop-blur-xl border-t border-white/5 p-4 z-50">
+                    <div className="max-w-4xl mx-auto flex justify-between items-center">
                         <Button
-                            onClick={() => setStep(step + 1)}
-                            disabled={!formData.type || (step === 2 && !formData.name)}
-                            className="bg-white text-black hover:bg-neutral-200 h-12 px-8 rounded-xl font-black text-xs uppercase tracking-widest shadow-xl"
+                            variant="ghost"
+                            disabled={step === 1}
+                            onClick={() => setStep(step - 1)}
+                            className="h-10 px-6 rounded-lg font-bold text-[10px] uppercase tracking-widest text-neutral-500"
                         >
-                            Siguiente Paso <ArrowRight className="ml-2 h-4 w-4" />
+                            <ChevronLeft className="mr-2" size={14} /> Volver
                         </Button>
-                    ) : (
-                        <Button
-                            onClick={handleSubmitWizard}
-                            className="bg-emerald-500 hover:bg-emerald-600 text-black h-12 px-8 rounded-xl font-black text-xs uppercase tracking-widest shadow-[0_0_20px_rgba(16,185,129,0.4)]"
-                        >
-                            {editingUnit ? "GUARDAR CAMBIOS" : "FINALIZAR INSTALACIÓN"}
-                        </Button>
-                    )}
+                        <div className="flex gap-3">
+                            {step < 4 ? (
+                                <Button
+                                    onClick={() => setStep(step + 1)}
+                                    className="h-10 px-8 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] uppercase tracking-widest"
+                                >
+                                    Siguiente <ChevronRight className="ml-2" size={14} />
+                                </Button>
+                            ) : (
+                                <Button
+                                    onClick={handleSave}
+                                    className="h-10 px-8 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] uppercase tracking-widest"
+                                >
+                                    Guardar Propiedad <Check className="ml-2" size={14} />
+                                </Button>
+                            )}
+                        </div>
+                    </div>
                 </div>
             </div>
         );
     }
 
     return (
-        <>
-            <div className="p-6 h-full flex flex-col md:flex-row gap-8 animate-in fade-in duration-500 overflow-hidden">
-                {/* Left Column */}
-                <div className="w-full md:w-72 shrink-0 flex flex-col gap-6">
-                    <header className="flex justify-between items-center mb-6 px-1">
-                        <div>
-                            <h1 className="text-2xl font-black text-white tracking-tight uppercase">Propiedades</h1>
-                            <p className="text-xs text-neutral-500 font-bold uppercase tracking-widest">
-                                {units.length} Unidades
-                            </p>
-                        </div>
-                    </header>
-
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" size={16} />
-                        <Input
-                            placeholder="Buscar..."
-                            value={searchTerm}
-                            onChange={e => setSearchTerm(e.target.value)}
-                            className="pl-10 bg-neutral-900 border-neutral-800 rounded-xl"
-                        />
+        <div className="h-full flex flex-col bg-[#0a0a0a] animate-in fade-in duration-700 overflow-hidden">
+            {/* Horizontal Header Menu */}
+            <header className="px-8 py-6 border-b border-white/5 bg-neutral-900/40 backdrop-blur-md flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-8">
+                    <div>
+                        <h1 className="text-2xl font-black text-white tracking-tighter uppercase leading-none">Unidades</h1>
+                        <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest mt-1">Catastro y Gestión de Propiedades</p>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-2">
-                        {filteredUnits.map((unit) => (
-                            <div
-                                key={unit.id}
-                                onClick={() => setSelectedUnit(unit)}
-                                className={cn(
-                                    "group p-5 rounded-xl border cursor-pointer transition-all relative overflow-hidden",
-                                    selectedUnit?.id === unit.id
-                                        ? "bg-blue-600 border-blue-500 shadow-lg shadow-blue-500/20"
-                                        : "bg-neutral-900/50 border-neutral-800 hover:border-neutral-700 hover:bg-neutral-800"
-                                )}
-                            >
-                                <div className="flex items-start justify-between relative z-10">
-                                    <div className="flex items-center gap-3">
-                                        <div className={cn(
-                                            "p-2 rounded-lg shrink-0",
-                                            selectedUnit?.id === unit.id ? "bg-white/20 text-white" : "bg-neutral-800 text-neutral-500 group-hover:text-white"
-                                        )}>
-                                            {unit.type === 'EDIFICIO' && <Building2 size={18} />}
-                                            {unit.type === 'BARRIO' && <MapPin size={18} />}
-                                            {unit.type === 'CASA' && <Home size={18} />}
-                                        </div>
-                                        <div className="overflow-hidden">
-                                            <h3 className={cn("font-bold text-sm truncate", selectedUnit?.id === unit.id ? "text-white" : "text-neutral-200")}>{unit.name}</h3>
-                                            <p className={cn("text-xs font-medium truncate", selectedUnit?.id === unit.id ? "text-blue-200" : "text-neutral-500")}>
-                                                {unit.type}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+                    <div className="h-10 w-px bg-white/5 mx-2 hidden md:block" />
 
-                        <Button onClick={handleCreateNew} variant="outline" className="w-full border-dashed border-neutral-800 text-neutral-500 hover:text-white hover:border-neutral-600 h-12 rounded-xl text-xs">
-                            <Plus size={14} className="mr-2" /> Nueva Propiedad
-                        </Button>
+                    <div className="relative group w-80 hidden md:block">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-600 group-focus-within:text-blue-500 transition-colors" size={14} />
+                        <input
+                            type="text"
+                            placeholder="Buscar propiedad, lote o contacto..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full h-10 pl-11 pr-4 bg-white/[0.03] border border-white/10 rounded-xl text-xs text-white placeholder:text-neutral-700 focus:outline-none focus:border-blue-500/50 focus:bg-white/[0.05] transition-all"
+                        />
                     </div>
                 </div>
 
-                {/* Right Column */}
-                <div className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden flex flex-col relative shadow-2xl">
-                    {selectedUnit ? (
-                        <>
-                            <div className="h-64 relative shrink-0">
-                                <div className="absolute inset-0 z-0">
-                                    <iframe
-                                        width="100%"
-                                        height="100%"
-                                        frameBorder="0"
-                                        scrolling="no"
-                                        marginHeight={0}
-                                        marginWidth={0}
-                                        src={`https://maps.google.com/maps?q=${selectedUnit.coordinates || selectedUnit.address}&z=15&output=embed`}
-                                        className="filter grayscale contrast-125"
-                                    />
+                <div className="flex items-center gap-3">
+                    <div className="flex items-center bg-black/40 border border-white/10 p-1 rounded-xl gap-1">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setActiveCategory("all")}
+                            className={cn("h-8 text-[9px] font-bold uppercase tracking-widest rounded-lg", activeCategory === "all" ? "bg-white/10 text-white" : "text-neutral-500 hover:text-neutral-300")}
+                        >
+                            Ver Todo
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setActiveCategory("units")}
+                            className={cn("h-8 text-[9px] font-bold uppercase tracking-widest rounded-lg", activeCategory === "units" ? "bg-blue-600 text-white" : "text-neutral-500")}
+                        >
+                            Lotes y Pisos
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setActiveCategory("complexes")}
+                            className={cn("h-8 text-[9px] font-bold uppercase tracking-widest rounded-lg", activeCategory === "complexes" ? "bg-blue-600 text-white" : "text-neutral-500")}
+                        >
+                            Barrios/Edificios
+                        </Button>
+                    </div>
+
+                    <Button onClick={handleCreateNew} size="sm" className="h-10 px-6 rounded-xl bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-600/20 font-bold text-[10px] uppercase tracking-widest">
+                        <Plus className="mr-2" size={16} /> Nueva Propiedad
+                    </Button>
+                </div>
+            </header>
+
+            {/* Central Table Content */}
+            <main className="flex-1 overflow-hidden p-8 flex flex-col gap-6">
+                <div className="bg-neutral-900/40 border border-white/5 rounded-2xl flex-1 flex flex-col overflow-hidden shadow-2xl">
+                    <div className="flex-1 overflow-auto custom-scrollbar">
+                        <Table>
+                            <TableHeader className="bg-black/40 border-b border-white/5 sticky top-0 z-10 backdrop-blur-sm">
+                                <TableRow className="hover:bg-transparent border-none">
+                                    <TableHead className="w-[300px] text-[9px] font-black uppercase tracking-widest text-neutral-500 py-6 pl-8">Unidad / Identificador</TableHead>
+                                    <TableHead className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Ubicación / Complejo</TableHead>
+                                    <TableHead className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Estado / Ocupación</TableHead>
+                                    <TableHead className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Responsable</TableHead>
+                                    <TableHead className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Contacto</TableHead>
+                                    <TableHead className="w-[100px] text-[9px] font-black uppercase tracking-widest text-neutral-500 text-right pr-8">Acciones</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {filteredUnits.map((unit) => (
+                                    <TableRow
+                                        key={unit.id}
+                                        className={cn(
+                                            "border-b border-white/[0.02] hover:bg-white/[0.02] transition-colors group cursor-pointer",
+                                            selectedUnit?.id === unit.id && "bg-blue-600/5"
+                                        )}
+                                        onClick={() => setSelectedUnit(unit)}
+                                    >
+                                        <TableCell className="py-4 pl-8">
+                                            <div className="flex items-center gap-4">
+                                                <div className={cn(
+                                                    "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-inner ring-1 ring-white/5",
+                                                    (unit.lot || unit.houseNumber) ? "bg-blue-600/10 text-blue-400" : "bg-neutral-800 text-neutral-500"
+                                                )}>
+                                                    {(unit.lot || unit.houseNumber) ? <Home size={18} /> : (unit.type === 'BARRIO' ? <MapPin size={18} /> : <Building2 size={18} />)}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="font-bold text-white uppercase text-sm tracking-tight truncate">{unit.name}</p>
+                                                        {unit.parentId && <Badge className="bg-blue-600/10 text-blue-400 border-none text-[8px] h-4">Sub-unidad</Badge>}
+                                                    </div>
+                                                    <p className="text-[8px] font-black text-neutral-600 uppercase tracking-widest truncate">
+                                                        {unit.lot ? `Lote ${unit.lot}` : ""} {unit.houseNumber ? `N° ${unit.houseNumber}` : ""}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="space-y-1">
+                                                {unit.parentId ? (
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="text-[10px] font-bold text-neutral-300 uppercase truncate max-w-[120px]">
+                                                            {units.find(u => u.id === unit.parentId)?.name}
+                                                        </span>
+                                                        <Badge variant="outline" className="text-[7px] border-white/5 text-neutral-600">Complejo</Badge>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-[10px] font-bold text-blue-500 uppercase">Principal / {unit.type}</span>
+                                                )}
+                                                <p className="text-[8px] font-black text-neutral-700 uppercase truncate max-w-[150px]">{unit.address || "S/D"}</p>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <Badge className={cn(
+                                                    "border-none font-black text-[9px] px-2 py-0.5 uppercase tracking-tighter",
+                                                    unit.users.length > 0 ? "bg-emerald-500/10 text-emerald-500" : "bg-neutral-800 text-neutral-500"
+                                                )}>
+                                                    {unit.users.length > 0 ? 'Ocupado' : 'Vacante'}
+                                                </Badge>
+                                                <span className="text-[8px] font-bold text-neutral-700 uppercase">{unit.users.length} Pers.</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center overflow-hidden ring-1 ring-white/10">
+                                                    {unit.contactName ? <UserCircle size={14} className="text-neutral-600" /> : <UserCircle size={14} className="text-neutral-800" />}
+                                                </div>
+                                                <p className="text-[10px] font-bold text-neutral-400 uppercase truncate max-w-[100px]">{unit.contactName || "S/D"}</p>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                {unit.adminPhone && <Phone size={12} className="text-neutral-600" />}
+                                                <p className="text-[10px] font-bold text-neutral-400 uppercase truncate max-w-[100px]">{unit.adminPhone || "S/D"}</p>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="text-right pr-8">
+                                            <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <Button
+                                                    onClick={(e) => { e.stopPropagation(); handleEdit(unit); }}
+                                                    variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5"
+                                                >
+                                                    <Pencil size={14} />
+                                                </Button>
+                                                <div onClick={(e) => e.stopPropagation()}>
+                                                    <DeleteConfirmDialog id={unit.id} title={unit.name} onDelete={deleteUnit} onSuccess={loadUnits}>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-red-500/50 hover:text-red-500 hover:bg-red-500/10">
+                                                            <Trash2 size={14} />
+                                                        </Button>
+                                                    </DeleteConfirmDialog>
+                                                </div>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                                {filteredUnits.length === 0 && (
+                                    <TableRow>
+                                        <TableCell colSpan={6} className="py-20 text-center opacity-20">
+                                            <Building2 size={40} className="mx-auto mb-4" />
+                                            <p className="text-[10px] font-black uppercase tracking-widest">No se encontraron unidades</p>
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+
+                    {/* Bottom Detail Summary (Conditionally shown if something selected) */}
+                    {selectedUnit && (
+                        <div className="h-24 bg-black/40 border-t border-white/5 px-8 flex items-center justify-between animate-in slide-in-from-bottom-4 duration-500">
+                            <div className="flex items-center gap-6">
+                                <div className="space-y-1">
+                                    <span className="text-[8px] font-black text-neutral-600 uppercase tracking-widest">Unidad Seleccionada</span>
+                                    <div className="flex items-center gap-3">
+                                        <h3 className="text-xl font-black text-white uppercase tracking-tighter">{selectedUnit.name}</h3>
+                                        <Badge className="bg-blue-600 text-white border-none text-[8px] font-black uppercase">{selectedUnit.type}</Badge>
+                                    </div>
                                 </div>
-
-                                <div className="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/60 to-transparent" />
-
-                                <div className="absolute bottom-6 left-8 right-8 flex justify-between items-end">
-                                    <div>
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <span className="px-2 py-1 bg-blue-500 text-white text-[10px] font-black uppercase tracking-widest rounded-md">
-                                                {selectedUnit.type}
-                                            </span>
-                                            {selectedUnit.floors && (
-                                                <span className="px-2 py-1 bg-neutral-800 text-neutral-300 text-[10px] font-black uppercase tracking-widest rounded-md border border-neutral-700">
-                                                    {selectedUnit.floors} Niveles
-                                                </span>
-                                            )}
-                                        </div>
-                                        <h2 className="text-3xl font-black text-white tracking-tight mb-1">{selectedUnit.name}</h2>
-                                        <div className="flex items-center gap-4">
-                                            <p className="text-neutral-400 font-medium flex items-center gap-2 text-sm">
-                                                <MapPin size={14} /> {selectedUnit.address || "Dirección no especificada"}
-                                            </p>
-                                            {(selectedUnit as any).lot && (
-                                                <div className="flex items-center gap-2 bg-neutral-800/80 px-2 py-1 rounded border border-white/5">
-                                                    <span className="text-[10px] font-black text-neutral-500 uppercase">Lote</span>
-                                                    <span className="text-xs font-bold text-blue-400">{(selectedUnit as any).lot}</span>
+                                <div className="h-8 w-px bg-white/5" />
+                                <div className="flex items-center gap-8">
+                                    <div className="space-y-1">
+                                        <span className="text-[8px] font-black text-neutral-600 uppercase tracking-widest">Ubicación</span>
+                                        <p className="text-[10px] font-bold text-neutral-400 uppercase">{selectedUnit.address || "S/D"}</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <span className="text-[8px] font-black text-neutral-600 uppercase tracking-widest">Habitantes</span>
+                                        <div className="flex -space-x-2">
+                                            {selectedUnit.users.slice(0, 5).map((u, i) => (
+                                                <div key={i} className="w-6 h-6 rounded-full border border-black bg-neutral-800 flex items-center justify-center overflow-hidden ring-1 ring-white/10">
+                                                    {u.cara ? <Image src={u.cara} alt="" width={24} height={24} className="object-cover" /> : <UserCircle size={14} className="text-neutral-600" />}
+                                                </div>
+                                            ))}
+                                            {selectedUnit.users.length > 5 && (
+                                                <div className="w-6 h-6 rounded-full border border-black bg-neutral-900 border-white/10 flex items-center justify-center text-[8px] font-black text-neutral-400">
+                                                    +{selectedUnit.users.length - 5}
                                                 </div>
                                             )}
-                                            {(selectedUnit as any).houseNumber && (
-                                                <div className="flex items-center gap-2 bg-neutral-800/80 px-2 py-1 rounded border border-white/5">
-                                                    <span className="text-[10px] font-black text-neutral-500 uppercase">Nº Casa</span>
-                                                    <span className="text-xs font-bold text-white">{(selectedUnit as any).houseNumber}</span>
-                                                </div>
-                                            )}
                                         </div>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <Button onClick={() => handleEdit(selectedUnit)} size="icon" variant="secondary" className="bg-white/10 hover:bg-white/20 text-white backdrop-blur border border-white/10 rounded-xl">
-                                            <Pencil size={18} />
-                                        </Button>
-                                        <DeleteConfirmDialog
-                                            id={selectedUnit.id}
-                                            title={selectedUnit.name}
-                                            description="Eliminar unidad?"
-                                            onDelete={deleteUnit}
-                                            onSuccess={() => { loadUnits(); setSelectedUnit(null); }}
-                                        >
-                                            <Button size="icon" variant="destructive" className="bg-red-500/80 hover:bg-red-600 backdrop-blur rounded-xl">
-                                                <Trash2 size={18} />
-                                            </Button>
-                                        </DeleteConfirmDialog>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
-
-                                {selectedUnit.type === 'EDIFICIO' && selectedUnit.floors && (selectedUnit.floors as number) > 0 && (
-                                    <div>
-                                        <div className="flex items-center justify-between mb-4">
-                                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                                                <LayoutGrid size={18} className="text-neutral-500" />
-                                                Distribución de Niveles
-                                            </h3>
-                                            <Button variant="outline" size="sm" className="h-8 text-[10px] font-black uppercase tracking-widest border-neutral-800 bg-neutral-900" onClick={() => setShowLevelsDialog(true)}>
-                                                Administrar Niveles
-                                            </Button>
-                                        </div>
-                                        <div className="bg-neutral-950 border border-neutral-800 rounded-lg overflow-hidden">
-                                            <table className="w-full text-left text-sm">
-                                                <thead className="bg-white/5 border-b border-white/5">
-                                                    <tr>
-                                                        <th className="p-4 font-bold text-neutral-400 uppercase text-[10px] tracking-widest w-20">Nivel</th>
-                                                        <th className="p-4 font-bold text-neutral-400 uppercase text-[10px] tracking-widest">Etiqueta</th>
-                                                        <th className="p-4 font-bold text-neutral-400 uppercase text-[10px] tracking-widest">Dispositivos de Acceso</th>
-                                                        <th className="p-4 font-bold text-neutral-400 uppercase text-[10px] tracking-widest text-right">Acciones</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-white/5">
-                                                    {getLevels(selectedUnit.floors as number).reverse().map((level) => (
-                                                        <tr key={level.number} className="hover:bg-white/5 transition-colors group">
-                                                            <td className="p-4 font-mono text-neutral-500">#{level.number}</td>
-                                                            <td className="p-4 font-bold text-white uppercase tracking-tighter">{level.number === 1 ? "Planta Baja" : `Nivel ${level.number}`}</td>
-                                                            <td className="p-4">
-                                                                <div className="flex items-center gap-2">
-                                                                    {level.devices.length > 0 ? (
-                                                                        level.devices.map((dev, idx) => (
-                                                                            <div key={idx} className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-neutral-800 border border-neutral-700 text-xs text-neutral-300">
-                                                                                {dev.type === 'LPR' ? <Video size={10} className="text-purple-400" /> : <ScanFace size={10} className="text-blue-400" />}
-                                                                                {dev.name}
-                                                                            </div>
-                                                                        ))
-                                                                    ) : (
-                                                                        <span className="text-neutral-600 text-xs italic">Pasillo Común</span>
-                                                                    )}
-
-                                                                    <Button size="icon" variant="ghost" className="h-6 w-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity ml-2 hover:bg-neutral-700">
-                                                                        <Plus size={12} className="text-emerald-500" />
-                                                                    </Button>
-                                                                </div>
-                                                            </td>
-                                                            <td className="p-4 text-right">
-                                                                <DropdownMenu>
-                                                                    <DropdownMenuTrigger asChild>
-                                                                        <Button size="icon" variant="ghost" className="h-8 w-8 text-neutral-500 hover:text-white">
-                                                                            <MoreVertical size={16} />
-                                                                        </Button>
-                                                                    </DropdownMenuTrigger>
-                                                                    <DropdownMenuContent align="end" className="bg-neutral-900 border-neutral-800 text-neutral-300">
-                                                                        <DropdownMenuItem className="hover:bg-neutral-800" onClick={() => { setCurrentLevel(level.number); setShowLevelsDialog(true); }}>
-                                                                            <Pencil size={12} className="mr-2" /> Editar Nivel
-                                                                        </DropdownMenuItem>
-                                                                        <DropdownMenuItem className="hover:bg-neutral-800" onClick={() => { setCurrentLevel(level.number); setShowResidentsDialog(true); }}>
-                                                                            <Users size={12} className="mr-2" /> Ver Residentes
-                                                                        </DropdownMenuItem>
-                                                                        <DropdownMenuItem className="text-red-500 hover:bg-neutral-800">
-                                                                            <Trash2 size={12} className="mr-2" /> Desactivar
-                                                                        </DropdownMenuItem>
-                                                                    </DropdownMenuContent>
-                                                                </DropdownMenu>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {selectedUnit.type !== 'EDIFICIO' && (
-                                    <div className="text-center py-20 border border-dashed border-neutral-800/50 rounded-2xl bg-neutral-950/30 mt-8">
-                                        <div className="w-12 h-12 bg-neutral-900 rounded-full flex items-center justify-center mx-auto mb-4 border border-white/5">
-                                            <Info size={20} className="text-neutral-700" />
-                                        </div>
-                                        <p className="text-neutral-500 text-xs font-medium max-w-[240px] mx-auto leading-relaxed">Información detallada no disponible para este tipo de unidad en esta versión.</p>
-                                    </div>
-                                )}
+                            <div className="flex items-center gap-3">
+                                <Button onClick={() => handleEdit(selectedUnit)} variant="outline" className="h-9 px-5 bg-white/5 border-white/10 rounded-xl font-black text-[9px] uppercase tracking-widest">
+                                    <Pencil className="mr-2" size={14} /> Editar Propiedad
+                                </Button>
+                                <Button
+                                    onClick={() => setSelectedUnit(null)}
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-9 w-9 text-neutral-600 hover:text-white"
+                                >
+                                    <X size={18} />
+                                </Button>
                             </div>
-                        </>
-                    ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center text-neutral-500 p-12 text-center">
-                            <div className="w-24 h-24 bg-neutral-800 rounded-full flex items-center justify-center mb-6 animate-pulse">
-                                <Building2 size={40} className="text-neutral-700" />
-                            </div>
-                            <h2 className="text-xl font-bold text-white mb-2">Selecciona una Propiedad</h2>
-                            <p className="max-w-xs mx-auto text-sm">Elige una unidad de la lista lateral para ver sus detalles, plantas y configuración.</p>
                         </div>
                     )}
                 </div>
-            </div>
+            </main>
 
-            {/* Stylized Quick Edit Dialog */}
+            {/* Edit Dialog - Refined & Elegant */}
             <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-                <DialogContent className="bg-neutral-950 border-white/5 text-white max-w-4xl p-0 overflow-hidden outline-none">
+                <DialogContent className="bg-neutral-950 border-white/5 text-white max-w-4xl p-0 overflow-hidden outline-none rounded-2xl shadow-2xl">
                     <DialogHeader className="sr-only">
-                        <DialogTitle>Editar Unidad</DialogTitle>
-                        <DialogDescription>Modificar los detalles de la propiedad, estructura y ubicación.</DialogDescription>
+                        <DialogTitle>Editar Propiedad</DialogTitle>
                     </DialogHeader>
-                    <div className="flex h-[600px]">
-                        {/* Sidebar Sections */}
-                        <div className="w-56 bg-neutral-900/50 border-r border-white/5 p-4 flex flex-col gap-2">
+                    <div className="flex h-[550px]">
+                        {/* Sidebar */}
+                        <div className="w-56 bg-neutral-900/50 border-r border-white/5 p-6 flex flex-col gap-1.5">
                             <div className="mb-6 px-2">
-                                <h3 className="text-xs font-black text-neutral-500 uppercase tracking-widest">Edición</h3>
-                                <p className="text-[10px] text-neutral-600 font-bold uppercase truncate">{editingUnit?.name}</p>
+                                <h3 className="text-xs font-bold text-white uppercase tracking-widest">Configuración</h3>
+                                <p className="text-[8px] text-blue-500 font-bold uppercase tracking-widest mt-0.5 truncate">{editingUnit?.name}</p>
                             </div>
                             {[
                                 { id: 'general', icon: Info, label: 'General' },
-                                { id: 'structure', icon: LayoutGrid, label: 'Estructura' },
                                 { id: 'location', icon: Navigation, label: 'Ubicación' },
+                                { id: 'residents', icon: Users, label: 'Residentes' },
+                                { id: 'vehicles', icon: Car, label: 'Vehículos' },
                             ].map((tab) => (
                                 <button
                                     key={tab.id}
                                     onClick={() => setActiveEditTab(tab.id as any)}
                                     className={cn(
-                                        "flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-xs font-bold",
+                                        "flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all text-[10px] font-bold uppercase tracking-widest",
                                         activeEditTab === tab.id
-                                            ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
-                                            : "text-neutral-500 hover:bg-white/5 hover:text-white"
+                                            ? "bg-blue-600 text-white"
+                                            : "text-neutral-500 hover:text-neutral-300 hover:bg-white/5"
                                     )}
                                 >
-                                    <tab.icon size={16} />
+                                    <tab.icon size={14} />
                                     {tab.label}
                                 </button>
                             ))}
                         </div>
 
-                        {/* Content Area */}
-                        <div className="flex-1 flex flex-col">
-                            <div className="flex-1 overflow-y-auto p-8 space-y-8">
+                        {/* Content */}
+                        <div className="flex-1 flex flex-col bg-black/20">
+                            <div className="flex-1 overflow-y-auto p-10 custom-scrollbar">
                                 {activeEditTab === 'general' && (
-                                    <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-                                        <div className="flex items-center gap-3 mb-2">
-                                            <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400">
-                                                <Info size={20} />
-                                            </div>
-                                            <div>
-                                                <h4 className="font-black text-white uppercase tracking-tight">Datos principales</h4>
-                                                <p className="text-[10px] text-neutral-500 font-bold">Identificación básica de la propiedad</p>
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-2 col-span-2">
-                                                <Label className="text-[10px] font-black text-neutral-500 uppercase">Nombre de Unidad</Label>
+                                    <div className="space-y-6 animate-in fade-in duration-300">
+                                        <div className="grid grid-cols-2 gap-6">
+                                            <div className="space-y-1.5 col-span-2">
+                                                <Label className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest">Nombre de la Unidad</Label>
                                                 <Input
                                                     value={formData.name}
                                                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                                    className="bg-black/40 border-white/5 h-11 focus:ring-blue-500/20"
+                                                    className="bg-black/40 border-white/10 h-10 rounded-lg text-sm font-semibold uppercase"
                                                 />
                                             </div>
-                                            <div className="space-y-2">
-                                                <Label className="text-[10px] font-black text-neutral-500 uppercase">Categoría</Label>
+                                            <div className="space-y-1.5">
+                                                <Label className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest">Tipo</Label>
                                                 <Select value={formData.type} onValueChange={(v) => setFormData({ ...formData, type: v as any })}>
-                                                    <SelectTrigger className="bg-black/40 border-white/5 h-11">
+                                                    <SelectTrigger className="bg-black/40 border-white/10 h-10 rounded-lg text-xs font-bold uppercase">
                                                         <SelectValue />
                                                     </SelectTrigger>
-                                                    <SelectContent className="bg-neutral-900 border-white/5 text-white italic">
-                                                        <SelectItem value="EDIFICIO">Edificio / Torre</SelectItem>
-                                                        <SelectItem value="BARRIO">Barrio / Loteo</SelectItem>
-                                                        <SelectItem value="CASA">Casa Particular</SelectItem>
+                                                    <SelectContent className="bg-neutral-900 border-white/10 text-white">
+                                                        <SelectItem value="BARRIO" className="text-xs uppercase font-bold">Barrio / Loteo</SelectItem>
+                                                        <SelectItem value="EDIFICIO" className="text-xs uppercase font-bold">Edificio / Torre</SelectItem>
+                                                        <SelectItem value="CASA" className="text-xs uppercase font-bold">Vivienda</SelectItem>
                                                     </SelectContent>
                                                 </Select>
                                             </div>
-                                            <div className="space-y-2">
-                                                <Label className="text-[10px] font-black text-neutral-500 uppercase">Contacto Administrativo</Label>
+                                            <div className="space-y-1.5">
+                                                <Label className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest">Lote / Parcela</Label>
                                                 <Input
-                                                    value={formData.adminPhone}
-                                                    onChange={(e) => setFormData({ ...formData, adminPhone: e.target.value })}
-                                                    placeholder="+54 ..."
-                                                    className="bg-black/40 border-white/5 h-11 font-mono"
+                                                    value={formData.lot}
+                                                    onChange={(e) => setFormData({ ...formData, lot: e.target.value })}
+                                                    className="bg-black/40 border-white/10 h-10 rounded-lg text-blue-400 font-bold"
                                                 />
                                             </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {activeEditTab === 'structure' && (
-                                    <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-                                        <div className="flex items-center gap-3 mb-2">
-                                            <div className="p-2 bg-purple-500/10 rounded-lg text-purple-400">
-                                                <LayoutGrid size={20} />
-                                            </div>
-                                            <div>
-                                                <h4 className="font-black text-white uppercase tracking-tight">Arquitectura</h4>
-                                                <p className="text-[10px] text-neutral-500 font-bold">Distribución interna y herencia</p>
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-4">
-                                            {formData.type === 'EDIFICIO' && (
-                                                <div className="space-y-2 col-span-2">
-                                                    <Label className="text-[10px] font-black text-neutral-500 uppercase">Cantidad de Plantas / Niveles</Label>
-                                                    <Input
-                                                        type="number"
-                                                        value={formData.floors}
-                                                        onChange={(e) => setFormData({ ...formData, floors: e.target.value })}
-                                                        className="bg-black/40 border-white/5 h-11 font-mono text-purple-400"
-                                                    />
-                                                </div>
-                                            )}
-                                            {formData.type === 'BARRIO' && (
-                                                <>
-                                                    <div className="space-y-2">
-                                                        <Label className="text-[10px] font-black text-neutral-500 uppercase">Manzana / Lote</Label>
-                                                        <Input
-                                                            value={formData.lot}
-                                                            onChange={(e) => setFormData({ ...formData, lot: e.target.value })}
-                                                            className="bg-black/40 border-white/5 h-11"
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label className="text-[10px] font-black text-neutral-500 uppercase">Número Casa</Label>
-                                                        <Input
-                                                            value={formData.houseNumber}
-                                                            onChange={(e) => setFormData({ ...formData, houseNumber: e.target.value })}
-                                                            className="bg-black/40 border-white/5 h-11"
-                                                        />
-                                                    </div>
-                                                </>
-                                            )}
-                                            {formData.type === 'CASA' && (
-                                                <div className="space-y-2 col-span-2">
-                                                    <Label className="text-[10px] font-black text-neutral-500 uppercase">Referencia Domiciliaria</Label>
-                                                    <Input
-                                                        value={formData.houseNumber}
-                                                        onChange={(e) => setFormData({ ...formData, houseNumber: e.target.value })}
-                                                        placeholder="Ej: PH al fondo / Casa 4"
-                                                        className="bg-black/40 border-white/5 h-11"
-                                                    />
-                                                </div>
-                                            )}
                                         </div>
                                     </div>
                                 )}
 
                                 {activeEditTab === 'location' && (
-                                    <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-                                        <div className="flex items-center gap-3 mb-2">
-                                            <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-400">
-                                                <MapIcon size={20} />
+                                    <div className="space-y-4 animate-in fade-in duration-300">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <Navigation className="text-blue-500" size={16} />
+                                            <h4 className="text-[10px] font-bold text-white uppercase tracking-widest">Ubicación en Mapa</h4>
+                                        </div>
+                                        <div className="bg-black/40 border border-white/5 rounded-2xl overflow-hidden h-[300px]">
+                                            <LocationPicker
+                                                coords={formData.coordinates}
+                                                onChange={(val) => setFormData({ ...formData, coordinates: val })}
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <Label className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest">Dirección Física / Referencia</Label>
+                                            <Input
+                                                value={formData.address}
+                                                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                                                placeholder="Ej: Calle Principal 123"
+                                                className="bg-black/40 border-white/10 h-10 rounded-lg text-xs"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeEditTab === 'residents' && (
+                                    <div className="space-y-6 animate-in fade-in duration-300">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <h4 className="text-[10px] font-bold text-white uppercase tracking-widest">Residentes del Lote</h4>
+                                            <Badge className="bg-blue-600 text-white border-none text-[8px] font-black">{editingUnit?.users?.length || 0} Vinculados</Badge>
+                                        </div>
+                                        <div className="grid grid-cols-1 gap-3">
+                                            {editingUnit?.users?.map(user => (
+                                                <div key={user.id} className="bg-neutral-900/60 p-4 rounded-2xl flex items-center justify-between border border-white/5 group">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center relative overflow-hidden ring-1 ring-white/5">
+                                                            {user.cara ? <Image src={user.cara} alt="" fill className="object-cover" /> : <UserCircle size={18} className="text-neutral-700" />}
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-bold text-white uppercase text-xs tracking-tight">{user.name}</p>
+                                                            <p className="text-[9px] font-black text-neutral-600 uppercase tracking-widest">{user.role}</p>
+                                                        </div>
+                                                    </div>
+                                                    <Button
+                                                        onClick={async () => {
+                                                            await unassignUserFromUnit(user.id);
+                                                            toast.success(`Residente ${user.name} desvinculado`);
+                                                            loadUnits();
+                                                            loadAvailableUsers();
+                                                        }}
+                                                        variant="ghost" size="icon" className="h-8 w-8 text-neutral-700 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                                                    >
+                                                        <X size={14} />
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                            <Button
+                                                onClick={() => setShowAssignDialog(true)}
+                                                variant="outline"
+                                                className="w-full mt-2 h-12 bg-white/[0.02] border-dashed border-white/10 rounded-2xl font-black text-[10px] uppercase tracking-widest text-blue-500 hover:bg-blue-500/5 hover:border-blue-500/30 transition-all"
+                                            >
+                                                <Plus size={16} className="mr-2" /> Vincular Nuevo Residente
+                                            </Button>
+
+                                            {(editingUnit?.users?.length || 0) === 0 && (
+                                                <div className="py-8 text-center bg-black/20 rounded-2xl border border-dashed border-white/5 opacity-50">
+                                                    <p className="text-[9px] font-bold text-neutral-700 uppercase tracking-widest">Sin habitantes registrados actualmente</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Inner Assign Dialog */}
+                                <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
+                                    <DialogContent className="bg-neutral-900 border-white/10 text-white max-w-md p-6 rounded-2xl shadow-2xl">
+                                        <DialogHeader>
+                                            <DialogTitle className="text-lg font-black uppercase tracking-tighter">Vincular Residente</DialogTitle>
+                                            <DialogDescription className="text-xs text-neutral-500">Selecciona un usuario de la lista global para asignarlo a {editingUnit?.name}.</DialogDescription>
+                                        </DialogHeader>
+                                        <div className="space-y-4 py-4">
+                                            <div className="relative">
+                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600" size={12} />
+                                                <Input
+                                                    placeholder="Buscar usuario..."
+                                                    className="bg-black/40 border-white/10 pl-9 h-10 text-xs"
+                                                    value={searchAvailable}
+                                                    onChange={(e) => setSearchAvailable(e.target.value)}
+                                                />
                                             </div>
-                                            <div>
-                                                <h4 className="font-black text-white uppercase tracking-tight">Geoposicionamiento</h4>
-                                                <p className="text-[10px] text-neutral-500 font-bold">Ubicación exacta de la propiedad</p>
+                                            <div className="max-h-[300px] overflow-y-auto custom-scrollbar space-y-1 pr-2">
+                                                {availableUsers.filter(u => u.name.toLowerCase().includes(searchAvailable.toLowerCase())).map(user => (
+                                                    <button
+                                                        key={user.id}
+                                                        onClick={async () => {
+                                                            if (editingUnit) {
+                                                                await assignUserToUnit(user.id, editingUnit.id);
+                                                                toast.success(`${user.name} vinculado correctamente`);
+                                                                setShowAssignDialog(false);
+                                                                loadUnits();
+                                                                loadAvailableUsers();
+                                                            }
+                                                        }}
+                                                        className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-blue-600/10 border border-transparent hover:border-blue-500/30 transition-all group"
+                                                    >
+                                                        <div className="flex items-center gap-3 text-left">
+                                                            <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
+                                                                <UserCircle size={16} className="text-neutral-600 group-hover:text-blue-400" />
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-xs font-bold text-white uppercase">{user.name}</p>
+                                                                <p className="text-[9px] text-neutral-500 uppercase font-bold">{user.email}</p>
+                                                            </div>
+                                                        </div>
+                                                        <ChevronRight size={14} className="text-neutral-700 group-hover:text-blue-500" />
+                                                    </button>
+                                                ))}
+                                                {availableUsers.length === 0 && (
+                                                    <p className="text-center py-8 text-[10px] text-neutral-600 font-bold uppercase tracking-widest">No hay usuarios disponibles</p>
+                                                )}
                                             </div>
                                         </div>
+                                    </DialogContent>
+                                </Dialog>
 
-                                        <div className="space-y-4">
-                                            <div className="space-y-2">
-                                                <Label className="text-[10px] font-black text-neutral-500 uppercase">Dirección Física</Label>
-                                                <Input
-                                                    value={formData.address}
-                                                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                                                    className="bg-black/40 border-white/5 h-11"
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label className="text-[10px] font-black text-neutral-500 uppercase text-emerald-500">Mapa Interactivo</Label>
-                                                <LocationPicker
-                                                    coords={formData.coordinates}
-                                                    onChange={(val) => setFormData({ ...formData, coordinates: val })}
-                                                />
-                                            </div>
+                                {activeEditTab === 'vehicles' && (
+                                    <div className="space-y-6 animate-in fade-in duration-300">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <h4 className="text-[10px] font-bold text-white uppercase tracking-widest">Vehículos y Matrículas</h4>
+                                            <Badge className="bg-emerald-600 text-white border-none text-[8px] font-black">LPR Activo</Badge>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {editingUnit?.users?.flatMap(u => (u as any).credentials?.filter((c: any) => c.type === 'PLATE').map((c: any) => ({ ...c, userName: u.name }))).map((plate, idx) => (
+                                                <div key={idx} className="bg-black/40 p-4 rounded-2xl border border-white/5 flex items-center gap-4">
+                                                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                                                        <Car size={18} />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-lg font-black text-white tracking-widest uppercase">{plate.value}</p>
+                                                        <p className="text-[8px] font-bold text-neutral-600 uppercase tracking-widest">Propietario: {plate.userName}</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {(editingUnit?.users?.reduce((acc, u) => acc + (u as any).credentials?.filter((c: any) => c.type === 'PLATE').length || 0, 0) || 0) === 0 && (
+                                                <div className="col-span-2 py-12 text-center bg-black/20 rounded-2xl border border-dashed border-white/5">
+                                                    <Car size={32} className="mx-auto text-neutral-800 mb-3" />
+                                                    <p className="text-[10px] font-bold text-neutral-700 uppercase tracking-widest">Sin matrículas registradas</p>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 )}
                             </div>
 
-                            {/* Footer */}
-                            <div className="p-6 bg-neutral-900/30 border-t border-white/5 flex justify-end gap-3">
-                                <Button variant="ghost" onClick={() => setShowEditDialog(false)} className="text-neutral-500 hover:text-white font-bold h-11 rounded-xl">
-                                    CANCELAR
+                            <div className="p-6 bg-neutral-900 border-t border-white/5 flex justify-end gap-3">
+                                <Button variant="ghost" onClick={() => setShowEditDialog(false)} className="h-9 px-4 rounded-lg text-neutral-500 font-bold text-[10px] uppercase tracking-widest">
+                                    Descartar
                                 </Button>
-                                <Button onClick={handleQuickEdit} className="bg-blue-600 hover:bg-blue-500 text-white font-black px-8 h-11 rounded-xl shadow-xl shadow-blue-600/20">
-                                    GUARDAR CAMBIOS
+                                <Button onClick={handleSave} className="h-9 px-6 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold text-[10px] uppercase tracking-widest">
+                                    Guardar
                                 </Button>
                             </div>
-                        </div>
-                    </div>
-                </DialogContent>
-            </Dialog>
-
-            {/* Sub-Modal: Edit Level */}
-            <Dialog open={showLevelsDialog} onOpenChange={setShowLevelsDialog}>
-                <DialogContent className="bg-neutral-900 border-white/10 text-white">
-                    <DialogHeader>
-                        <DialogTitle className="text-xl font-black uppercase flex items-center gap-2">
-                            <Layers size={18} className="text-blue-500" /> Gestionar Nivel {currentLevel}
-                        </DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-6 py-4">
-                        <div className="p-6 rounded-2xl bg-black/40 border border-white/5 space-y-4 text-center">
-                            <div className="w-12 h-12 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-2">
-                                <Monitor size={20} className="text-blue-400" />
-                            </div>
-                            <h5 className="font-bold text-sm">Dispositivos en este nivel</h5>
-                            <p className="text-xs text-neutral-500 mb-4">Configurar ubicación de cámaras faciales o lectores LPR</p>
-                            <Button variant="outline" className="w-full border-dashed border-neutral-700 h-10 text-xs">
-                                <Plus size={14} className="mr-2" /> VINCULAR DISPOSITIVO
-                            </Button>
-                        </div>
-                    </div>
-                </DialogContent>
-            </Dialog>
-
-            {/* Sub-Modal: View Residents */}
-            <Dialog open={showResidentsDialog} onOpenChange={setShowResidentsDialog}>
-                <DialogContent className="bg-neutral-900 border-white/10 text-white max-w-2xl">
-                    <DialogHeader>
-                        <DialogTitle className="text-xl font-black uppercase flex items-center gap-2">
-                            <Users size={18} className="text-emerald-500" /> Residentes del Nivel {currentLevel}
-                        </DialogTitle>
-                    </DialogHeader>
-                    <div className="py-4">
-                        <div className="space-y-2">
-                            {[1, 2, 3].map(i => (
-                                <div key={i} className="flex items-center justify-between p-4 bg-black/20 rounded-xl border border-white/5 hover:border-white/10 transition-all">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-lg bg-neutral-800 flex items-center justify-center text-neutral-500">
-                                            <UserCircle size={20} />
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-bold">Residente {i} - Depto {currentLevel}0{i}</p>
-                                            <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest">Activo • {i} Vehículos</p>
-                                        </div>
-                                    </div>
-                                    <Button variant="ghost" size="icon" className="text-neutral-500 hover:text-white">
-                                        <ChevronRight size={18} />
-                                    </Button>
-                                </div>
-                            ))}
                         </div>
                     </div>
                 </DialogContent>
             </Dialog>
 
             <style jsx global>{`
-                .custom-scrollbar::-webkit-scrollbar {
-                    width: 4px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-track {
-                    background: transparent;
-                }
-                .custom-scrollbar::-webkit-scrollbar-thumb {
-                    background: #333;
-                    border-radius: 10px;
-                }
-                .leaflet-container {
-                    background: #111 !important;
-                }
+                .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #444; }
+                .leaflet-container { background: #0a0a0a !important; border-radius: 32px; }
             `}</style>
-        </>
+        </div>
+    );
+}
+
+function Textarea({ value, onChange, placeholder, className }: { value: string, onChange: (e: any) => void, placeholder?: string, className?: string }) {
+    return (
+        <textarea
+            value={value}
+            onChange={onChange}
+            placeholder={placeholder}
+            className={cn(
+                "w-full bg-black/40 border border-white/5 rounded-xl p-4 text-xs text-white placeholder:text-neutral-700 focus:outline-none focus:border-blue-500 transition-all",
+                className
+            )}
+        />
     );
 }

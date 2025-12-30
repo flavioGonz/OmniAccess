@@ -1,5 +1,7 @@
 "use server";
 
+import { prisma } from "@/lib/prisma";
+
 export type TreeNode = {
     id: string;
     name: string;
@@ -12,7 +14,16 @@ export type TreeNode = {
 };
 
 export async function getProjectStructure(): Promise<TreeNode> {
-    return {
+    const setting = await prisma.setting.findUnique({
+        where: { key: "PROJECT_STRUCTURE" }
+    });
+
+    if (setting) {
+        return JSON.parse(setting.value);
+    }
+
+    // Default structure if not found
+    const defaultStructure: TreeNode = {
         id: "root",
         name: "LPR-NODE CORE",
         type: "section",
@@ -85,4 +96,15 @@ export async function getProjectStructure(): Promise<TreeNode> {
             }
         ]
     };
+
+    return defaultStructure;
+}
+
+export async function updateProjectStructure(data: TreeNode) {
+    await prisma.setting.upsert({
+        where: { key: "PROJECT_STRUCTURE" },
+        update: { value: JSON.stringify(data) },
+        create: { key: "PROJECT_STRUCTURE", value: JSON.stringify(data) }
+    });
+    return { success: true };
 }

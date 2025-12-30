@@ -26,7 +26,9 @@ import {
     Clock,
     Car,
     CreditCard,
-    Building2
+    Building2,
+    ArrowUpRight,
+    ArrowDownLeft
 } from "lucide-react";
 import { AccessEvent, User, Unit, Device } from "@prisma/client";
 import Image from "next/image";
@@ -36,9 +38,22 @@ import { cn } from "@/lib/utils";
 import { getCarLogo } from "@/lib/car-logos";
 import { ExportHistoryDialog } from "@/components/history/ExportHistoryDialog";
 
+const formatDuration = (ms: number) => {
+    const minutes = Math.floor(ms / 60000);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (days > 0) return `${days}d ${hours % 24}h`;
+    if (hours > 0) return `${hours}h ${minutes % 60}m`;
+    if (minutes > 0) return `${minutes}m`;
+    return `< 1m`;
+};
+
 type FullAccessEvent = AccessEvent & {
-    user: (User & { unit: Unit | null, cara?: string | null }) | null;
+    user: (User & { unit: { name: string } | null, cara?: string | null }) | null;
     device: Device | null;
+    stayDuration?: number | null;
+    previousDirection?: string | null;
 };
 
 export default function HistoryPage() {
@@ -252,7 +267,8 @@ export default function HistoryPage() {
                                 <TableHead className="text-neutral-500 font-black tracking-widest uppercase text-[10px]">Vehículo / Detalles</TableHead>
                                 <TableHead className="text-neutral-500 font-black tracking-widest uppercase text-[10px]">Sujeto & Unidad</TableHead>
                                 <TableHead className="text-neutral-500 font-black tracking-widest uppercase text-[10px]">Punto de Acceso</TableHead>
-                                <TableHead className="text-neutral-500 font-black tracking-widest uppercase text-[10px]">Tiempo</TableHead>
+                                <TableHead className="text-neutral-500 font-black tracking-widest uppercase text-[10px]">Estado / Tiempo</TableHead>
+                                <TableHead className="text-neutral-500 font-black tracking-widest uppercase text-[10px]">Fecha</TableHead>
                                 <TableHead className="text-right text-neutral-500 font-black tracking-widest pr-4 uppercase text-[10px]">Resultado</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -340,7 +356,13 @@ export default function HistoryPage() {
                                                                     />
                                                                 )}
                                                                 <span className="text-[10px] text-neutral-500 font-bold uppercase">
-                                                                    {details.Color || '---'} • {details.Tipo || 'Vehículo'}
+                                                                    {(() => {
+                                                                        let t = details.Tipo || 'Vehículo';
+                                                                        if (t.toUpperCase() === 'SUVMPV') t = 'SUV / MPV';
+                                                                        if (t.toUpperCase() === 'VEHICLE') t = 'AUTO';
+                                                                        if (t.toUpperCase() === 'PICKUPTRUCK') t = 'PICKUP';
+                                                                        return t;
+                                                                    })()}
                                                                 </span>
                                                             </div>
                                                         </div>
@@ -360,11 +382,14 @@ export default function HistoryPage() {
                                                             )}
                                                         </div>
                                                         <div>
-                                                            <p className="font-bold text-white uppercase text-xs tracking-tight">
+                                                            <p className={cn(
+                                                                "font-bold uppercase text-xs tracking-tight",
+                                                                evt.user?.name ? "text-indigo-400" : "text-neutral-500"
+                                                            )}>
                                                                 {evt.user?.name || "Externo / Desconocido"}
                                                             </p>
                                                             <p className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mt-0.5">
-                                                                {evt.user?.unit?.name || "Sin Unidad"}
+                                                                {evt.user?.unit?.name || (evt.user?.name ? "Residente" : "Sin Unidad")}
                                                             </p>
                                                         </div>
                                                     </div>
@@ -387,27 +412,54 @@ export default function HistoryPage() {
                                                     </div>
                                                 </TableCell>
 
-                                                {/* Timestamp Section */}
+                                                {/* Stay Duration / Context */}
+                                                <TableCell>
+                                                    {(evt as any).stayDuration ? (
+                                                        <div className="flex flex-col gap-1">
+                                                            <div className={cn(
+                                                                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[8px] font-black border uppercase tracking-widest w-fit",
+                                                                (evt as any).previousDirection === 'ENTRY'
+                                                                    ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
+                                                                    : "bg-neutral-500/10 text-neutral-400 border-neutral-500/20"
+                                                            )}>
+                                                                {(evt as any).previousDirection === 'ENTRY' ? (
+                                                                    <><ArrowDownLeft size={10} /> ESTUVO DENTRO</>
+                                                                ) : (
+                                                                    <><ArrowUpRight size={10} /> ESTUVO FUERA</>
+                                                                )}
+                                                            </div>
+                                                            <span className="text-[10px] font-mono text-neutral-400 font-bold ml-1">
+                                                                {formatDuration((evt as any).stayDuration)}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-[9px] text-neutral-700 font-black uppercase tracking-tighter">Primer Registro</span>
+                                                    )}
+                                                </TableCell>
+
+                                                {/* Date & Time combined */}
                                                 <TableCell>
                                                     <div className="flex flex-col">
-                                                        <span className="text-xs font-black text-white font-mono">
+                                                        <span className="text-[11px] font-black text-neutral-300 font-mono">
+                                                            {new Date(evt.timestamp).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' }).replace('.', '')}
+                                                        </span>
+                                                        <span className="text-[10px] font-bold text-neutral-500 font-mono">
                                                             {new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                                                         </span>
-                                                        <p className="text-[9px] text-neutral-500 font-bold tracking-widest uppercase mt-0.5">
-                                                            {new Date(evt.timestamp).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
-                                                        </p>
                                                     </div>
                                                 </TableCell>
 
                                                 {/* Result Status */}
                                                 <TableCell className="text-right pr-4">
-                                                    <div className={cn(
-                                                        "inline-block w-24 py-1.5 rounded-lg font-black text-[10px] uppercase text-center tracking-tighter shadow-lg",
-                                                        evt.decision === "GRANT"
-                                                            ? "bg-emerald-600 text-white shadow-emerald-900/40 border border-emerald-500/30"
-                                                            : "bg-red-600 text-white shadow-red-900/40 border border-red-500/30"
-                                                    )}>
-                                                        {evt.decision === "GRANT" ? "PERMITIDO" : "DENEGADO"}
+                                                    <div className="flex justify-end">
+                                                        <div className={cn(
+                                                            "w-24 py-1.5 rounded-lg font-black text-[10px] uppercase text-center tracking-tighter shadow-lg",
+                                                            evt.decision === "GRANT"
+                                                                ? "bg-emerald-600 text-white shadow-emerald-900/40 border border-emerald-500/30"
+                                                                : "bg-red-600 text-white shadow-red-900/40 border border-red-500/30"
+                                                        )}>
+                                                            {evt.decision === "GRANT" ? "PERMITIDO" : "DENEGADO"}
+                                                        </div>
                                                     </div>
                                                 </TableCell>
                                             </TableRow>

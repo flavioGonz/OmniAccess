@@ -184,7 +184,7 @@ export default function UsersPage() {
     };
 
     return (
-        <div className="relative h-screen flex flex-col gap-6 p-6 overflow-hidden">
+        <div className="relative h-full flex flex-col gap-6 p-6 overflow-hidden">
 
             {/* Header */}
             <div className="relative flex items-center justify-between">

@@ -15,7 +15,12 @@ import {
     Activity,
     Info,
     RefreshCcw,
-    ShieldAlert
+    ShieldAlert,
+    FileText,
+    HardDrive,
+    Download,
+    Upload,
+    Table as TableIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +28,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { DriverDetailsDialog } from "@/components/DriverDetailsDialog";
 import { DRIVER_MODELS, type DeviceBrand } from "@/lib/driver-models";
-import { updateSetting, getSetting, testS3Connection, getBucketLifecycle, updateBucketLifecycle, testDbConnection } from "@/app/actions/settings";
+import { updateSetting, getSetting, testS3Connection, getBucketLifecycle, updateBucketLifecycle, testDbConnection, getBucketStats, getDbStats, downloadBackup } from "@/app/actions/settings";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
@@ -238,6 +243,27 @@ export default function SettingsPage() {
 
 function DatabaseSection() {
     const [testing, setTesting] = useState(false);
+    const [stats, setStats] = useState<{ totalSize: string, tables: any[] } | null>(null);
+    const [loadingStats, setLoadingStats] = useState(true);
+    const [backingUp, setBackingUp] = useState(false);
+
+    useEffect(() => {
+        loadStats();
+    }, []);
+
+    const loadStats = async () => {
+        setLoadingStats(true);
+        try {
+            const res = await getDbStats();
+            if (res.success) {
+                setStats({ totalSize: res.totalSize, tables: res.tables });
+            }
+        } catch (err) {
+            console.error("Error loading DB stats:", err);
+        } finally {
+            setLoadingStats(false);
+        }
+    };
 
     const handleTestDb = async () => {
         setTesting(true);
@@ -245,6 +271,7 @@ function DatabaseSection() {
             const res = await testDbConnection();
             if (res.success) {
                 toast.success("¡Conexión Exitosa con PostgreSQL!");
+                loadStats();
             } else {
                 toast.error(`Error de conexión: ${res.message}`);
             }
@@ -255,56 +282,149 @@ function DatabaseSection() {
         }
     };
 
+    const handleBackup = async () => {
+        setBackingUp(true);
+        try {
+            const res = await downloadBackup();
+            if (res.success) {
+                const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `omniaccess-backup-${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                toast.success("Respaldo generado y descargado con éxito");
+            } else {
+                toast.error("Error al generar el respaldo: " + res.message);
+            }
+        } catch (err) {
+            toast.error("Error durante el proceso de respaldo");
+        } finally {
+            setBackingUp(false);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-8">
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center justify-between mb-8">
                     <div>
-                        <h2 className="text-2xl font-black text-white">PostgreSQL Database</h2>
-                        <p className="text-sm text-neutral-500 mt-1">Gestión y configuración de la base de datos</p>
+                        <h2 className="text-2xl font-black text-white tracking-tight">PostgreSQL Database</h2>
+                        <p className="text-sm text-neutral-500 mt-1">Gestión avanzada y salud del motor de datos</p>
+                    </div>
+                    <div className="flex flex-col items-end">
+                        <div className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg mb-1">
+                            <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Peso Total DB</span>
+                        </div>
+                        <span className="text-xl font-mono font-black text-white">
+                            {loadingStats ? "..." : stats?.totalSize || "N/A"}
+                        </span>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-neutral-950/50 border border-white/5 rounded-xl p-6">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="p-2 bg-blue-500/10 rounded-lg">
-                                <Database className="text-blue-400" size={20} />
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Connection Health */}
+                    <div className="lg:col-span-1 space-y-4">
+                        <div className="bg-neutral-950/50 border border-white/5 rounded-xl p-6 h-full flex flex-col justify-between">
+                            <div>
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="p-2 bg-blue-500/10 rounded-lg">
+                                        <Activity className="text-blue-400" size={20} />
+                                    </div>
+                                    <h3 className="font-bold text-white text-sm uppercase tracking-tight">Estado de Red</h3>
+                                </div>
+                                <p className="text-xs text-neutral-500 leading-relaxed mb-6">
+                                    Asegura que el microservicio Prisma pueda comunicarse con la instancia local de Postgres.
+                                </p>
                             </div>
-                            <h3 className="font-bold text-white">Estado de Conexión</h3>
-                        </div>
-                        <div className="space-y-4">
-                            <p className="text-sm text-neutral-400">
-                                Verifica que la aplicación pueda leer y escribir en la base de datos PostgreSQL configurada.
-                            </p>
                             <Button
                                 onClick={handleTestDb}
                                 disabled={testing}
-                                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold h-10 transition-all shadow-lg shadow-blue-900/20"
+                                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black h-11 text-[10px] uppercase tracking-widest transition-all"
                             >
-                                {testing ? <RefreshCcw className="animate-spin mr-2" size={16} /> : <Activity className="mr-2" size={16} />}
-                                PROBAR CONEXIÓN AHORA
+                                {testing ? <RefreshCcw className="animate-spin mr-2" size={14} /> : <Activity className="mr-2" size={14} />}
+                                TESTEAR CONEXIÓN
                             </Button>
                         </div>
                     </div>
 
-                    <div className="bg-neutral-950/50 border border-white/5 rounded-xl p-6">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="p-2 bg-purple-500/10 rounded-lg">
-                                <Cloud className="text-purple-400" size={20} />
+                    {/* Tables Stats */}
+                    <div className="lg:col-span-2">
+                        <div className="bg-neutral-950/50 border border-white/5 rounded-xl p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-purple-500/10 rounded-lg">
+                                        <TableIcon className="text-purple-400" size={20} />
+                                    </div>
+                                    <h3 className="font-bold text-white text-sm uppercase tracking-tight">Esquema & Tablas</h3>
+                                </div>
+                                <button onClick={loadStats} className="text-neutral-500 hover:text-white transition-colors">
+                                    <RefreshCcw size={14} className={loadingStats ? "animate-spin" : ""} />
+                                </button>
                             </div>
-                            <h3 className="font-bold text-white">Acciones Rápidas</h3>
+
+                            <div className="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
+                                {loadingStats ? (
+                                    <p className="text-[10px] text-neutral-600 animate-pulse font-black uppercase">Obteniendo esquema...</p>
+                                ) : stats?.tables.map((table, i) => (
+                                    <div key={i} className="flex items-center justify-between p-3 bg-white/[0.02] border border-white/5 rounded-lg hover:bg-white/5 transition-all group">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-neutral-700 group-hover:bg-purple-500 transition-colors" />
+                                            <span className="text-[10px] font-black text-neutral-400 uppercase tracking-tight">{table.table_name}</span>
+                                        </div>
+                                        <div className="flex items-center gap-4 font-mono text-[10px]">
+                                            <span className="text-neutral-600">{table.row_count} rows</span>
+                                            <span className="text-neutral-400 font-bold">{table.total_size}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                        <div className="space-y-2">
-                            <Button variant="outline" className="w-full justify-start text-xs h-9 bg-neutral-900 border-neutral-700 hover:bg-neutral-800 text-neutral-400 cursor-not-allowed opacity-50">
-                                <Database size={14} className="mr-2" />
-                                Crear Nueva Base de Datos (Próximamente)
-                            </Button>
-                            <Button variant="outline" className="w-full justify-start text-xs h-9 bg-neutral-900 border-neutral-700 hover:bg-neutral-800 text-neutral-400 cursor-not-allowed opacity-50">
-                                <Cloud size={14} className="mr-2" />
-                                Conectar Base Externa (Próximamente)
-                            </Button>
+                    </div>
+                </div>
+
+                {/* Backup & Import Section */}
+                <div className="mt-8 pt-8 border-t border-white/5 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-neutral-900 border border-white/5 p-6 rounded-xl flex items-center justify-between group">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500 border border-amber-500/20">
+                                <Download size={24} />
+                            </div>
+                            <div>
+                                <p className="text-white font-black uppercase tracking-tight text-xs">Respaldo Integral</p>
+                                <p className="text-[10px] text-neutral-500 font-medium">Exportar toda la configuración y registros a JSON</p>
+                            </div>
                         </div>
+                        <Button
+                            onClick={handleBackup}
+                            disabled={backingUp}
+                            className="bg-neutral-800 hover:bg-amber-600 text-neutral-300 hover:text-white font-black text-[9px] uppercase tracking-widest px-4 h-9 transition-all"
+                        >
+                            {backingUp ? <RefreshCcw className="animate-spin mr-2" size={12} /> : <Download size={12} className="mr-2" />}
+                            EXPORTAR
+                        </Button>
+                    </div>
+
+                    <div className="bg-neutral-900 border border-white/5 p-6 rounded-xl flex items-center justify-between group opacity-50 cursor-not-allowed">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500 border border-blue-500/20">
+                                <Upload size={24} />
+                            </div>
+                            <div>
+                                <p className="text-white font-black uppercase tracking-tight text-xs">Importar Datos</p>
+                                <p className="text-[10px] text-neutral-500 font-medium">Restaurar sistema desde un archivo de respaldo</p>
+                            </div>
+                        </div>
+                        <Button
+                            disabled
+                            className="bg-neutral-800 text-neutral-500 font-black text-[9px] uppercase tracking-widest px-4 h-9"
+                        >
+                            <Upload size={12} className="mr-2" />
+                            IMPORTAR
+                        </Button>
                     </div>
                 </div>
             </div>
@@ -328,6 +448,18 @@ function StorageSection() {
         face: 0
     });
     const [savingLifecycle, setSavingLifecycle] = useState(false);
+    const [stats, setStats] = useState({
+        lpr: { size: 0, count: 0, loading: true },
+        face: { size: 0, count: 0, loading: true }
+    });
+
+    const formatSize = (bytes: number) => {
+        if (bytes === 0) return "0 B";
+        const k = 1024;
+        const sizes = ["B", "KB", "MB", "GB", "TB"];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+    };
 
     useEffect(() => {
         async function load() {
@@ -356,6 +488,25 @@ function StorageSection() {
                 setLifecycles({
                     lpr: lcLpr.success ? lcLpr.days || 0 : 0,
                     face: lcFace.success ? lcFace.days || 0 : 0
+                });
+
+                // Load stats
+                const [statsLpr, statsFace] = await Promise.all([
+                    getBucketStats(bl?.value || "lpr"),
+                    getBucketStats(bf?.value || "face")
+                ]);
+
+                setStats({
+                    lpr: {
+                        size: statsLpr.success ? statsLpr.size : 0,
+                        count: statsLpr.success ? statsLpr.count : 0,
+                        loading: false
+                    },
+                    face: {
+                        size: statsFace.success ? statsFace.size : 0,
+                        count: statsFace.success ? statsFace.count : 0,
+                        loading: false
+                    }
                 });
             } catch (err) {
                 console.error("Error loading S3 settings:", err);
@@ -553,6 +704,28 @@ function StorageSection() {
                                     />
                                     <span className="text-xs text-neutral-400 font-medium">Días de retención</span>
                                 </div>
+
+                                {/* Stats LPR */}
+                                <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <p className="text-[9px] text-neutral-600 font-black uppercase tracking-widest">Archivos</p>
+                                        <div className="flex items-center gap-2">
+                                            <FileText size={12} className="text-blue-500/50" />
+                                            <span className="text-xs font-mono font-bold text-neutral-300">
+                                                {stats.lpr.loading ? "..." : stats.lpr.count.toLocaleString()}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <p className="text-[9px] text-neutral-600 font-black uppercase tracking-widest">Peso Total</p>
+                                        <div className="flex items-center gap-2">
+                                            <HardDrive size={12} className="text-blue-500/50" />
+                                            <span className="text-xs font-mono font-bold text-neutral-300">
+                                                {stats.lpr.loading ? "..." : formatSize(stats.lpr.size)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -579,6 +752,28 @@ function StorageSection() {
                                         className="bg-black/60 border-white/10 h-10 w-24 text-center font-bold text-purple-400"
                                     />
                                     <span className="text-xs text-neutral-400 font-medium">Días de retención</span>
+                                </div>
+
+                                {/* Stats FACE */}
+                                <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <p className="text-[9px] text-neutral-600 font-black uppercase tracking-widest">Archivos</p>
+                                        <div className="flex items-center gap-2">
+                                            <FileText size={12} className="text-purple-500/50" />
+                                            <span className="text-xs font-mono font-bold text-neutral-300">
+                                                {stats.face.loading ? "..." : stats.face.count.toLocaleString()}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <p className="text-[9px] text-neutral-600 font-black uppercase tracking-widest">Peso Total</p>
+                                        <div className="flex items-center gap-2">
+                                            <HardDrive size={12} className="text-purple-500/50" />
+                                            <span className="text-xs font-mono font-bold text-neutral-300">
+                                                {stats.face.loading ? "..." : formatSize(stats.face.size)}
+                                            </span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>

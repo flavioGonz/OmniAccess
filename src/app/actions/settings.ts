@@ -6,7 +6,8 @@ import {
     S3Client,
     ListObjectsV2Command,
     GetBucketLifecycleConfigurationCommand,
-    PutBucketLifecycleConfigurationCommand
+    PutBucketLifecycleConfigurationCommand,
+    HeadObjectCommand
 } from "@aws-sdk/client-s3";
 
 export async function getSetting(key: string) {
@@ -25,7 +26,6 @@ export async function updateSetting(key: string, value: string) {
     revalidatePath("/admin/configuracion");
     return setting;
 }
-
 
 export async function purgeAccessEvents() {
     console.log("Starting purge process...");
@@ -161,12 +161,98 @@ export async function testS3Connection(bucketType: "lpr" | "face" = "lpr") {
     }
 }
 
+export async function getBucketStats(bucketName: string) {
+    try {
+        const client = await getS3InternalClient();
+        let totalSize = 0;
+        let fileCount = 0;
+        let isTruncated = true;
+        let continuationToken: string | undefined = undefined;
+
+        while (isTruncated) {
+            const command: any = new ListObjectsV2Command({
+                Bucket: bucketName,
+                ContinuationToken: continuationToken,
+            });
+
+            const response = await client.send(command);
+
+            if (response.Contents) {
+                fileCount += response.Contents.length;
+                for (const obj of response.Contents) {
+                    totalSize += obj.Size || 0;
+                }
+            }
+
+            isTruncated = response.IsTruncated || false;
+            continuationToken = response.NextContinuationToken;
+        }
+
+        return {
+            success: true,
+            size: totalSize,
+            count: fileCount
+        };
+    } catch (error: any) {
+        console.error(`Error getting stats for bucket ${bucketName}:`, error);
+        return { success: false, message: error.message };
+    }
+}
+
 export async function testDbConnection() {
     try {
         await prisma.$queryRaw`SELECT 1`;
         return { success: true, message: "Conexión a base de datos exitosa" };
     } catch (error: any) {
         console.error("DB Connection Failed:", error);
+        return { success: false, message: error.message };
+    }
+}
+
+export async function getDbStats() {
+    try {
+        const dbSizeQuery: any[] = await prisma.$queryRaw`SELECT pg_size_pretty(pg_database_size(current_database())) as size`;
+
+        const tableStats: any[] = await prisma.$queryRaw`
+            SELECT 
+                relname as table_name,
+                n_live_tup as row_count,
+                pg_size_pretty(pg_total_relation_size(relid)) as total_size
+            FROM pg_stat_user_tables
+            ORDER BY n_live_tup DESC;
+        `;
+
+        return {
+            success: true,
+            totalSize: dbSizeQuery[0]?.size || "0 B",
+            tables: tableStats
+        };
+    } catch (error: any) {
+        console.error("Error getting DB stats:", error);
+        return { success: false, message: error.message };
+    }
+}
+
+export async function downloadBackup() {
+    try {
+        // En una implementación real con pg_dump sería mejor, pero para propósitos demostrativos
+        // y portabilidad, podemos exportar las tablas principales a JSON
+        const [users, vehicles, devices, events, units] = await Promise.all([
+            prisma.user.findMany(),
+            prisma.vehicle.findMany(),
+            prisma.device.findMany(),
+            prisma.accessEvent.findMany({ take: 1000, orderBy: { timestamp: 'desc' } }), // Limitamos eventos por tamaño
+            prisma.unit.findMany(),
+        ]);
+
+        const backupData = {
+            version: "1.0",
+            timestamp: new Date().toISOString(),
+            data: { users, vehicles, devices, events, units }
+        };
+
+        return { success: true, data: backupData };
+    } catch (error: any) {
         return { success: false, message: error.message };
     }
 }

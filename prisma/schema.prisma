@@ -50,13 +50,21 @@ model Unit {
   lot         String?     // For BARRIO: Identificador de lote (letras o números)
   houseNumber String?     // For BARRIO/CASA: Número de casa
   address     String?
-  coordinates String?     // "lat,lng"
+  coordinates String?     // "lat,lng" (Center or main point)
+  mapPoints   String?     // JSON string of polygon points for neighborhood map
+  contactName String?
+  contactEmail String?
   adminPhone  String?
   deviceCount Int         @default(0)
   deviceType  String?     // "LPR", "FACE", "BOTH"
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  // Hierarchy for sub-units (e.g. Barrio -> Lotes)
+  parentId    String?
+  parent      Unit?    @relation("SubUnits", fields: [parentId], references: [id])
+  children    Unit[]   @relation("SubUnits")
 }
 
 enum UserRole {
