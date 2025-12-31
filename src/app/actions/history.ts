@@ -138,3 +138,35 @@ export async function getEventsCountToday() {
 
     return { total, grants, denies };
 }
+
+export async function getRelatedSessionEvents(eventId: string) {
+    const event = await prisma.accessEvent.findUnique({
+        where: { id: eventId },
+        select: { timestamp: true, deviceId: true }
+    });
+
+    if (!event || !event.deviceId) return [];
+
+    // Find events +/- 1 minute from the same device
+    const windowMs = 60 * 1000;
+    const startWindow = new Date(event.timestamp.getTime() - windowMs);
+    const endWindow = new Date(event.timestamp.getTime() + windowMs);
+
+    const related = await prisma.accessEvent.findMany({
+        where: {
+            deviceId: event.deviceId,
+            timestamp: {
+                gte: startWindow,
+                lte: endWindow
+            }
+        },
+        orderBy: { timestamp: 'asc' },
+        include: {
+            user: {
+                select: { name: true }
+            }
+        }
+    });
+
+    return related;
+}

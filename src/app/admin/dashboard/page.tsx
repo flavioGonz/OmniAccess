@@ -24,7 +24,8 @@ import {
     LogOut,
     Truck,
     Bus,
-    Bike
+    Bike,
+    Phone
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -94,12 +95,103 @@ export default function AccessDashboard() {
         return () => { newSocket.disconnect(); };
     }, []);
 
+
+
     const filteredEvents = useMemo(() => {
-        return events.filter(e => {
-            if (activeFilter !== "ALL" && e.decision !== activeFilter) return false;
-            if (activeType !== "ALL" && e.accessType !== activeType) return false;
-            return true;
-        });
+        const result: (FullAccessEvent & { hasDoorOpen?: boolean; hasDoorClose?: boolean })[] = [];
+
+        // We iterate and process events. We need to skip events that are part of a sequence we already attached to a parent.
+        const handledIds = new Set<string>();
+
+        // Pre-sort might be needed if events aren't strictly ordered, but typically they are new-to-old.
+        // Assuming 'events' is sorted Newest First (descending time).
+
+        for (let i = 0; i < events.length; i++) {
+            const e = events[i];
+
+            if (handledIds.has(e.id)) continue;
+
+            // Apply Filters
+            if (activeFilter !== "ALL" && e.decision !== activeFilter) continue;
+            if (activeType !== "ALL" && e.accessType !== activeType) continue;
+
+            const plate = (e.plateDetected || '').toUpperCase();
+
+            // If this is a Credential Event (Face, Tag, Pin, Plate) - Look for subsequent Door Open/Close events
+            // Since list is Newest First, "subsequent" means events with slightly LATER timestamps (which would be lower index? No, wait.)
+            // Newest first means index 0 is 12:05, index 1 is 12:04.
+            // A "Door Open" triggered by this event would happen AFTER it. So it would be at a LOWER index (Newer).
+            // BUT, usually we receive Credential -> then Door Open. So Door Open is NEWER. 
+            // So if I am at Credential (older), the Door Open is at i-1 or i-2.
+
+            // Let's look for RELATED events in the vicinity.
+            // Actually, usually the order of arrival is:
+            // 1. Validation (Credential) -> Saved to DB
+            // 2. Door Open -> Saved to DB (Timestamp slightly later)
+            // 3. Door Close -> Saved to DB (Timestamp later)
+
+            // So in a DESCENDING list (Newest Top):
+            // Row 0: Door Close
+            // Row 1: Door Open
+            // Row 2: Credential
+
+            // If I am iterating from 0 to N.
+            // When I hit "Door Close", I might want to hide it and wait for "Credential".
+            // When I hit "Credential", I want to look BACK (at lower indices, newer events) to attribute them to this credential.
+
+            // However, complicating factor: We might simply hide Door Open/Close and attach them to the nearest PARENT credential event found in a small window.
+            // Let's try this: Valid Display Events are Credential Events (Type != 'DOOR_OPEN' etc).
+            // When we find one, we search `events` array for a DoorOpen/Close that happened shortly AFTER this event.
+
+            if (plate === 'DOOR_OPEN' || plate === 'DOOR_CLOSE') {
+                // We typically hide these unless they are orphan (no credential event found nearby).
+                // Let's check if there is a Credential event slightly OLDER (higher index) or SAME time that likely triggered this.
+                const parentCandidate = events.slice(i + 1, i + 10).find(prev =>
+                    prev.deviceId === e.deviceId &&
+                    ['PLATE', 'FACE', 'TAG', 'PIN'].includes(prev.accessType || '') &&
+                    prev.plateDetected !== 'DOOR_OPEN' &&
+                    prev.plateDetected !== 'DOOR_CLOSE' &&
+                    (Math.abs(new Date(e.timestamp).getTime() - new Date(prev.timestamp).getTime()) < 30000) // 30s window
+                );
+
+                if (parentCandidate) {
+                    // This event is part of a sequence led by 'parentCandidate'. 
+                    // We interpret this as "Hide this row, it will be represented in the parent".
+                    // We don't need to do anything here because when we process 'parentCandidate' we will look for this.
+                    continue;
+                }
+                // If orphan, we show it (fall through to push)
+            } else {
+                // This is a Credential Event (Main).
+                // Search for its children (Door Open / Close) that occurred slightly AFTER (newer = lower index).
+                const relatedOpen = events.slice(Math.max(0, i - 10), i).find(next =>
+                    next.deviceId === e.deviceId &&
+                    (next.plateDetected === 'DOOR_OPEN' || (next.details && next.details.includes('Door Open'))) &&
+                    (new Date(next.timestamp).getTime() - new Date(e.timestamp).getTime() > 0) && // Must be after
+                    (new Date(next.timestamp).getTime() - new Date(e.timestamp).getTime() < 30000) // Within 30s
+                );
+
+                const relatedClose = events.slice(Math.max(0, i - 10), i).find(next =>
+                    next.deviceId === e.deviceId &&
+                    (next.plateDetected === 'DOOR_CLOSE' || (next.details && next.details.includes('Door Close'))) &&
+                    (new Date(next.timestamp).getTime() - new Date(e.timestamp).getTime() > 0) &&
+                    (new Date(next.timestamp).getTime() - new Date(e.timestamp).getTime() < 120000) // Open/Close cycle can be longer (e.g. 1 min)
+                );
+
+                // Construct enhanced event object
+                const enhancedEvent = {
+                    ...e,
+                    hasDoorOpen: !!relatedOpen,
+                    hasDoorClose: !!relatedClose
+                };
+
+                result.push(enhancedEvent);
+                continue;
+            }
+
+            result.push(e);
+        }
+        return result;
     }, [events, activeFilter, activeType]);
 
     const plateCountsToday = useMemo(() => {
@@ -144,40 +236,103 @@ export default function AccessDashboard() {
         };
     };
 
-    const EventItem = ({ event }: { event: FullAccessEvent }) => {
+    // Helper for image URLs
+    const getImageUrl = (path: string | null | undefined): string => {
+        if (!path) return "";
+        if (path.startsWith('http') || path.startsWith('/api/files')) return path;
+        return `/api/files/${path}`;
+    };
+
+    const EventItem = ({ event }: { event: FullAccessEvent & { hasDoorOpen?: boolean; hasDoorClose?: boolean } }) => {
+        const isCall = event.plateDetected === 'CALL_START' || event.accessType === 'CALL';
+
         const typeConfig = {
             PLATE: { icon: Car, color: "blue", label: "LPR", bgClass: "bg-blue-500/10", textClass: "text-blue-400" },
             FACE: { icon: UserIcon, color: "purple", label: "FACE", bgClass: "bg-purple-500/10", textClass: "text-purple-400" },
             TAG: { icon: CreditCard, color: "amber", label: "RFID", bgClass: "bg-amber-500/10", textClass: "text-amber-400" },
-            DOOR: { icon: DoorOpen, color: "emerald", label: "DOOR", bgClass: "bg-emerald-500/10", textClass: "text-emerald-400" }
+            DOOR: { icon: DoorOpen, color: "emerald", label: "DOOR", bgClass: "bg-emerald-500/10", textClass: "text-emerald-400" },
+            CALL: { icon: Phone, color: "orange", label: "CALL", bgClass: "bg-orange-500/10", textClass: "text-orange-400" }
         };
 
-        const config = typeConfig[event.accessType as keyof typeof typeConfig] || typeConfig.TAG;
+        const config = isCall ? typeConfig.CALL : (typeConfig[event.accessType as keyof typeof typeConfig] || typeConfig.TAG);
         const TypeIcon = config.icon;
 
-        // Extract LPR metadata
+        // Parse details into meta object
         const meta: any = {};
-        if (event.accessType === 'PLATE' && event.details) {
+        if (event.details) {
             event.details.split(',').forEach(p => {
                 const [k, v] = p.split(':').map(s => s.trim());
                 if (k && v) meta[k] = v;
+                // Fallback for older colon-only details if needed, but comma split is safer
             });
         }
+
+        // Extract call destination if available
+        // Usually details="Llamada entrante a: 101"
+        let callDest = "Central";
+        if (isCall && event.details) {
+            const match = event.details.match(/a:\s*(\S+)/);
+            if (match) callDest = match[1];
+            else if (event.details.includes('Central')) callDest = 'Central';
+            else callDest = event.details; // Fallback
+        }
+
         const logoUrl = getCarLogo(meta.Marca);
-        const plateKey = event.plateDetected && event.plateDetected !== 'unknown' && event.plateDetected !== 'NO_LEIDA' ? event.plateDetected : (event.user?.id || 'sys');
+        const plateKey = event.plateDetected && event.plateDetected !== 'unknown' && event.plateDetected !== 'NO_LEIDA' && !isCall ? event.plateDetected : (event.user?.id || 'sys');
         const plateCount = plateCountsToday[plateKey] || 0;
 
+        const fullImageUrl = getImageUrl(event.snapshotPath);
+        const faceCropUrl = getImageUrl(meta.FaceImage);
+
+        const timeStatus = calculateDuration(event);
+
+        // Check for Anomalous Plate (S/P, No Leida)
+        const isAnomalous = event.accessType === "PLATE" && (
+            event.plateDetected === "NO_LEIDA" ||
+            event.plateDetected === "unknown" ||
+            event.plateDetected === "S/P" ||
+            !event.plateDetected
+        );
+
         return (
-            <EventDetailsDialog event={event}>
-                <div className="p-4 hover:bg-white/5 cursor-pointer transition-all group border-b border-white/5 last:border-0 border-l-2 border-l-transparent hover:border-l-indigo-500">
+            <EventDetailsDialog event={event} timeStatus={timeStatus}>
+                <div className={cn(
+                    "p-4 cursor-pointer transition-all group border-b border-white/5 last:border-0 border-l-[3px]",
+                    isAnomalous
+                        ? "bg-yellow-500/10 border-l-yellow-500 hover:bg-yellow-500/20"
+                        : "hover:bg-white/5 border-l-transparent hover:border-l-indigo-500"
+                )}>
                     <div className="flex items-center gap-3">
-                        {/* LEFT: LOGO/ICON */}
-                        <div className={cn("rounded-lg shrink-0 flex items-center justify-center p-1.5", "bg-white border border-white/10 shadow-sm", "w-11 h-11")}>
-                            {logoUrl ? (
+                        {/* LEFT: LOGO/ICON OR FACE IMAGES */}
+                        <div className={cn("rounded-lg shrink-0 flex items-center justify-center p-1.5", "bg-white border border-white/10 shadow-sm", "w-14 h-11 relative overflow-hidden")}>
+                            {event.accessType === 'FACE' && fullImageUrl ? (
+                                <>
+                                    {/* Full Scene Image */}
+                                    <Image
+                                        src={fullImageUrl}
+                                        alt="Escena"
+                                        fill
+                                        sizes="56px"
+                                        className="object-cover"
+                                    />
+                                    {/* Face Overlay (Bottom Right) */}
+                                    {faceCropUrl && (
+                                        <div className="absolute bottom-0 right-0 w-5 h-5 border border-white bg-black rounded-tl-sm overflow-hidden z-10">
+                                            <Image
+                                                src={faceCropUrl}
+                                                alt="Rostro"
+                                                fill
+                                                sizes="20px"
+                                                className="object-cover"
+                                            />
+                                        </div>
+                                    )}
+                                </>
+                            ) : logoUrl ? (
                                 <div className="relative w-full h-full">
                                     <Image
                                         src={logoUrl}
-                                        alt="B"
+                                        alt="Logo"
                                         fill
                                         sizes="44px"
                                         className="object-contain"
@@ -203,23 +358,39 @@ export default function AccessDashboard() {
                                         </div>
                                     ) : (
                                         <p className="text-sm font-black text-white truncate tracking-tight uppercase">
-                                            {event.user?.name || event.plateDetected || "ID: " + event.id.slice(-4)}
+                                            {isCall ? `LLAMANDO A ${callDest}` : (event.user?.name || event.plateDetected || "ID: " + event.id.slice(-4))}
                                         </p>
                                     )}
+
+                                    {/* SEQUENCE INDICATORS (INLINE) */}
+                                    <div className="flex items-center gap-1 ml-2">
+                                        {event.hasDoorOpen && (
+                                            <div title="Puerta Abierta" className="bg-emerald-500/20 text-emerald-400 p-0.5 rounded border border-emerald-500/30">
+                                                <DoorOpen size={10} />
+                                            </div>
+                                        )}
+                                        {event.hasDoorClose && (
+                                            <div title="Puerta Cerrada" className="bg-indigo-500/20 text-indigo-400 p-0.5 rounded border border-indigo-500/30">
+                                                <LogOut size={10} />
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="flex items-center gap-2 mt-1">
                                     <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest truncate italic">
                                         {event.accessType === 'PLATE' ? (
                                             `${meta.Marca || ''} ${meta.Modelo || ''} ${meta.Tipo ? `• ${meta.Tipo}` : ''}`.trim() || 'Vehículo Detectado'
+                                        ) : isCall ? (
+                                            'INTERCOMUNICADOR'
                                         ) : (
-                                            event.user?.unit?.name || 'Acceso Manual'
+                                            `SIMILITUD: ${meta.Similitud || 'N/A'}`
                                         )}
                                     </p>
                                     {meta.Color && (
                                         <div className="w-2 h-2 rounded-full border border-white/20" style={{ backgroundColor: meta.Color.toLowerCase() === 'blanco' ? '#fff' : meta.Color.toLowerCase() === 'negro' ? '#000' : meta.Color }} />
                                     )}
                                 </div>
-                                {event.user?.name && event.accessType === "PLATE" && (
+                                {event.user?.name && event.accessType === "PLATE" && ( // Only show user name here if it's PLATE, otherwise it's already main title
                                     <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-0.5">
                                         {event.user.name}
                                     </p>
@@ -236,12 +407,15 @@ export default function AccessDashboard() {
                                     </Badge>
                                 )}
                                 <div className={cn(
-                                    "w-24 py-1.5 rounded-lg font-black text-[10px] uppercase text-center tracking-tighter shadow-lg",
+                                    "px-2 py-1.5 rounded-lg font-black text-[10px] uppercase text-center tracking-tighter shadow-lg flex items-center justify-center gap-1.5 min-w-[100px]",
                                     event.decision === "GRANT"
                                         ? "bg-emerald-600 text-white shadow-emerald-900/40 border border-emerald-500/30"
                                         : "bg-red-600 text-white shadow-red-900/40 border border-red-500/30"
                                 )}>
-                                    {event.decision === "GRANT" ? "PERMITIDO" : "DENEGADO"}
+                                    {event.decision === "GRANT"
+                                        ? <><CheckCircle2 size={12} /> PERMITIDO</>
+                                        : <><XCircle size={12} /> DENEGADO</>
+                                    }
                                 </div>
                             </div>
                             <span className="text-[10px] font-mono text-neutral-500 font-bold">
@@ -328,11 +502,23 @@ export default function AccessDashboard() {
                     </div>
                     <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-black/40">
                         {captureEvents.map(event => {
-                            const marca = event.details?.split(',').find(p => p.trim().startsWith('Marca:'))?.split(':')[1]?.trim();
-                            const color = event.details?.split(',').find(p => p.trim().startsWith('Color:'))?.split(':')[1]?.trim();
-                            let tipo = event.details?.split(',').find(p => p.trim().startsWith('Tipo:'))?.split(':')[1]?.trim()?.toUpperCase();
+                            // Parse details
+                            const detailsMap: any = {};
+                            if (event.details) {
+                                event.details.split(',').forEach(p => {
+                                    const [k, v] = p.split(':').map(s => s.trim());
+                                    if (k && v) detailsMap[k] = v;
+                                });
+                            }
+
+                            const marca = detailsMap['Marca'];
+                            const color = detailsMap['Color'];
+                            let tipo = detailsMap['Tipo']?.toUpperCase();
                             if (tipo === 'VEHICLE' || tipo === 'CAR') tipo = 'AUTO';
                             if (tipo === 'PICKUPTRUCK') tipo = 'PICKUP';
+
+                            const faceCropUrl = getImageUrl(detailsMap['FaceImage']);
+                            const similarity = detailsMap['Similitud'];
 
                             const logoUrl = getCarLogo(marca);
                             const getVehicleIcon = (t: string | undefined) => {
@@ -344,6 +530,8 @@ export default function AccessDashboard() {
                                 return <Car size={14} />;
                             };
 
+                            const isFace = event.accessType === 'FACE';
+
                             return (
                                 <EventDetailsDialog key={event.id} event={event}>
                                     <div className={cn(
@@ -351,7 +539,7 @@ export default function AccessDashboard() {
                                         event.decision === "GRANT" ? "border-emerald-500/30 shadow-emerald-900/20" : "border-red-500/30 shadow-red-900/20"
                                     )}>
                                         <Image
-                                            src={event.imagePath || event.snapshotPath || event.user?.cara || "/placeholder-camera.jpg"}
+                                            src={getImageUrl(event.imagePath || event.snapshotPath) || (event.user?.cara ? getImageUrl(event.user.cara) : "/placeholder-camera.jpg")}
                                             alt="Capture"
                                             fill
                                             className="object-cover group-hover:scale-105 transition-transform duration-700"
@@ -359,19 +547,71 @@ export default function AccessDashboard() {
                                         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
 
                                         {/* Decision Overlay */}
-                                        <div className="absolute bottom-3 right-3">
+                                        {/* Decision Overlay */}
+                                        <div className="absolute bottom-3 right-3 z-10 flex flex-col items-end gap-1.5">
                                             <div className={cn(
-                                                "min-w-[40px] h-10 flex flex-col items-center justify-center rounded-xl shadow-2xl backdrop-blur-md border",
-                                                event.decision === "GRANT" ? "bg-emerald-500/80 border-emerald-400 text-white" : "bg-red-500/80 border-red-400 text-white"
+                                                "px-3 py-2 rounded-lg font-black text-[10px] uppercase tracking-tighter shadow-2xl backdrop-blur-md border flex items-center gap-2 animate-pulse",
+                                                event.decision === "GRANT"
+                                                    ? "bg-emerald-600 border-emerald-400 text-white shadow-emerald-900/40"
+                                                    : "bg-red-600 border-red-400 text-white shadow-red-900/40"
                                             )}>
-                                                {event.decision === "GRANT" ? <CheckCircle2 size={18} strokeWidth={3} /> : <XCircle size={18} strokeWidth={3} />}
-                                                <span className="text-[7px] font-black mt-0.5">{event.decision === "GRANT" ? "AUT" : "DEN"}</span>
+                                                {event.decision === "GRANT"
+                                                    ? <><CheckCircle2 size={14} strokeWidth={3} /> AUTORIZADO</>
+                                                    : <><XCircle size={14} strokeWidth={3} /> DENEGADO</>
+                                                }
+                                            </div>
+
+                                            {/* Timestamp */}
+                                            <div className="px-2 py-0.5 rounded bg-black/50 backdrop-blur-md border border-white/10 shadow-lg flex items-center gap-1">
+                                                <div className="w-1 h-1 rounded-full bg-indigo-500 animate-pulse" />
+                                                <p className="text-[8px] font-mono font-bold text-white/90">
+                                                    {new Date(event.timestamp).toLocaleDateString([], { day: '2-digit', month: '2-digit' })} • {new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                                </p>
                                             </div>
                                         </div>
 
-                                        {/* Plate Overlay */}
-                                        <div className="absolute bottom-3 left-3 flex flex-col items-start">
-                                            {(() => {
+                                        {/* FACE CROP OVERLAY (Bottom Right, left of decision) */}
+                                        {isFace && faceCropUrl && (
+                                            <div className="absolute bottom-3 right-16 z-10 w-10 h-10 rounded-lg overflow-hidden border border-white/30 shadow-2xl bg-black">
+                                                <Image
+                                                    src={faceCropUrl}
+                                                    alt="Face"
+                                                    fill
+                                                    className="object-cover"
+                                                />
+                                            </div>
+                                        )}
+
+                                        {/* Identity / Plate Overlay */}
+                                        {/* Center Overlay: Resident Name & Time Status */}
+                                        {(event.user?.name || (detailsMap['Name'] && detailsMap['Name'] !== 'unknown')) && (
+                                            <div className="absolute inset-0 flex flex-col items-center justify-center z-20 pointer-events-none p-4 text-center">
+                                                <h3 className="text-2xl font-black text-white uppercase tracking-tighter drop-shadow-[0_4px_4px_rgba(0,0,0,1)] bg-black/40 px-4 py-1 rounded-full backdrop-blur-[2px]">
+                                                    {event.user?.name || detailsMap['Name']}
+                                                </h3>
+                                                {(() => {
+                                                    const duration = calculateDuration(event);
+                                                    if (duration) {
+                                                        return (
+                                                            <div className="mt-2 px-3 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/10 flex items-center gap-2 shadow-2xl animate-in fade-in slide-in-from-bottom-2">
+                                                                <span className={cn("text-[10px] font-black uppercase tracking-widest", duration.color)}>
+                                                                    {duration.label}
+                                                                </span>
+                                                                <span className="text-white/20">•</span>
+                                                                <span className="text-[10px] font-mono text-white font-bold">
+                                                                    {duration.value}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return null;
+                                                })()}
+                                            </div>
+                                        )}
+
+                                        {/* Identity / Plate Overlay (Bottom Left) */}
+                                        <div className="absolute bottom-3 left-3 flex flex-col items-start z-10 max-w-[70%]">
+                                            {!(event.user?.name || (detailsMap['Name'] && detailsMap['Name'] !== 'unknown')) && (() => {
                                                 const duration = calculateDuration(event);
                                                 if (!duration) return null;
                                                 return (
@@ -382,14 +622,34 @@ export default function AccessDashboard() {
                                                     </div>
                                                 );
                                             })()}
-                                            <div className="flex flex-col bg-white border-2 border-neutral-800 rounded-sm overflow-hidden shadow-2xl min-w-[100px]">
-                                                <div className="h-1 bg-blue-600 w-full" />
-                                                <p className="text-[16px] font-black text-black tracking-[0.2em] uppercase px-3 py-0.5 text-center font-mono">
-                                                    {event.accessType === "PLATE" ? (event.plateDetected === "NO_LEIDA" ? "S/P" : event.plateDetected) : event.user?.name}
-                                                </p>
-                                            </div>
-                                            <p className="text-[8px] text-neutral-400 font-bold uppercase tracking-[0.2em] mt-1 drop-shadow-lg">
-                                                {event.device?.name} • {new Date(event.timestamp).toLocaleTimeString()}
+
+                                            {isFace ? (
+                                                // FACE IDENTITY STYLE (Only if Unknown, otherwise name is in center)
+                                                !(event.user?.name || (detailsMap['Name'] && detailsMap['Name'] !== 'unknown')) && (
+                                                    <div className="flex flex-col items-start">
+                                                        <div className="flex items-center gap-2 bg-black/60 backdrop-blur-xl border border-white/10 rounded-lg px-3 py-1.5 shadow-2xl">
+                                                            <UserIcon size={14} className="text-white" />
+                                                            <div>
+                                                                <p className="text-[12px] font-black text-white leading-none uppercase tracking-wide">
+                                                                    Desconocido
+                                                                </p>
+                                                                {similarity && <p className="text-[8px] text-emerald-400 font-bold uppercase tracking-wider">{similarity}% Similitud</p>}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            ) : (
+                                                // PLATE IDENTITY STYLE (Always Show)
+                                                <div className="flex flex-col bg-white border-2 border-neutral-800 rounded-sm overflow-hidden shadow-2xl min-w-[100px]">
+                                                    <div className="h-1 bg-blue-600 w-full" />
+                                                    <p className="text-[16px] font-black text-black tracking-[0.2em] uppercase px-3 py-0.5 text-center font-mono">
+                                                        {event.plateDetected === "NO_LEIDA" ? "S/P" : event.plateDetected}
+                                                    </p>
+                                                </div>
+                                            )}
+
+                                            <p className="text-[8px] text-neutral-400 font-bold uppercase tracking-[0.2em] mt-1 drop-shadow-lg truncate w-full pl-0.5">
+                                                {event.device?.name}
                                             </p>
                                         </div>
 
@@ -400,28 +660,30 @@ export default function AccessDashboard() {
                                             </Badge>
                                         </div>
 
-                                        {/* Attributes Overlay */}
-                                        <div className="absolute top-3 left-3 flex flex-col gap-2">
-                                            {logoUrl && (
-                                                <div className="bg-white rounded-lg p-1.5 shadow-2xl w-10 h-10 flex items-center justify-center">
-                                                    <div className="relative w-7 h-7"><Image src={logoUrl} alt="Logo" fill className="object-contain" /></div>
+                                        {/* Attributes Overlay (Only for vehicles) */}
+                                        {!isFace && (
+                                            <div className="absolute top-3 left-3 flex flex-col gap-2">
+                                                {logoUrl && (
+                                                    <div className="bg-white rounded-lg p-1.5 shadow-2xl w-10 h-10 flex items-center justify-center">
+                                                        <div className="relative w-7 h-7"><Image src={logoUrl} alt="Logo" fill className="object-contain" /></div>
+                                                    </div>
+                                                )}
+                                                <div className="flex flex-col gap-1 items-start pl-1 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                                                    {color && (
+                                                        <div className="flex items-center gap-1.5">
+                                                            <div className="w-2 h-2 rounded-full border border-white/40" style={{ backgroundColor: color.toLowerCase() === 'blanco' ? '#fff' : color.toLowerCase() === 'negro' ? '#000' : color }} />
+                                                            <span className="text-[9px] font-black text-white uppercase tracking-wider">{color}</span>
+                                                        </div>
+                                                    )}
+                                                    {tipo && (
+                                                        <div className="flex items-center gap-1.5 text-white">
+                                                            {getVehicleIcon(tipo)}
+                                                            <span className="text-[9px] font-black uppercase tracking-wider">{tipo}</span>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            )}
-                                            <div className="flex flex-col gap-1 items-start pl-1 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-                                                {color && (
-                                                    <div className="flex items-center gap-1.5">
-                                                        <div className="w-2 h-2 rounded-full border border-white/40" style={{ backgroundColor: color.toLowerCase() === 'blanco' ? '#fff' : color.toLowerCase() === 'negro' ? '#000' : color }} />
-                                                        <span className="text-[9px] font-black text-white uppercase tracking-wider">{color}</span>
-                                                    </div>
-                                                )}
-                                                {tipo && (
-                                                    <div className="flex items-center gap-1.5 text-white">
-                                                        {getVehicleIcon(tipo)}
-                                                        <span className="text-[9px] font-black uppercase tracking-wider">{tipo}</span>
-                                                    </div>
-                                                )}
                                             </div>
-                                        </div>
+                                        )}
                                     </div>
                                 </EventDetailsDialog>
                             );
@@ -449,6 +711,6 @@ export default function AccessDashboard() {
                 </div>
 
             </div>
-        </div>
+        </div >
     );
 }

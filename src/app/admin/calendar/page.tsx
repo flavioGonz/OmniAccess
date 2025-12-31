@@ -18,7 +18,7 @@ import {
     CreditCard,
     DoorOpen
 } from "lucide-react";
-import { AccessEvent, Unit, Device } from "@prisma/client";
+import { AccessEvent, Device } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,7 +43,7 @@ type FullAccessEvent = AccessEvent & {
         dni: string | null;
         apartment: string | null;
         cara: string | null;
-        unit: Unit | null;
+        unit: { name: string } | null;
         parkingSlotId: string | null;
     } | null;
     device: Device | null;
@@ -59,6 +59,11 @@ export default function CalendarPage() {
     const [view, setView] = useState<ViewType>('month');
     const [searchTerm, setSearchTerm] = useState("");
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [visibleCount, setVisibleCount] = useState(50);
+
+    useEffect(() => {
+        setVisibleCount(50);
+    }, [selectedDate, currentDate, searchTerm]);
 
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -367,10 +372,18 @@ export default function CalendarPage() {
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar pb-24">
+                <div
+                    className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar pb-24"
+                    onScroll={(e) => {
+                        const { scrollTop, clientHeight, scrollHeight } = e.currentTarget;
+                        if (scrollHeight - scrollTop <= clientHeight + 300) {
+                            setVisibleCount(prev => prev + 50);
+                        }
+                    }}
+                >
                     {selectedDate ? (
                         selectedDayEvents.length > 0 ? (
-                            selectedDayEvents.map(evt => (
+                            selectedDayEvents.slice(0, visibleCount).map(evt => (
                                 <EventDetailsDialog key={evt.id} event={evt}>
                                     <div className="group bg-neutral-900/50 hover:bg-neutral-800 p-3 rounded-xl cursor-pointer transition-all flex items-start gap-3 border border-transparent hover:border-neutral-700/50">
                                         <div className="mt-1">

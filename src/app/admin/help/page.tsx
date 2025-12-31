@@ -182,17 +182,83 @@ export default function HelpPage() {
                         </div>
 
                         <div className="pt-6 border-t border-white/5 space-y-4">
+                            <p className="text-[10px] font-black text-neutral-600 uppercase tracking-widest px-3 mb-4">Documentación Técnica</p>
+
+                            <div className="space-y-3">
+                                <Link
+                                    href="/admin/help/docs/hikvision-driver"
+                                    className="group relative block overflow-hidden rounded-2xl border border-red-600/20 bg-gradient-to-br from-red-600/10 via-red-600/5 to-transparent hover:from-red-600/20 hover:via-red-600/10 transition-all duration-300"
+                                >
+                                    <div className="absolute inset-0 bg-gradient-to-r from-red-600/0 via-red-600/5 to-red-600/0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    <div className="relative p-4 space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2.5 bg-red-600/20 rounded-xl text-red-400 group-hover:scale-110 transition-transform">
+                                                    <Cpu size={18} strokeWidth={2.5} />
+                                                </div>
+                                                <div>
+                                                    <h3 className="text-xs font-black text-white uppercase tracking-tight">Hikvision Driver</h3>
+                                                    <p className="text-[9px] text-red-400/60 font-bold uppercase tracking-wider">LPR Camera System</p>
+                                                </div>
+                                            </div>
+                                            <ChevronRight size={16} className="text-red-500 group-hover:translate-x-1 transition-transform" />
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="h-px flex-1 bg-red-600/20" />
+                                            <span className="text-[8px] text-red-400/40 font-black uppercase tracking-widest">ISAPI Protocol</span>
+                                        </div>
+                                    </div>
+                                </Link>
+
+                                <Link
+                                    href="/admin/help/docs/akuvox-driver"
+                                    className="group relative block overflow-hidden rounded-2xl border border-purple-600/20 bg-gradient-to-br from-purple-600/10 via-purple-600/5 to-transparent hover:from-purple-600/20 hover:via-purple-600/10 transition-all duration-300"
+                                >
+                                    <div className="absolute inset-0 bg-gradient-to-r from-purple-600/0 via-purple-600/5 to-purple-600/0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    <div className="relative p-4 space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2.5 bg-purple-600/20 rounded-xl text-purple-400 group-hover:scale-110 transition-transform">
+                                                    <Cpu size={18} strokeWidth={2.5} />
+                                                </div>
+                                                <div>
+                                                    <h3 className="text-xs font-black text-white uppercase tracking-tight">Akuvox Driver</h3>
+                                                    <p className="text-[9px] text-purple-400/60 font-bold uppercase tracking-wider">Access Control</p>
+                                                </div>
+                                            </div>
+                                            <ChevronRight size={16} className="text-purple-500 group-hover:translate-x-1 transition-transform" />
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="h-px flex-1 bg-purple-600/20" />
+                                            <span className="text-[8px] text-purple-400/40 font-black uppercase tracking-widest">HTTP API</span>
+                                        </div>
+                                    </div>
+                                </Link>
+                            </div>
+
                             <Link
                                 href="/admin/help/structure"
-                                className="w-full flex items-center justify-between p-4 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-600/20 rounded-xl group transition-all"
+                                className="group relative block overflow-hidden rounded-2xl border border-blue-600/20 bg-gradient-to-br from-blue-600/10 via-blue-600/5 to-transparent hover:from-blue-600/20 hover:via-blue-600/10 transition-all duration-300 mt-4"
                             >
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-blue-600/20 rounded-lg text-blue-400">
-                                        <Layers size={16} />
+                                <div className="absolute inset-0 bg-gradient-to-r from-blue-600/0 via-blue-600/5 to-blue-600/0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                <div className="relative p-4 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2.5 bg-blue-600/20 rounded-xl text-blue-400 group-hover:scale-110 transition-transform">
+                                                <Layers size={18} strokeWidth={2.5} />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-xs font-black text-white uppercase tracking-tight">Core Architecture</h3>
+                                                <p className="text-[9px] text-blue-400/60 font-bold uppercase tracking-wider">System Overview</p>
+                                            </div>
+                                        </div>
+                                        <ChevronRight size={16} className="text-blue-500 group-hover:translate-x-1 transition-transform" />
                                     </div>
-                                    <span className="text-[10px] font-black text-white uppercase tracking-widest">Core Architecture</span>
+                                    <div className="flex items-center gap-2">
+                                        <div className="h-px flex-1 bg-blue-600/20" />
+                                        <span className="text-[8px] text-blue-400/40 font-black uppercase tracking-widest">Full Stack</span>
+                                    </div>
                                 </div>
-                                <ChevronRight size={14} className="text-blue-500" />
                             </Link>
                         </div>
                     </aside>

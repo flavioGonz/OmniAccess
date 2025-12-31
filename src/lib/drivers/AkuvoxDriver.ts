@@ -307,8 +307,8 @@ export class AkuvoxDriver implements IDeviceDriver {
                     console.log(`[Akuvox] Retrieved ${users.length} users from device`);
                 }
             } catch (error) {
-                console.error(`[Akuvox] Error fetching users:`, error);
-                throw new Error(`No se pudo conectar con el dispositivo. Verifica que esté encendido y accesible.`);
+                console.warn(`[Akuvox] Warning: Could not fetch users (Device might be offline or busy). Returning empty list.`);
+                return [];
             }
 
             // 2. Get Face List (with timeout)

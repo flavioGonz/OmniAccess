@@ -43,14 +43,23 @@ export const HIKVISION_VEHICLE_BRANDS: { [key: number]: string } = {
     18: 'Renault',
     19: 'Suzuki',
     20: 'Fiat',
-    // ... más marcas según necesidad
+    // Códigos adicionales encontrados
+    1028: 'Brand 1028', // TODO: Identificar marca
     1030: 'Porsche',
+    1037: 'Brand 1037', // TODO: Identificar marca
+    1060: 'Brand 1060', // TODO: Identificar marca
     1064: 'Ford',
+    1067: 'Fiat',
     1112: 'Mazda',
     1144: 'Volvo',
     1559: 'Foton',
     1775: 'Isuzu',
     1951: 'FAW',
+    1965: 'DongFeng',
+    1056: 'Dodge',
+    1944: 'GWM Haval',
+    1031: 'Buick',
+    1028: 'Audi',
 };
 
 // Códigos de Tipo de Vehículo

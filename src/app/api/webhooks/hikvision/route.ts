@@ -3,11 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { XMLParser } from "fast-xml-parser";
 import { uploadToS3 } from "@/lib/s3";
 import { AccessDecision } from "@prisma/client";
-import {
-    getVehicleBrandName,
-    getVehicleColorName,
-    getVehicleTypeName
-} from "@/lib/hikvision-codes";
+import { getVehicleBrandName } from "@/lib/hikvision-codes";
 
 // Global cache for debounce: Plate -> Timestamp
 const debounceCache = new Map<string, number>();
@@ -27,10 +23,10 @@ export async function POST(req: NextRequest) {
     let logDetails = "";
 
     try {
-        console.log(`${logPrefix} === Hikvision Webhook Received ===`);
+        console.log(`${logPrefix} === Hikvision Webhook Received === `);
 
         const contentType = req.headers.get("content-type") || "";
-        console.log(`${logPrefix} Content-Type: ${contentType}`);
+        console.log(`${logPrefix} Content - Type: ${contentType} `);
 
         let xmlContent = "";
         let imageFile: File | null = null;
@@ -48,12 +44,12 @@ export async function POST(req: NextRequest) {
                     // Check if it's XML
                     if (value.type.includes("xml") || fileContent.trim().startsWith("<")) {
                         xmlContent = fileContent;
-                        logDetails += `XML_FILE_FOUND: ${key}\\n`;
+                        logDetails += `XML_FILE_FOUND: ${key} \\n`;
                     }
                     // Check if it's an image
                     else if (value.type.includes("image/")) {
                         imageFile = value;
-                        logDetails += `IMAGE_FILE_FOUND: ${key}, size: ${value.size}\\n`;
+                        logDetails += `IMAGE_FILE_FOUND: ${key}, size: ${value.size} \\n`;
                     }
                 }
             }
@@ -61,7 +57,7 @@ export async function POST(req: NextRequest) {
 
         if (!xmlContent) {
             logDetails += "WEBHOOK_FAIL: No XML received\\n";
-            console.error(`${logPrefix} ${logDetails}`);
+            console.error(`${logPrefix} ${logDetails} `);
             return NextResponse.json({
                 error: "No XML metadata found"
             }, { status: 400 });
@@ -74,20 +70,20 @@ export async function POST(req: NextRequest) {
         });
         xmlData = parser.parse(xmlContent);
 
-        console.log(`${logPrefix} Parsed XML:`, JSON.stringify(xmlData, null, 2));
+        console.log(`${logPrefix} Parsed XML: `, JSON.stringify(xmlData, null, 2));
 
         // Extract MAC Address for device identification (como el PHP)
         const macAddress = xmlData.macAddress || xmlData.EventNotificationAlert?.macAddress;
         let device = null;
 
         if (macAddress) {
-            logDetails += `DEVICE_ID_FOUND_IN_XML: MAC Address = ${macAddress}\\n`;
+            logDetails += `DEVICE_ID_FOUND_IN_XML: MAC Address = ${macAddress} \\n`;
             device = await prisma.device.findFirst({
                 where: { mac: macAddress }
             });
 
             if (device) {
-                logDetails += `DEVICE_MATCHED_IN_DB: ${device.name} (ID: ${device.id})\\n`;
+                logDetails += `DEVICE_MATCHED_IN_DB: ${device.name} (ID: ${device.id}) \\n`;
             } else {
                 logDetails += `DEVICE_NOT_MATCHED_IN_DB: No device found with MAC '${macAddress}'\\n`;
             }
@@ -104,7 +100,7 @@ export async function POST(req: NextRequest) {
 
         if (!plateNumber) {
             logDetails += "WEBHOOK_FAIL: No plate number found in XML\\n";
-            console.error(`${logPrefix} ${logDetails}`);
+            console.error(`${logPrefix} ${logDetails} `);
             return NextResponse.json({
                 error: "Plate number not found"
             }, { status: 400 });
@@ -112,7 +108,7 @@ export async function POST(req: NextRequest) {
 
         // Clean plate (como el PHP: strtoupper(preg_replace('/[^A-Z0-9]/i', '', $plate)))
         const cleanPlate = plateNumber.toString().toUpperCase().replace(/[^A-Z0-9]/g, "");
-        logDetails += `PLATE_EXTRACTED: ${cleanPlate}\\n`;
+        logDetails += `PLATE_EXTRACTED: ${cleanPlate} \\n`;
 
         // Get timestamp from camera or fallback to server (como el PHP)
         let eventTimestamp = new Date();
@@ -121,9 +117,9 @@ export async function POST(req: NextRequest) {
         if (cameraDateTime) {
             try {
                 eventTimestamp = new Date(cameraDateTime);
-                logDetails += `TIMESTAMP_FROM_CAMERA: ${cameraDateTime} (${eventTimestamp.toISOString()})\\n`;
+                logDetails += `TIMESTAMP_FROM_CAMERA: ${cameraDateTime} (${eventTimestamp.toISOString()}) \\n`;
             } catch (e) {
-                logDetails += `TIMESTAMP_PARSE_ERROR: Could not parse '${cameraDateTime}'. Using server time.\\n`;
+                logDetails += `TIMESTAMP_PARSE_ERROR: Could not parse '${cameraDateTime}'.Using server time.\\n`;
                 eventTimestamp = new Date();
             }
         } else {
@@ -134,8 +130,8 @@ export async function POST(req: NextRequest) {
         const now = Date.now();
         const lastSeen = debounceCache.get(cleanPlate);
         if (lastSeen && now - lastSeen < DEBOUNCE_TIME) {
-            logDetails += `DEBOUNCED: ${cleanPlate}\\n`;
-            console.log(`${logPrefix} ${logDetails}`);
+            logDetails += `DEBOUNCED: ${cleanPlate} \\n`;
+            console.log(`${logPrefix} ${logDetails} `);
             return NextResponse.json({ message: "Debounced", plate: cleanPlate });
         }
         debounceCache.set(cleanPlate, now);
@@ -148,9 +144,9 @@ export async function POST(req: NextRequest) {
                 const filename = `hik_${cleanPlate}_${eventTimestamp.getTime()}.jpg`;
 
                 relativeImagePath = await uploadToS3(buffer, filename, imageFile.type || "image/jpeg", "lpr");
-                logDetails += `IMAGE_SAVED_S3: ${relativeImagePath}\\n`;
+                logDetails += `IMAGE_SAVED_S3: ${relativeImagePath} \\n`;
             } catch (imgError: any) {
-                logDetails += `IMAGE_S3_UPLOAD_ERROR: ${imgError.message}\\n`;
+                logDetails += `IMAGE_S3_UPLOAD_ERROR: ${imgError.message} \\n`;
             }
         }
 
@@ -161,27 +157,31 @@ export async function POST(req: NextRequest) {
         });
 
         const decision: AccessDecision = credential ? "GRANT" : "DENY";
-        logDetails += `ACCESS_DECISION: ${decision}${credential ? ` for user ${credential.user?.name}` : ' (no match)'}\n`;
+        logDetails += `ACCESS_DECISION: ${decision}${credential ? ` for user ${credential.user?.name}` : ' (no match)'} \n`;
 
-        // Extract Vehicle Metadata
+        // Extract Vehicle Metadata from the correct fields
         const anprData = xmlData.ANPR || xmlData.EventNotificationAlert?.ANPR || {};
-        const brandId = anprData.vehicleType || anprData.vehicleBrand || xmlData.vehicleType || xmlData.vehicleBrand;
-        const colorId = anprData.vehicleColor || xmlData.vehicleColor;
-        const typeId = anprData.vehicleTypeCategory || xmlData.vehicleTypeCategory;
+        const vehicleInfo = anprData.vehicleInfo || {};
 
-        const brandName = brandId ? getVehicleBrandName(brandId) : "Desconocido";
-        const colorName = colorId ? getVehicleColorName(colorId) : "Desconocido";
-        const typeName = typeId ? getVehicleTypeName(typeId) : "Vehículo";
+        // Color: Ya viene como texto en vehicleInfo.color ("blue", "gray", "white", etc.)
+        const colorText = vehicleInfo.color || "Desconocido";
 
-        const detailsString = `Marca: ${brandName}, Color: ${colorName}, Tipo: ${typeName}`;
-        logDetails += `METADATA: ${detailsString}\n`;
+        // Tipo: Ya viene como texto en vehicleType ("SUVMPV", "sedan", etc.)
+        const typeText = anprData.vehicleType || "Vehículo";
+
+        // Marca: Viene como código numérico en vehicleInfo.vehicleLogoRecog
+        const brandCode = vehicleInfo.vehicleLogoRecog;
+        const brandName = brandCode ? getVehicleBrandName(brandCode) : "Desconocido";
+
+        const detailsString = `Marca: ${brandName}, Color: ${colorText}, Tipo: ${typeText} `;
+        logDetails += `METADATA: ${detailsString} \n`;
 
         // Use found device or first available
         if (!device) {
             device = await prisma.device.findFirst();
             if (!device) {
                 logDetails += "ERROR: No devices configured\\n";
-                console.error(`${logPrefix} ${logDetails}`);
+                console.error(`${logPrefix} ${logDetails} `);
                 return NextResponse.json({
                     error: "No devices configured"
                 }, { status: 500 });
@@ -213,8 +213,8 @@ export async function POST(req: NextRequest) {
             },
         });
 
-        logDetails += `EVENT_INSERT_SUCCESS: ${event.id}\\n`;
-        console.log(`${logPrefix} ${logDetails}`);
+        logDetails += `EVENT_INSERT_SUCCESS: ${event.id} \\n`;
+        console.log(`${logPrefix} ${logDetails} `);
 
         // Emit Socket.io
         if ((global as any).io) {
@@ -223,7 +223,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Respond with Hikvision XML format (como el PHP)
-        const xmlResponse = `<?xml version="1.0" encoding="UTF-8"?><ResponseStatus version="2.0" xmlns="http://www.hikvision.com/ver20/XMLSchema"><requestURL>/ISAPI/Event/notification/alertStream</requestURL><statusCode>1</statusCode><statusString>OK</statusString><subStatusCode>ok</subStatusCode></ResponseStatus>`;
+        const xmlResponse = `<? xml version = "1.0" encoding = "UTF-8" ?> <ResponseStatus version="2.0" xmlns = "http://www.hikvision.com/ver20/XMLSchema" > <requestURL>/ISAPI/Event / notification / alertStream < /requestURL><statusCode>1</statusCode > <statusString>OK < /statusString><subStatusCode>ok</subStatusCode > </ResponseStatus>`;
 
         return new NextResponse(xmlResponse, {
             status: 200,

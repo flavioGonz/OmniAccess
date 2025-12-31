@@ -55,6 +55,22 @@ import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { DeviceMemoryDialog } from "@/components/DeviceMemoryDialog";
 import { DevicePlateListDialog } from "@/components/DevicePlateListDialog";
 import { AkuvoxActionUrlDialog } from "@/components/AkuvoxActionUrlDialog";
+
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+    DropdownMenuLabel,
+    DropdownMenuSeparator
+} from "@/components/ui/dropdown-menu";
+import { MoreHorizontal, DownloadCloud, UploadCloud, Info } from "lucide-react";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 const BRAND_CONFIG: Record<string, { label: string, color: string, bg: string, logoUrl: string }> = {
@@ -460,127 +476,153 @@ export default function DevicesPage() {
                                     <TableCell className="text-center">
                                         <div className="flex items-center justify-center gap-4">
                                             {/* PULL Connection (Server -> Device) */}
-                                            <div className="flex flex-col items-center gap-1 group/pull">
-                                                <div className={cn(
-                                                    "w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-500 border",
-                                                    (dev.lastOnlinePull && (new Date().getTime() - new Date(dev.lastOnlinePull).getTime()) < 5 * 60 * 1000)
-                                                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.1)]"
-                                                        : "bg-neutral-900 border-neutral-800 text-neutral-700"
-                                                )}>
-                                                    <Server
-                                                        size={14}
-                                                        className={cn(
-                                                            (dev.lastOnlinePull && (new Date().getTime() - new Date(dev.lastOnlinePull).getTime()) < 5 * 60 * 1000) && "animate-pulse"
-                                                        )}
-                                                    />
-                                                </div>
-                                                <span className="text-[7px] font-black uppercase tracking-widest text-neutral-600 group-hover/pull:text-neutral-400 transition-colors">Pull (Svr)</span>
-                                            </div>
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger>
+                                                        <div className="flex flex-col items-center gap-1 group/pull cursor-help">
+                                                            <div className={cn(
+                                                                "w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-500 border",
+                                                                (dev.lastOnlinePull && (new Date().getTime() - new Date(dev.lastOnlinePull).getTime()) < 5 * 60 * 1000)
+                                                                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.1)]"
+                                                                    : "bg-neutral-900 border-neutral-800 text-neutral-700"
+                                                            )}>
+                                                                <DownloadCloud
+                                                                    size={14}
+                                                                    className={cn(
+                                                                        (dev.lastOnlinePull && (new Date().getTime() - new Date(dev.lastOnlinePull).getTime()) < 5 * 60 * 1000) && "animate-pulse"
+                                                                    )}
+                                                                />
+                                                            </div>
+                                                            <span className="text-[7px] font-black uppercase tracking-widest text-neutral-600 group-hover/pull:text-neutral-400 transition-colors">Servidor</span>
+                                                        </div>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p className="font-bold">Sincronización PULL (Servidor)</p>
+                                                        <p className="text-xs text-neutral-400">El servidor se conecta al dispositivo para leer datos.</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
 
                                             {/* PUSH Connection (Device -> Server) */}
-                                            <div className="flex flex-col items-center gap-1 group/push">
-                                                <div className={cn(
-                                                    "w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-500 border",
-                                                    (dev.lastOnlinePush && (new Date().getTime() - new Date(dev.lastOnlinePush).getTime()) < 5 * 60 * 1000)
-                                                        ? "bg-blue-500/10 border-blue-500/20 text-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.1)]"
-                                                        : "bg-neutral-900 border-neutral-800 text-neutral-700"
-                                                )}>
-                                                    <Activity
-                                                        size={14}
-                                                        className={cn(
-                                                            (dev.lastOnlinePush && (new Date().getTime() - new Date(dev.lastOnlinePush).getTime()) < 5 * 60 * 1000) && "animate-bounce"
-                                                        )}
-                                                    />
-                                                </div>
-                                                <span className="text-[7px] font-black uppercase tracking-widest text-neutral-600 group-hover/push:text-neutral-400 transition-colors">Push (Dev)</span>
-                                            </div>
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger>
+                                                        <div className="flex flex-col items-center gap-1 group/push cursor-help">
+                                                            <div className={cn(
+                                                                "w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-500 border",
+                                                                (dev.lastOnlinePush && (new Date().getTime() - new Date(dev.lastOnlinePush).getTime()) < 5 * 60 * 1000)
+                                                                    ? "bg-blue-500/10 border-blue-500/20 text-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.1)]"
+                                                                    : "bg-neutral-900 border-neutral-800 text-neutral-700"
+                                                            )}>
+                                                                <UploadCloud
+                                                                    size={14}
+                                                                    className={cn(
+                                                                        (dev.lastOnlinePush && (new Date().getTime() - new Date(dev.lastOnlinePush).getTime()) < 5 * 60 * 1000) && "animate-bounce"
+                                                                    )}
+                                                                />
+                                                            </div>
+                                                            <span className="text-[7px] font-black uppercase tracking-widest text-neutral-600 group-hover/push:text-neutral-400 transition-colors">Dispositivo</span>
+                                                        </div>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p className="font-bold">Sincronización PUSH (Dispositivo)</p>
+                                                        <p className="text-xs text-neutral-400">El dispositivo envía eventos al servidor (Webhooks).</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-right pr-8">
-                                        <div className="flex justify-end items-center gap-3">
-                                            {/* Live View Button */}
-                                            <Button
-                                                variant="outline"
-                                                size="icon"
-                                                onClick={() => setViewingLive(dev)}
-                                                className="h-10 w-10 rounded-xl border-neutral-800 bg-neutral-900/50 text-indigo-400 hover:bg-indigo-600 hover:border-indigo-400 transition-all shadow-lg"
-                                                title="Ver en Vivo (Remoto)"
-                                            >
-                                                <Eye size={18} />
-                                            </Button>
+                                        <div className="flex justify-end items-center gap-2">
+                                            {/* Primary Actions: Quick Access */}
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => setViewingLive(dev)}
+                                                            className="h-8 w-8 rounded-lg bg-neutral-900/50 text-neutral-400 hover:text-indigo-400 hover:bg-indigo-500/10 border border-neutral-800 hover:border-indigo-500/30 transition-all"
+                                                        >
+                                                            <Eye size={16} />
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent><p>Ver en Vivo</p></TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
 
-                                            {/* Relay Trigger Button */}
-                                            <Button
-                                                onClick={() => handleTriggerRelay(dev.id)}
-                                                disabled={isOpening}
-                                                className={cn(
-                                                    "w-10 h-10 rounded-xl transition-all duration-500 shadow-lg border relative group/relay overflow-hidden",
-                                                    isOpening
-                                                        ? "bg-emerald-500 border-emerald-400 text-white"
-                                                        : "bg-neutral-900 border-neutral-800 text-neutral-500 hover:text-white hover:border-neutral-600"
-                                                )}
-                                                title="Abrir Puerta / Activar Relé"
-                                            >
-                                                {isOpening ? (
-                                                    <Unlock className="animate-bounce" size={20} />
-                                                ) : (
-                                                    <Lock size={18} className="group-hover/relay:scale-110 transition-transform" />
-                                                )}
-                                            </Button>
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Button
+                                                            onClick={() => handleTriggerRelay(dev.id)}
+                                                            disabled={isOpening}
+                                                            size="icon"
+                                                            className={cn(
+                                                                "h-8 w-8 rounded-lg transition-all border relative overflow-hidden",
+                                                                isOpening
+                                                                    ? "bg-emerald-500 border-emerald-400 text-white"
+                                                                    : "bg-neutral-900/50 text-neutral-400 hover:text-emerald-400 hover:bg-emerald-500/10 border-neutral-800 hover:border-emerald-500/30"
+                                                            )}
+                                                        >
+                                                            {isOpening ? <Unlock className="animate-bounce" size={16} /> : <Zap size={16} />}
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent><p>Abrir Puerta</p></TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
 
-                                            {dev.brand === 'AKUVOX' && (
-                                                <Button
-                                                    variant="outline"
-                                                    size="icon"
-                                                    onClick={() => setConfigActionUrl(dev)}
-                                                    className="h-10 w-10 rounded-xl border-neutral-800 bg-neutral-900/50 text-blue-400 hover:bg-indigo-600 hover:border-indigo-400 transition-all shadow-lg"
-                                                    title="Configurar Action URLs"
-                                                >
-                                                    <Zap size={18} />
-                                                </Button>
-                                            )}
+                                            {/* Dropdown for Secondary Actions */}
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5">
+                                                        <MoreHorizontal size={16} />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end" className="w-48 bg-neutral-900 border-neutral-800 text-neutral-200">
+                                                    <DropdownMenuLabel className="text-xs font-black uppercase tracking-widest text-neutral-500">Gestión</DropdownMenuLabel>
 
-                                            {dev.deviceType === 'FACE_TERMINAL' && (
-                                                <Button
-                                                    variant="outline"
-                                                    size="icon"
-                                                    onClick={() => setManagingMemory(dev)}
-                                                    className="h-10 w-10 rounded-xl border-neutral-800 bg-neutral-900/50 text-emerald-400 hover:bg-emerald-500 hover:border-emerald-400 transition-all shadow-lg"
-                                                    title="Memoria Flash"
-                                                >
-                                                    <Database size={18} />
-                                                </Button>
-                                            )}
+                                                    {dev.deviceType === 'FACE_TERMINAL' && (
+                                                        <DropdownMenuItem onClick={() => setManagingMemory(dev)} className="cursor-pointer gap-2 text-xs font-bold hover:bg-white/5 hover:text-indigo-400 focus:bg-white/5 focus:text-indigo-400">
+                                                            <Database size={14} /> Memoria Flash
+                                                        </DropdownMenuItem>
+                                                    )}
 
-                                            {dev.deviceType === 'LPR_CAMERA' && dev.brand === 'HIKVISION' && (
-                                                <Button
-                                                    variant="outline"
-                                                    size="icon"
-                                                    onClick={() => setManagingPlates(dev)}
-                                                    className="h-10 w-10 rounded-xl border-neutral-800 bg-neutral-900/50 text-blue-400 hover:bg-blue-500 hover:border-blue-400 transition-all shadow-lg"
-                                                    title="Lista Blanca Interna"
-                                                >
-                                                    <Database size={18} />
-                                                </Button>
-                                            )}
+                                                    {dev.deviceType === 'LPR_CAMERA' && dev.brand === 'HIKVISION' && (
+                                                        <DropdownMenuItem onClick={() => setManagingPlates(dev)} className="cursor-pointer gap-2 text-xs font-bold hover:bg-white/5 hover:text-blue-400 focus:bg-white/5 focus:text-blue-400">
+                                                            <Database size={14} /> Lista Blanca LPR
+                                                        </DropdownMenuItem>
+                                                    )}
 
-                                            <DeviceFormDialog device={dev} groups={groups} onSuccess={loadData}>
-                                                <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl border-neutral-800 bg-neutral-900/50 text-blue-400 hover:bg-blue-500/10 transition-all shadow-lg">
-                                                    <Settings2 size={18} />
-                                                </Button>
-                                            </DeviceFormDialog>
+                                                    {dev.brand === 'AKUVOX' && (
+                                                        <DropdownMenuItem onClick={() => setConfigActionUrl(dev)} className="cursor-pointer gap-2 text-xs font-bold hover:bg-white/5 hover:text-orange-400 focus:bg-white/5 focus:text-orange-400">
+                                                            <Network size={14} /> Webhooks (Action URL)
+                                                        </DropdownMenuItem>
+                                                    )}
 
-                                            <DeleteConfirmDialog
-                                                id={dev.id}
-                                                title={dev.name}
-                                                description="Se perderá la conexión con este hardware."
-                                                onDelete={deleteDevice}
-                                                onSuccess={loadData}
-                                            >
-                                                <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl border-neutral-800 bg-neutral-900/50 text-red-500/40 hover:text-red-500 hover:bg-red-500/10 transition-all">
-                                                    <Trash2 size={18} />
-                                                </Button>
-                                            </DeleteConfirmDialog>
+                                                    <DropdownMenuSeparator className="bg-white/5" />
+
+                                                    <DeviceFormDialog device={dev} groups={groups} onSuccess={loadData}>
+                                                        <div className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-xs font-bold outline-none transition-colors hover:bg-white/5 hover:text-blue-400 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 gap-2">
+                                                            <Settings2 size={14} /> Editar Configuración
+                                                        </div>
+                                                    </DeviceFormDialog>
+
+                                                    <DropdownMenuSeparator className="bg-white/5" />
+
+                                                    <DeleteConfirmDialog
+                                                        id={dev.id}
+                                                        title={dev.name}
+                                                        description="Se eliminará este dispositivo."
+                                                        onDelete={deleteDevice}
+                                                        onSuccess={loadData}
+                                                    >
+                                                        <div className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-xs font-bold outline-none transition-colors hover:bg-red-500/10 hover:text-red-500 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 gap-2 text-red-400">
+                                                            <Trash2 size={14} /> Eliminar
+                                                        </div>
+                                                    </DeleteConfirmDialog>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </div>
                                     </TableCell>
                                 </TableRow >

@@ -3,6 +3,8 @@ export const DRIVER_MODELS = {
     HIKVISION: [
     
         { value: "iDS-2CD7A26G0/P-IZHS", label: "iDS-2CD7A26G0/P-IZHS", category: "LPR", photo: "https://chipcom.com.gt/_next/image?url=https%3A%2F%2Fftp3.syscom.mx%2Fusuarios%2Ffotos%2FBancoFotografiasSyscom%2FHIKVISION%2FIDS2CD7A26G0IZHS(C)%2FIDS2CD7A26G0IZHS(C)-p.PNG&w=256&q=75" },
+    
+        { value: "iDS-2CD7A26G0-IZHS", label: "iDS-2CD7A26G0-IZHS", category: "Face", photo: "" },
     ],
     AKUVOX: [    
         { value: "E18", label: "E18", category: "Terminal Face", photo: "https://www.akuvox.com/uploads/images/Products-Door-PhoneE18.png" },

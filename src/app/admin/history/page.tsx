@@ -28,7 +28,8 @@ import {
     CreditCard,
     Building2,
     ArrowUpRight,
-    ArrowDownLeft
+    ArrowDownLeft,
+    Phone
 } from "lucide-react";
 import { AccessEvent, User, Unit, Device } from "@prisma/client";
 import Image from "next/image";
@@ -295,6 +296,8 @@ export default function HistoryPage() {
                                         });
                                     }
                                     const logoUrl = getCarLogo(details.Marca);
+                                    const isCall = evt.plateDetected === 'CALL_START';
+                                    const callDest = details['Llamada entrante a'];
 
                                     return (
                                         <EventDetailsDialog key={evt.id} event={evt}>
@@ -324,8 +327,8 @@ export default function HistoryPage() {
                                                                     </p>
                                                                 </div>
                                                             ) : (
-                                                                <p className="font-mono text-sm font-black text-white tracking-widest uppercase">
-                                                                    {evt.plateDetected || "-------"}
+                                                                <p className={cn("font-mono text-sm font-black tracking-widest uppercase", isCall ? "text-blue-400" : "text-white")}>
+                                                                    {isCall ? "LLAMADA" : (evt.plateDetected || "-------")}
                                                                 </p>
                                                             )}
                                                         </div>
@@ -341,12 +344,12 @@ export default function HistoryPage() {
                                                                     <Image src={logoUrl} alt="Logo" fill sizes="40px" className="object-contain" />
                                                                 </div>
                                                             ) : (
-                                                                <Car size={18} className="text-neutral-300" />
+                                                                isCall ? <Phone size={18} className="text-blue-400" /> : <Car size={18} className="text-neutral-300" />
                                                             )}
                                                         </div>
                                                         <div className="flex flex-col">
                                                             <p className="font-black text-white text-xs uppercase tracking-tight">
-                                                                {details.Marca || "Desconocido"}
+                                                                {isCall ? "Intercomunicador" : (details.Marca || "Desconocido")}
                                                             </p>
                                                             <div className="flex items-center gap-2 mt-1">
                                                                 {details.Color && (
@@ -357,6 +360,7 @@ export default function HistoryPage() {
                                                                 )}
                                                                 <span className="text-[10px] text-neutral-500 font-bold uppercase">
                                                                     {(() => {
+                                                                        if (isCall) return "Comunicación";
                                                                         let t = details.Tipo || 'Vehículo';
                                                                         if (t.toUpperCase() === 'SUVMPV') t = 'SUV / MPV';
                                                                         if (t.toUpperCase() === 'VEHICLE') t = 'AUTO';
@@ -386,7 +390,7 @@ export default function HistoryPage() {
                                                                 "font-bold uppercase text-xs tracking-tight",
                                                                 evt.user?.name ? "text-indigo-400" : "text-neutral-500"
                                                             )}>
-                                                                {evt.user?.name || "Externo / Desconocido"}
+                                                                {evt.user?.name || (isCall && callDest ? `Destino: ${callDest}` : "Externo / Desconocido")}
                                                             </p>
                                                             <p className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mt-0.5">
                                                                 {evt.user?.unit?.name || (evt.user?.name ? "Residente" : "Sin Unidad")}

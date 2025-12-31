@@ -60,7 +60,7 @@ export default function UnitsPage() {
     const [showAssignDialog, setShowAssignDialog] = useState(false);
     const [editingUnit, setEditingUnit] = useState<ExtendedUnit | null>(null);
     const [showEditDialog, setShowEditDialog] = useState(false);
-    const [activeEditTab, setActiveEditTab] = useState<'general' | 'contact' | 'location' | 'map' | 'units'>('general');
+    const [activeEditTab, setActiveEditTab] = useState<'general' | 'contact' | 'location' | 'map' | 'units' | 'residents' | 'vehicles'>('general');
     const [editingSubUnit, setEditingSubUnit] = useState<ExtendedUnit | null>(null);
 
     // Form State
@@ -362,15 +362,6 @@ export default function UnitsPage() {
                                     onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                                     placeholder="Calle, Ciudad, Provincia"
                                     className="bg-black/40 border-white/5 h-10 rounded-lg text-sm"
-                                />
-                            </div>
-                            <div className="space-y-2 pt-2">
-                                <Label className="text-[10px] font-bold text-blue-500/50 uppercase tracking-widest">Puntos del Polígono (Opcional)</Label>
-                                <Textarea
-                                    value={formData.mapPoints}
-                                    onChange={(e) => setFormData({ ...formData, mapPoints: e.target.value })}
-                                    placeholder='[[lat,lng], ...]'
-                                    className="bg-black/40 border-white/5 h-16 text-[10px] font-mono"
                                 />
                             </div>
                         </div>

@@ -256,7 +256,7 @@ function DatabaseSection() {
         try {
             const res = await getDbStats();
             if (res.success) {
-                setStats({ totalSize: res.totalSize, tables: res.tables });
+                setStats({ totalSize: res.totalSize || "0 B", tables: res.tables || [] });
             }
         } catch (err) {
             console.error("Error loading DB stats:", err);
@@ -498,13 +498,13 @@ function StorageSection() {
 
                 setStats({
                     lpr: {
-                        size: statsLpr.success ? statsLpr.size : 0,
-                        count: statsLpr.success ? statsLpr.count : 0,
+                        size: statsLpr.success ? (statsLpr.size ?? 0) : 0,
+                        count: statsLpr.success ? (statsLpr.count ?? 0) : 0,
                         loading: false
                     },
                     face: {
-                        size: statsFace.success ? statsFace.size : 0,
-                        count: statsFace.success ? statsFace.count : 0,
+                        size: statsFace.success ? (statsFace.size ?? 0) : 0,
+                        count: statsFace.success ? (statsFace.count ?? 0) : 0,
                         loading: false
                     }
                 });

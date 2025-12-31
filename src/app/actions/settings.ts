@@ -166,27 +166,28 @@ export async function getBucketStats(bucketName: string) {
         const client = await getS3InternalClient();
         let totalSize = 0;
         let fileCount = 0;
-        let isTruncated = true;
-        let continuationToken: string | undefined = undefined;
 
-        while (isTruncated) {
-            const command: any = new ListObjectsV2Command({
+        const fetchObjects = async (token?: string): Promise<void> => {
+            const cmd = new ListObjectsV2Command({
                 Bucket: bucketName,
-                ContinuationToken: continuationToken,
+                ContinuationToken: token,
             });
 
-            const response = await client.send(command);
+            const res = await client.send(cmd);
 
-            if (response.Contents) {
-                fileCount += response.Contents.length;
-                for (const obj of response.Contents) {
+            if (res.Contents) {
+                fileCount += res.Contents.length;
+                for (const obj of res.Contents) {
                     totalSize += obj.Size || 0;
                 }
             }
 
-            isTruncated = response.IsTruncated || false;
-            continuationToken = response.NextContinuationToken;
-        }
+            if (res.IsTruncated && res.NextContinuationToken) {
+                await fetchObjects(res.NextContinuationToken);
+            }
+        };
+
+        await fetchObjects();
 
         return {
             success: true,
