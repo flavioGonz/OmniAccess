@@ -312,11 +312,22 @@ const handleWebhook = async (req, res, logPrefix) => {
             let faceImagePath = "";
 
             if (images.length > 0) {
-                // Sort by size: Largest is usually Full/Background, Smallest is Face Crop
-                images.sort((a, b) => b.size - a.size);
+                // Improved Image Classification based on Field Name
+                // Hikvision usually sends 'FaceImage' and 'BackgroundImage'
+                let fullImg = images.find(img => img.name && (img.name.toLowerCase().includes('background') || img.name.toLowerCase().includes('scene')));
+                let faceImg = images.find(img => img.name && (img.name.toLowerCase() === 'faceimage' || img.name.toLowerCase() === 'facecaptured' || img.name.toLowerCase().includes('face')));
 
-                const fullImg = images[0];
-                const faceImg = images.length > 1 ? images[images.length - 1] : null;
+                // Fallback: Sort by size (Largest = Full, Smallest = Face)
+                if (!fullImg) {
+                    images.sort((a, b) => b.size - a.size);
+                    fullImg = images[0];
+                }
+
+                // If we found a full image by size, and still need a face image, pick the smallest one (provided it's not the same as full)
+                if (!faceImg && images.length > 1) {
+                    images.sort((a, b) => a.size - b.size); // Smallest first
+                    if (images[0] !== fullImg) faceImg = images[0];
+                }
 
                 try {
                     // Upload Full (Using 'lpr' bucket to ensure compatibility with existing file viewer)
@@ -349,6 +360,18 @@ const handleWebhook = async (req, res, logPrefix) => {
                 if (cred) credentialId = cred.id;
             }
 
+            // --- Check System Mode for Face ---
+            const modeSetting = await prisma.setting.findUnique({ where: { key: 'MODE_FACE' } });
+            const mode = modeSetting?.value || 'WHITELIST'; // Default to Whitelist
+
+            let finalDecision = "GRANT";
+            if (mode === 'BLACKLIST') {
+                finalDecision = "DENY";
+                console.log(`${logPrefix} ⛔ [MODE-FACE] BLACKLIST Active - Identified user DENIED.`);
+            } else {
+                console.log(`${logPrefix} ✅ [MODE-FACE] WHITELIST Active - Identified user GRANTED.`);
+            }
+
             // --- Create Event ---
             const event = await prisma.accessEvent.create({
                 data: {
@@ -358,12 +381,12 @@ const handleWebhook = async (req, res, logPrefix) => {
                     timestamp: eventTimestamp,
                     accessType: 'FACE',
                     direction: device?.direction || "ENTRY",
-                    decision: "GRANT", // Matches are granted
+                    decision: finalDecision, // Dynamic Decision
                     snapshotPath: fullImagePath, // Store FULL image as main snapshot
                     plateDetected: null,
                     plateNumber: null,
                     // Store extra details including Face Crop Path
-                    details: `Rostro: ${personName}, Similitud: ${similarity}%, ${faceImagePath ? 'FaceImage:' + faceImagePath : ''}`
+                    details: `Rostro: ${personName}, ${faceImagePath ? `FaceImage: ${faceImagePath}, ` : ''}Similitud: ${similarity}% (Modo: ${mode})`
                 }
             });
 
@@ -378,7 +401,7 @@ const handleWebhook = async (req, res, logPrefix) => {
             }
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ status: "processed", type: "FACE", decision: "GRANT" }));
+            res.end(JSON.stringify({ status: "processed", type: "FACE", decision: finalDecision }));
             return;
         }
 
@@ -718,11 +741,18 @@ const handleWebhook = async (req, res, logPrefix) => {
             credentialId = credential.id;
             userId = user.id;
 
-            if (!accessDecision) {
-                accessDecision = "GRANT";
-                console.log(`${logPrefix} ✅ [DB-DECISION] Camera silent, Plate found in DB (User: ${user.name}) - GRANT`);
+            // --- Check System Mode for LPR ---
+            const modeSetting = await prisma.setting.findUnique({ where: { key: 'MODE_LPR' } });
+            const mode = modeSetting?.value || 'WHITELIST';
+
+            if (mode === 'BLACKLIST') {
+                accessDecision = "DENY";
+                console.log(`${logPrefix} ⛔ [MODE-LPR] BLACKLIST Active - Plate found in DB -> DENIED.`);
             } else {
-                console.log(`${logPrefix} ℹ️ [DB-INFO] Plate found in DB (User: ${user.name}), but using Camera Decision: ${accessDecision}`);
+                if (!accessDecision) {
+                    accessDecision = "GRANT";
+                    console.log(`${logPrefix} ✅ [MODE-LPR] WHITELIST Active - Plate found in DB -> GRANTED.`);
+                }
             }
         } else {
             if (!accessDecision) {
@@ -910,6 +940,20 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
             accessDecision = "GRANT";
             details = `Tarjeta RFID Válida: ${cardNumber}`;
 
+            if (device) {
+                console.log(`${logPrefix} [AUTO-SNAP] Triggering snapshot for card from ${device.name}`);
+                const snapBuffer = await fetchCameraSnapshot(device);
+                if (snapBuffer) {
+                    try {
+                        const filename = `aku_card_${device.id}_${Date.now()}.jpg`;
+                        snapPath = await uploadToS3(snapBuffer, filename, "image/jpeg", "face");
+                        details += " (Evidencia capturada)";
+                    } catch (e) {
+                        console.error("Error uploading card snapshot to S3:", e.message);
+                    }
+                }
+            }
+
         } else if (eventType === 'card_invalid') {
             credentialType = 'TAG';
             credentialValue = cardNumber;
@@ -925,7 +969,7 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
             credentialValue = rawValue.startsWith('$') ? "No Identificado" : rawValue;
 
             accessDecision = isSuccess ? "GRANT" : "DENY";
-            details = isSuccess ? `Rostro Reconocido: ${credentialValue}` : `Rostro No Identificado`;
+            details = isSuccess ? `Rostro: ${credentialValue}` : `Rostro: Desconocido`;
 
             // ATOMIC CAPTURE ON FACE EVENT
             if (device) {
@@ -947,6 +991,20 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
             credentialValue = params.code;
             accessDecision = "GRANT";
             details = `Código PIN Válido: ${params.code}`;
+
+            if (device) {
+                console.log(`${logPrefix} [AUTO-SNAP] Triggering snapshot for pin from ${device.name}`);
+                const snapBuffer = await fetchCameraSnapshot(device);
+                if (snapBuffer) {
+                    try {
+                        const filename = `aku_pin_${device.id}_${Date.now()}.jpg`;
+                        snapPath = await uploadToS3(snapBuffer, filename, "image/jpeg", "face");
+                        details += " (Evidencia capturada)";
+                    } catch (e) {
+                        console.error("Error uploading pin snapshot to S3:", e.message);
+                    }
+                }
+            }
 
         } else if (eventType === 'code_invalid') {
             credentialType = 'PIN';

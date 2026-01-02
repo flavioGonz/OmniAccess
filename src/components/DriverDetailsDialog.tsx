@@ -6,13 +6,22 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Check, ShieldCheck, Server, Activity, Plus, Trash2, Save, Zap, Workflow, Code } from "lucide-react";
+import { Check, ShieldCheck, Server, Activity, Plus, Trash2, Save, Zap, Workflow, Code, Car, ChevronsUpDown, Loader2, Search } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DRIVER_MODELS, type DeviceBrand } from "@/lib/driver-models";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { addDeviceModel, deleteDeviceModel } from "@/app/actions/driver-models";
+import { HIKVISION_VEHICLE_BRANDS } from "@/lib/hikvision-codes";
+import { getCarLogo } from "@/lib/car-logos";
+import carLogos from "@/lib/car-logos.json";
+import { saveHikvisionBrands } from "@/app/actions/settings";
+import { toast } from "sonner";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+
 
 // Driver metadata (version, features, etc.)
 const DRIVER_INFO = {
@@ -176,13 +185,14 @@ export function DriverDetailsDialog({ brand, isOpen, onClose }: DriverDetailsDia
                                 <Code size={14} className="mr-2" />
                                 Modelos Certificados
                             </TabsTrigger>
-                            <TabsTrigger value="webhooks" className="text-[10px] font-black uppercase tracking-widest px-6 data-[state=active]:bg-blue-600">
-                                <Zap size={14} className="mr-2" />
-                                Action URLs Logic
+                            <TabsTrigger value="brands" className="text-[10px] font-black uppercase tracking-widest px-6 data-[state=active]:bg-blue-600">
+                                <Car size={14} className="mr-2" />
+                                Marcas de Autos
                             </TabsTrigger>
                         </TabsList>
 
                         <TabsContent value="models" className="flex-1 flex flex-col min-h-0 m-0 focus-visible:ring-0">
+                            {/* ... existing Add Model Form & Models List codes ... */}
                             {/* Add Model Form */}
                             <div className="mb-6 p-4 bg-white/5 rounded-2xl border border-white/10">
                                 <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
@@ -286,70 +296,240 @@ export function DriverDetailsDialog({ brand, isOpen, onClose }: DriverDetailsDia
                             </ScrollArea>
                         </TabsContent>
 
-                        <TabsContent value="webhooks" className="flex-1 m-0 focus-visible:ring-0">
-                            <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
-                                <div className="p-6 bg-gradient-to-r from-blue-600/10 to-transparent border border-blue-500/20 rounded-2xl">
-                                    <h4 className="text-sm font-black text-white uppercase tracking-widest mb-2 flex items-center gap-2">
-                                        <Activity size={16} className="text-blue-500" />
-                                        Capacidades de Webhook
-                                    </h4>
-                                    <p className="text-[11px] text-neutral-400 leading-relaxed font-medium">
-                                        El servidor procesa eventos a través del puerto <code className="text-blue-400 bg-blue-400/10 px-1 rounded">10000</code>.
-                                        Para modelos de <span className="text-white font-bold">{brand}</span>, el esquema de normalización admite los siguientes eventos maestros:
-                                    </p>
-                                </div>
-
-                                <div className="rounded-2xl border border-white/5 overflow-hidden bg-black/40">
-                                    <table className="w-full text-left border-collapse">
-                                        <thead>
-                                            <tr className="bg-white/5">
-                                                <th className="p-4 text-[10px] font-black text-neutral-500 uppercase tracking-widest">Evento Maestro</th>
-                                                <th className="p-4 text-[10px] font-black text-neutral-500 uppercase tracking-widest">Action URL de Ejemplo</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-white/5">
-                                            {[
-                                                { ev: "Face Recognition", url: "/api/webhooks/akuvox?event=face_valid&mac=$mac&user=$name&time=$time" },
-                                                { ev: "Card/RFID Swipe", url: "/api/webhooks/akuvox?event=card_valid&mac=$mac&card=$card_sn&time=$time" },
-                                                { ev: "PIN Code Entry", url: "/api/webhooks/akuvox?event=code_valid&mac=$mac&code=$code&time=$time" },
-                                                { ev: "Relay Triggered", url: "/api/webhooks/akuvox?event=door_open&mac=$mac&id=$relay_id&time=$time" },
-                                                { ev: "Tamper Alarm", url: "/api/webhooks/akuvox?event=tamper&mac=$mac&time=$time" },
-                                                { ev: "Incoming Call", url: "/api/webhooks/akuvox?event=calling&mac=$mac&to=$remote&time=$time" }
-                                            ].map((row, i) => (
-                                                <tr key={i} className="hover:bg-white/[0.02] transition-colors group">
-                                                    <td className="p-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
-                                                            <span className="text-[11px] font-bold text-neutral-200 uppercase">{row.ev}</span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-4">
-                                                        <div className="p-2 bg-neutral-900/50 rounded-lg border border-white/5 font-mono text-[9px] text-blue-400/80 group-hover:text-blue-400 transition-colors break-all">
-                                                            http://TU_IP_SERVIDOR:10000{row.url}
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-
-                                <div className="p-5 bg-blue-900/10 rounded-2xl border border-blue-500/20">
-                                    <h5 className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                                        <ShieldCheck size={12} />
-                                        Nota de Configuración
-                                    </h5>
-                                    <p className="text-[10px] text-neutral-500 leading-relaxed font-medium">
-                                        Sustituye <code>TU_IP_SERVIDOR</code> por la dirección IP estática donde corre el servicio de webhooks.
-                                        El sistema utiliza una lógica de normalización automática: aunque configures un evento genérico,
-                                        mientras envíes el <code>$mac</code>, el servidor lo asignará al equipo correcto.
-                                    </p>
-                                </div>
-                            </div>
+                        <TabsContent value="brands" className="flex-1 flex flex-col min-h-0 m-0 focus-visible:ring-0">
+                            <BrandEditor />
                         </TabsContent>
                     </Tabs>
                 </div>
             </DialogContent>
         </Dialog>
+    );
+}
+
+function BrandEditor() {
+    const [brands, setBrands] = useState<{ code: string; name: string }[]>(
+        Object.entries(HIKVISION_VEHICLE_BRANDS)
+            .map(([code, name]) => ({ code, name }))
+            .sort((a, b) => parseInt(a.code) - parseInt(b.code))
+    );
+    const [newCode, setNewCode] = useState("");
+    const [newName, setNewName] = useState("");
+    const [isSaving, setIsSaving] = useState(false);
+    const [logoOpen, setLogoOpen] = useState(false);
+    const [filter, setFilter] = useState("");
+
+    const filteredBrands = brands
+        .filter(b => b.code.includes(filter) || b.name.toLowerCase().includes(filter.toLowerCase()))
+        .sort((a, b) => parseInt(a.code) - parseInt(b.code));
+
+    const handleDelete = (code: string) => {
+        if (confirm("¿Eliminar este mapeo de marca?")) {
+            setBrands(prev => prev.filter(b => b.code !== code));
+        }
+    };
+
+    const handleAdd = () => {
+        if (!newCode || !newName) {
+            toast.error("Complete ambos campos");
+            return;
+        }
+        if (brands.some(b => b.code === newCode)) {
+            toast.error("El código ya existe");
+            return;
+        }
+        setBrands(prev => [...prev, { code: newCode, name: newName }].sort((a, b) => parseInt(a.code) - parseInt(b.code)));
+        setNewCode("");
+        setNewName("");
+        toast.success("Marca agregada a la lista temporal");
+    };
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        try {
+            const map: Record<string, string> = {};
+            brands.forEach(b => map[b.code] = b.name);
+            const result = await saveHikvisionBrands(map);
+
+            if (result.success) {
+                toast.success("Marcas guardadas correctamente. Reiniciando UI...", { duration: 3000 });
+                setTimeout(() => window.location.reload(), 1500);
+            } else {
+                toast.error("Error al guardar: " + result.message);
+            }
+        } catch (e) {
+            toast.error("Error inesperado al guardar");
+        }
+        setIsSaving(false);
+    };
+
+    return (
+        <div className="flex flex-col h-full animate-in fade-in slide-in-from-right-4 duration-500">
+            <div className="p-4 bg-gradient-to-r from-purple-600/10 to-transparent border border-purple-500/20 rounded-2xl mb-4 shrink-0">
+                <h4 className="text-sm font-black text-white uppercase tracking-widest mb-2 flex items-center gap-2">
+                    <Car size={16} className="text-purple-500" />
+                    Mapeo de Marcas de Vehículos
+                </h4>
+                <p className="text-[11px] text-neutral-400 leading-relaxed font-medium">
+                    Asocie los códigos numéricos de Hikvision con sus marcas correspondientes.
+                    Al seleccionar una marca conocida, el logo se asignará automáticamente.
+                </p>
+            </div>
+
+            {/* Add New Brand Form */}
+            <div className="bg-white/5 p-4 rounded-xl border border-white/5 mb-6 flex items-end gap-4 shrink-0 shadow-lg">
+                <div className="w-24 shrink-0 space-y-1.5">
+                    <Label className="text-[9px] uppercase font-black text-neutral-500 tracking-widest pl-0.5">Código</Label>
+                    <Input
+                        value={newCode}
+                        onChange={e => setNewCode(e.target.value)}
+                        placeholder="1038"
+                        className="h-9 bg-black/40 border-white/10 font-mono text-xs text-center focus-visible:ring-purple-500/50"
+                    />
+                </div>
+                <div className="flex-1 min-w-0 space-y-1.5">
+                    <Label className="text-[9px] uppercase font-black text-neutral-500 tracking-widest pl-0.5">Marca (Nombre o Búsqueda)</Label>
+                    <Popover open={logoOpen} onOpenChange={setLogoOpen}>
+                        <PopoverTrigger asChild>
+                            <Button
+                                variant="outline"
+                                role="combobox"
+                                aria-expanded={logoOpen}
+                                className="w-full justify-between bg-black/40 border-white/10 h-9 text-xs focus-visible:ring-purple-500/50"
+                            >
+                                {newName || <span className="text-neutral-500 italic">Seleccionar marca o escribir nombre...</span>}
+                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[400px] p-0 bg-neutral-900 border-white/10 max-h-[300px]" align="start">
+                            <Command className="bg-transparent">
+                                <CommandInput placeholder="Buscar marca..." className="h-9 border-none focus:ring-0" />
+                                <CommandList>
+                                    <CommandEmpty>No se encontró la marca.</CommandEmpty>
+                                    <CommandGroup className="max-h-[200px] overflow-auto custom-scrollbar">
+                                        {carLogos.map((logo: any) => (
+                                            <CommandItem
+                                                key={logo.slug}
+                                                value={logo.name}
+                                                onSelect={(currentValue) => {
+                                                    setNewName(currentValue);
+                                                    setLogoOpen(false);
+                                                }}
+                                                className="text-xs data-[selected=true]:bg-white/10 py-2 cursor-pointer"
+                                            >
+                                                <Check
+                                                    className={cn("mr-2 h-3 w-3", newName === logo.name ? "opacity-100" : "opacity-0")}
+                                                />
+                                                <div className="flex items-center gap-3">
+                                                    {logo.image?.optimized ? (
+                                                        <div className="w-6 h-6 bg-white p-0.5 rounded flex items-center justify-center">
+                                                            <img src={logo.image.optimized} alt="" className="max-w-full max-h-full object-contain" />
+                                                        </div>
+                                                    ) : null}
+                                                    <span className="font-medium">{logo.name}</span>
+                                                </div>
+                                            </CommandItem>
+                                        ))}
+                                    </CommandGroup>
+                                </CommandList>
+                            </Command>
+                        </PopoverContent>
+                    </Popover>
+                </div>
+                <div className="shrink-0 pb-[1px]">
+                    <Button onClick={handleAdd} className="h-9 px-5 bg-blue-600 hover:bg-blue-500 text-[11px] uppercase font-black tracking-wider shadow-lg shadow-blue-900/20 transition-all hover:scale-105 active:scale-95">
+                        <Plus size={16} className="mr-1.5" /> Agregar
+                    </Button>
+                </div>
+            </div>
+
+            {/* Table Search & List */}
+            <div className="flex-1 bg-black/20 rounded-xl border border-white/5 overflow-hidden flex flex-col min-h-0 shadow-inner">
+                {/* Mini Search Toolbar */}
+                <div className="bg-white/5 border-b border-white/5 px-2 py-2 flex items-center justify-between gap-4 shrink-0">
+                    <div className="relative flex-1 max-w-[200px]">
+                        <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-500" />
+                        <Input
+                            placeholder="Buscar código o marca..."
+                            value={filter}
+                            onChange={(e) => setFilter(e.target.value)}
+                            className="h-7 pl-8 bg-black/20 border-white/5 text-[10px] focus-visible:ring-0 placeholder:text-neutral-600"
+                        />
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-12 gap-2 bg-white/5 border-b border-white/5 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-neutral-500 shrink-0">
+                    <div className="col-span-2">Código</div>
+                    <div className="col-span-5">Marca Definida</div>
+                    <div className="col-span-3">Logo Automático</div>
+                    <div className="col-span-2 text-right">Acción</div>
+                </div>
+                <ScrollArea className="flex-1 h-full">
+                    <div className="divide-y divide-white/5">
+                        {filteredBrands.map((brand) => {
+                            const logo = getCarLogo(brand.name);
+                            return (
+                                <div key={brand.code} className="grid grid-cols-12 gap-2 px-4 py-2 items-center hover:bg-white/[0.02] transition-colors group h-12">
+                                    <div className="col-span-2 font-mono text-xs text-blue-400 font-bold tracking-wider">
+                                        {brand.code}
+                                    </div>
+                                    <div className="col-span-5 text-xs font-bold text-white truncate pr-2">
+                                        {brand.name}
+                                    </div>
+                                    <div className="col-span-3 flex items-center gap-3">
+                                        {logo ? (
+                                            <div className="w-8 h-8 rounded-md bg-white p-1 flex items-center justify-center border border-white/10 shadow-sm shrink-0">
+                                                <img src={logo} alt={brand.name} className="max-w-full max-h-full object-contain" />
+                                            </div>
+                                        ) : (
+                                            <div className="w-8 h-8 rounded-md bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                                                <span className="text-[9px] text-neutral-600 italic">N/A</span>
+                                            </div>
+                                        )}
+                                        {logo ? (
+                                            <span className="text-[9px] text-emerald-500 font-black tracking-wider bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                                                OK
+                                            </span>
+                                        ) : (
+                                            <span className="text-[9px] text-neutral-600 font-bold tracking-wider opacity-50">
+                                                -
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="col-span-2 text-right">
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => handleDelete(brand.code)}
+                                            className="h-7 w-7 p-0 text-neutral-600 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
+                                        >
+                                            <Trash2 size={14} />
+                                        </Button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </ScrollArea>
+                <div className="bg-black/40 border-t border-white/5 px-4 py-2 text-[9px] text-neutral-500 flex items-center gap-2 truncate shrink-0">
+                    <Server size={10} />
+                    <span className="opacity-70">Fuente:</span>
+                    <code className="bg-white/5 px-1.5 py-0.5 rounded text-neutral-400 font-mono tracking-tight">/filippofilip95 ... /optimized/</code>
+                </div>
+            </div>
+
+            <div className="mt-4 flex justify-between items-center shrink-0">
+                <p className="text-[10px] text-neutral-600 italic">
+                    {brands.length} Marcas Definidas
+                </p>
+                <Button
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className="bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-black uppercase tracking-widest h-8"
+                >
+                    {isSaving ? <Loader2 size={12} className="animate-spin mr-2" /> : <Save size={12} className="mr-2" />}
+                    Guardar Cambios
+                </Button>
+            </div>
+        </div>
     );
 }

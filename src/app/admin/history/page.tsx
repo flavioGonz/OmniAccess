@@ -37,6 +37,7 @@ import { Badge } from "@/components/ui/badge";
 import { EventDetailsDialog } from "@/components/dashboard/EventDetailsDialog";
 import { cn } from "@/lib/utils";
 import { getCarLogo } from "@/lib/car-logos";
+import { getVehicleBrandName } from "@/lib/hikvision-codes";
 import { ExportHistoryDialog } from "@/components/history/ExportHistoryDialog";
 
 const formatDuration = (ms: number) => {
@@ -295,7 +296,16 @@ export default function HistoryPage() {
                                             if (k && v) details[k] = v;
                                         });
                                     }
-                                    const logoUrl = getCarLogo(details.Marca);
+
+                                    // Retroactive fix for unmapped brands (e.g., "Brand 1123")
+                                    let brandName = details.Marca || "Desconocido";
+                                    if (brandName.startsWith("Brand ")) {
+                                        const code = brandName.replace("Brand ", "");
+                                        const mapped = getVehicleBrandName(code);
+                                        if (mapped !== brandName) brandName = mapped;
+                                    }
+
+                                    const logoUrl = getCarLogo(brandName);
                                     const isCall = evt.plateDetected === 'CALL_START';
                                     const callDest = details['Llamada entrante a'];
 
@@ -349,7 +359,7 @@ export default function HistoryPage() {
                                                         </div>
                                                         <div className="flex flex-col">
                                                             <p className="font-black text-white text-xs uppercase tracking-tight">
-                                                                {isCall ? "Intercomunicador" : (details.Marca || "Desconocido")}
+                                                                {isCall ? "Intercomunicador" : brandName}
                                                             </p>
                                                             <div className="flex items-center gap-2 mt-1">
                                                                 {details.Color && (

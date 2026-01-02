@@ -29,11 +29,13 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { EventDetailsDialog } from "@/components/dashboard/EventDetailsDialog";
 import Image from "next/image";
 import { AccessEvent, Device, Unit } from "@prisma/client";
 import { getCarLogo } from "@/lib/car-logos";
+import { getVehicleBrandName } from "@/lib/hikvision-codes";
 
 interface FullAccessEvent extends AccessEvent {
     user: {
@@ -50,6 +52,29 @@ interface FullAccessEvent extends AccessEvent {
     device: Device | null;
 }
 
+function TimeAgo({ timestamp }: { timestamp: string | Date }) {
+    const [label, setLabel] = useState("");
+
+    useEffect(() => {
+        const update = () => {
+            const diff = Math.floor((Date.now() - new Date(timestamp).getTime()) / 1000);
+            if (diff < 0) {
+                setLabel("Ahora");
+                return;
+            }
+            if (diff < 60) setLabel(`Hace ${diff}s`);
+            else if (diff < 3600) setLabel(`Hace ${Math.floor(diff / 60)}m`);
+            else if (diff < 86400) setLabel(`Hace ${Math.floor(diff / 3600)}h`);
+            else setLabel(`Hace ${Math.floor(diff / 86400)}d`);
+        };
+        update();
+        const interval = setInterval(update, 1000);
+        return () => clearInterval(interval);
+    }, [timestamp]);
+
+    return <span>{label}</span>;
+}
+
 export default function AccessDashboard() {
     const [events, setEvents] = useState<FullAccessEvent[]>([]);
     const [socket, setSocket] = useState<Socket | null>(null);
@@ -57,9 +82,27 @@ export default function AccessDashboard() {
     const [activeType, setActiveType] = useState<"ALL" | "PLATE" | "FACE" | "TAG" | "DOOR">("ALL");
     const [stats, setStats] = useState({ total: 0, grants: 0, denies: 0 });
 
+    const lastEntry = events.find(e => e.direction === 'ENTRY');
+    const lastExit = events.find(e => e.direction === 'EXIT');
+
+    useEffect(() => {
+        const savedFilter = localStorage.getItem('dashboard_activeFilter');
+        if (savedFilter) setActiveFilter(savedFilter as any);
+
+        const savedType = localStorage.getItem('dashboard_activeType');
+        if (savedType) setActiveType(savedType as any);
+    }, []);
+
     const loadInitialData = async () => {
         try {
-            const data = await getAccessEvents({ take: 50 });
+            // Filter: Only Current Day
+            const startOfDay = new Date();
+            startOfDay.setHours(0, 0, 0, 0);
+
+            const data = await getAccessEvents({
+                take: 50,
+                from: startOfDay
+            });
             setEvents(data.events as FullAccessEvent[]);
 
             const todayStats = await getEventsCountToday();
@@ -68,6 +111,8 @@ export default function AccessDashboard() {
             console.error("Error loading data:", error);
         }
     };
+
+    const [isConnected, setIsConnected] = useState(false);
 
     useEffect(() => {
         loadInitialData();
@@ -79,9 +124,26 @@ export default function AccessDashboard() {
             transports: ["websocket", "polling"],
         });
 
-        newSocket.on("connect", () => console.log("✅ Socket connected"));
+        newSocket.on("connect", () => {
+            console.log("✅ Socket connected");
+            setIsConnected(true);
+        });
+
+        newSocket.on("disconnect", () => {
+            console.log("❌ Socket disconnected");
+            setIsConnected(false);
+        });
 
         newSocket.on("access_event", (event: FullAccessEvent) => {
+            // Filter old ANR events (older than current day)
+            const eventTime = new Date(event.timestamp).getTime();
+            const startOfDay = new Date().setHours(0, 0, 0, 0);
+
+            if (eventTime < startOfDay) {
+                console.log("Old ANR event ignored in dashboard:", event.timestamp);
+                return;
+            }
+
             console.log("📥 New access event received:", event);
             setEvents((prev) => [event, ...prev].slice(0, 50));
             setStats(prev => ({
@@ -239,12 +301,12 @@ export default function AccessDashboard() {
     // Helper for image URLs
     const getImageUrl = (path: string | null | undefined): string => {
         if (!path) return "";
-        if (path.startsWith('http') || path.startsWith('/api/files')) return path;
+        if (path.startsWith('http') || path.startsWith('/')) return path;
         return `/api/files/${path}`;
     };
 
     const EventItem = ({ event }: { event: FullAccessEvent & { hasDoorOpen?: boolean; hasDoorClose?: boolean } }) => {
-        const isCall = event.plateDetected === 'CALL_START' || event.accessType === 'CALL';
+        const isCall = event.plateDetected === 'CALL_START';
 
         const typeConfig = {
             PLATE: { icon: Car, color: "blue", label: "LPR", bgClass: "bg-blue-500/10", textClass: "text-blue-400" },
@@ -257,18 +319,33 @@ export default function AccessDashboard() {
         const config = isCall ? typeConfig.CALL : (typeConfig[event.accessType as keyof typeof typeConfig] || typeConfig.TAG);
         const TypeIcon = config.icon;
 
+
+
         // Parse details into meta object
         const meta: any = {};
         if (event.details) {
             event.details.split(',').forEach(p => {
                 const [k, v] = p.split(':').map(s => s.trim());
                 if (k && v) meta[k] = v;
-                // Fallback for older colon-only details if needed, but comma split is safer
             });
         }
 
+        // Clean and Resolve Brand Name
+        if (meta.Marca) {
+            // Remove "UNKNOWN" suffix which is common
+            let cleanBrand = meta.Marca.replace(/\s*UNKNOWN\s*/gi, '').trim();
+
+            // Check for "BRAND <Code>" pattern
+            const brandCodeMatch = cleanBrand.match(/BRAND\s*(\d+)/i);
+            if (brandCodeMatch) {
+                // Resolve numeric code to name
+                cleanBrand = getVehicleBrandName(brandCodeMatch[1]);
+            }
+
+            meta.Marca = cleanBrand;
+        }
+
         // Extract call destination if available
-        // Usually details="Llamada entrante a: 101"
         let callDest = "Central";
         if (isCall && event.details) {
             const match = event.details.match(/a:\s*(\S+)/);
@@ -294,20 +371,49 @@ export default function AccessDashboard() {
             !event.plateDetected
         );
 
+        // Determine Display Name for Face
+        const faceName = event.user?.name || meta.Rostro;
+        const faceSimilarity = meta.Similitud;
+
         return (
             <EventDetailsDialog event={event} timeStatus={timeStatus}>
                 <div className={cn(
                     "p-4 cursor-pointer transition-all group border-b border-white/5 last:border-0 border-l-[3px]",
                     isAnomalous
                         ? "bg-yellow-500/10 border-l-yellow-500 hover:bg-yellow-500/20"
-                        : "hover:bg-white/5 border-l-transparent hover:border-l-indigo-500"
+                        : isCall
+                            ? "bg-blue-900/10 border-l-blue-500 hover:bg-blue-900/20"
+                            : "hover:bg-white/5 border-l-transparent hover:border-l-indigo-500"
                 )}>
                     <div className="flex items-center gap-3">
                         {/* LEFT: LOGO/ICON OR FACE IMAGES */}
-                        <div className={cn("rounded-lg shrink-0 flex items-center justify-center p-1.5", "bg-white border border-white/10 shadow-sm", "w-14 h-11 relative overflow-hidden")}>
-                            {event.accessType === 'FACE' && fullImageUrl ? (
+                        <div className={cn("rounded-lg shrink-0 flex items-center justify-center p-0.5", "bg-neutral-900 border border-white/10 shadow-sm overflow-hidden", "w-14 h-11 relative")}>
+                            {(isCall) ? (
+                                <div className="relative w-full h-full">
+                                    {fullImageUrl ? (
+                                        <Image
+                                            src={fullImageUrl}
+                                            alt="Snap"
+                                            fill
+                                            sizes="56px"
+                                            className="object-cover opacity-80"
+                                        />
+                                    ) : (
+                                        <div className={cn("w-full h-full flex items-center justify-center", config.bgClass)}>
+                                            <TypeIcon size={18} className={config.textClass} />
+                                        </div>
+                                    )}
+                                    {isCall && (
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
+                                            <div className="relative">
+                                                <div className="absolute inset-0 bg-emerald-500 rounded-full animate-ping opacity-75" />
+                                                <Phone size={14} className="text-white relative z-10 drop-shadow-md" fill="currentColor" />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : event.accessType === 'FACE' && fullImageUrl ? (
                                 <>
-                                    {/* Full Scene Image */}
                                     <Image
                                         src={fullImageUrl}
                                         alt="Escena"
@@ -315,21 +421,20 @@ export default function AccessDashboard() {
                                         sizes="56px"
                                         className="object-cover"
                                     />
-                                    {/* Face Overlay (Bottom Right) */}
-                                    {faceCropUrl && (
-                                        <div className="absolute bottom-0 right-0 w-5 h-5 border border-white bg-black rounded-tl-sm overflow-hidden z-10">
+                                    {(faceCropUrl || event.user?.cara) && (
+                                        <div className="absolute bottom-0 right-0 w-7 h-9 border border-white/30 bg-black rounded-tl-sm overflow-hidden z-10 shadow-lg">
                                             <Image
-                                                src={faceCropUrl}
+                                                src={faceCropUrl || getImageUrl(event.user?.cara)}
                                                 alt="Rostro"
                                                 fill
-                                                sizes="20px"
+                                                sizes="28px"
                                                 className="object-cover"
                                             />
                                         </div>
                                     )}
                                 </>
                             ) : logoUrl ? (
-                                <div className="relative w-full h-full">
+                                <div className="relative w-full h-full p-1 bg-white">
                                     <Image
                                         src={logoUrl}
                                         alt="Logo"
@@ -357,8 +462,14 @@ export default function AccessDashboard() {
                                             </p>
                                         </div>
                                     ) : (
-                                        <p className="text-sm font-black text-white truncate tracking-tight uppercase">
-                                            {isCall ? `LLAMANDO A ${callDest}` : (event.user?.name || event.plateDetected || "ID: " + event.id.slice(-4))}
+                                        <p className={cn("text-sm font-black truncate tracking-tight uppercase", isCall ? "text-blue-400" : "text-white")}>
+                                            {isCall
+                                                ? `LLAMADA DE ${event.device?.name?.replace('AKUVOX ', '') || 'PORTERO'}`
+                                                : (event.plateDetected === 'DOOR_OPEN' || event.plateDetected === 'DOOR_CLOSE')
+                                                    ? "CONTROL DE PUERTA"
+                                                    : (event.accessType === 'FACE')
+                                                        ? (faceName || "ROSTRO DETECTADO")
+                                                        : (event.user?.name || event.plateDetected || "ID: " + event.id.slice(-4))}
                                         </p>
                                     )}
 
@@ -379,42 +490,61 @@ export default function AccessDashboard() {
                                 <div className="flex items-center gap-2 mt-1">
                                     <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest truncate italic">
                                         {event.accessType === 'PLATE' ? (
-                                            `${meta.Marca || ''} ${meta.Modelo || ''} ${meta.Tipo ? `• ${meta.Tipo}` : ''}`.trim() || 'Vehículo Detectado'
+                                            [meta.Marca, meta.Modelo, meta.Tipo]
+                                                .filter(val => val && !['unknown', 'null', 'undefined'].includes(val.toLowerCase()))
+                                                .join(' • ') || 'Vehículo Detectado'
                                         ) : isCall ? (
-                                            'INTERCOMUNICADOR'
+                                            `A: ${callDest}`
+                                        ) : (event.plateDetected === 'DOOR_OPEN' || event.plateDetected === 'DOOR_CLOSE') ? (
+                                            event.device?.name || 'ACCIONAMIENTO MANUAL'
+                                        ) : (event.accessType === 'FACE') ? (
+                                            faceSimilarity ? `${faceSimilarity}% SIMILITUD (CAMARA)` : (faceName ? 'IDENTIFICADO POR CAMARA' : 'ROSTRO NO IDENTIFICADO')
                                         ) : (
-                                            `SIMILITUD: ${meta.Similitud || 'N/A'}`
+                                            `SIMILITUD: ${meta.Similitud || 'VERIFICADO'}`
                                         )}
                                     </p>
-                                    {meta.Color && (
-                                        <div className="w-2 h-2 rounded-full border border-white/20" style={{ backgroundColor: meta.Color.toLowerCase() === 'blanco' ? '#fff' : meta.Color.toLowerCase() === 'negro' ? '#000' : meta.Color }} />
-                                    )}
                                 </div>
-                                {event.user?.name && event.accessType === "PLATE" && ( // Only show user name here if it's PLATE, otherwise it's already main title
-                                    <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-0.5">
-                                        {event.user.name}
-                                    </p>
+                                {meta.Color && (
+                                    <div className="w-2 h-2 rounded-full border border-white/20" style={{ backgroundColor: meta.Color.toLowerCase() === 'blanco' ? '#fff' : meta.Color.toLowerCase() === 'negro' ? '#000' : meta.Color }} />
                                 )}
                             </div>
+                            {event.user?.name && event.accessType === "PLATE" && (
+                                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-0.5">
+                                    {event.user.name}
+                                </p>
+                            )}
                         </div>
+
 
                         {/* RIGHT: DECISION & TIME */}
                         <div className="flex flex-col items-end gap-1 shrink-0">
                             <div className="flex items-center gap-2">
-                                {plateCount > 1 && event.plateDetected !== "NO_LEIDA" && event.plateDetected !== "unknown" && (
+                                {plateCount > 1 && event.plateDetected !== "NO_LEIDA" && event.plateDetected !== "unknown" && !isCall && (
                                     <Badge className="bg-white/5 text-neutral-400 border-white/10 text-[9px] font-black px-1.5 h-5 flex items-center justify-center">
                                         {plateCount}x Hoy
                                     </Badge>
                                 )}
                                 <div className={cn(
-                                    "px-2 py-1.5 rounded-lg font-black text-[10px] uppercase text-center tracking-tighter shadow-lg flex items-center justify-center gap-1.5 min-w-[100px]",
-                                    event.decision === "GRANT"
-                                        ? "bg-emerald-600 text-white shadow-emerald-900/40 border border-emerald-500/30"
-                                        : "bg-red-600 text-white shadow-red-900/40 border border-red-500/30"
+                                    "px-2 py-1.5 rounded-lg font-black text-[10px] uppercase text-center tracking-tighter shadow-lg flex items-center justify-center gap-1.5 min-w-[80px]",
+                                    isCall
+                                        ? "bg-blue-600 text-white shadow-blue-900/40 border border-blue-500/30 animate-pulse"
+                                        : (event.plateDetected === 'DOOR_OPEN')
+                                            ? "bg-emerald-600 text-white shadow-emerald-900/40 border border-emerald-500/30"
+                                            : (event.plateDetected === 'DOOR_CLOSE')
+                                                ? "bg-neutral-600 text-white shadow-neutral-900/40 border border-neutral-500/30"
+                                                : event.decision === "GRANT"
+                                                    ? "bg-emerald-600 text-white shadow-emerald-900/40 border border-emerald-500/30"
+                                                    : "bg-red-600 text-white shadow-red-900/40 border border-red-500/30"
                                 )}>
-                                    {event.decision === "GRANT"
-                                        ? <><CheckCircle2 size={12} /> PERMITIDO</>
-                                        : <><XCircle size={12} /> DENEGADO</>
+                                    {isCall
+                                        ? <><Phone size={12} fill="currentColor" /> LLAMANDO</>
+                                        : (event.plateDetected === 'DOOR_OPEN')
+                                            ? <><DoorOpen size={12} /> ABIERTA</>
+                                            : (event.plateDetected === 'DOOR_CLOSE')
+                                                ? <><LogOut size={12} /> CERRADA</>
+                                                : event.decision === "GRANT"
+                                                    ? <><CheckCircle2 size={12} /> PERMITIDO</>
+                                                    : <><XCircle size={12} /> DENEGADO</>
                                     }
                                 </div>
                             </div>
@@ -424,7 +554,7 @@ export default function AccessDashboard() {
                         </div>
                     </div>
                 </div>
-            </EventDetailsDialog>
+            </EventDetailsDialog >
         );
     };
 
@@ -452,34 +582,50 @@ export default function AccessDashboard() {
                         <div className="flex items-center gap-2 bg-black/40 p-1.5 rounded-xl border border-white/5">
                             <Filter size={11} className="text-neutral-600 shrink-0 mx-1" />
                             <div className="flex-1 flex justify-center gap-1 border-x border-white/5 px-2">
-                                {(["ALL", "GRANT", "DENY"] as const).map((f) => (
-                                    <button
-                                        key={f}
-                                        onClick={() => setActiveFilter(f)}
-                                        className={cn(
-                                            "w-7 h-7 flex items-center justify-center rounded-lg transition-all",
-                                            activeFilter === f
-                                                ? (f === 'GRANT' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-900/40' : f === 'DENY' ? 'bg-red-500 text-white shadow-lg shadow-red-900/40' : 'bg-indigo-500 text-white shadow-lg shadow-indigo-900/40')
-                                                : "text-neutral-600 hover:text-neutral-400 hover:bg-white/5"
-                                        )}
-                                    >
-                                        {f === 'ALL' ? <Activity size={12} /> : f === 'GRANT' ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
-                                    </button>
-                                ))}
+                                <TooltipProvider>
+                                    {(["ALL", "GRANT", "DENY"] as const).map((f) => (
+                                        <Tooltip key={f}>
+                                            <TooltipTrigger asChild>
+                                                <button
+                                                    onClick={() => { setActiveFilter(f); localStorage.setItem('dashboard_activeFilter', f); }}
+                                                    className={cn(
+                                                        "w-7 h-7 flex items-center justify-center rounded-lg transition-all",
+                                                        activeFilter === f
+                                                            ? (f === 'GRANT' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-900/40' : f === 'DENY' ? 'bg-red-500 text-white shadow-lg shadow-red-900/40' : 'bg-indigo-500 text-white shadow-lg shadow-indigo-900/40')
+                                                            : "text-neutral-600 hover:text-neutral-400 hover:bg-white/5"
+                                                    )}
+                                                >
+                                                    {f === 'ALL' ? <Activity size={12} /> : f === 'GRANT' ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
+                                                </button>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top">
+                                                <p>{f === 'ALL' ? 'Todos los Eventos' : f === 'GRANT' ? 'Solo Permitidos' : 'Solo Denegados'}</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    ))}
+                                </TooltipProvider>
                             </div>
                             <div className="flex gap-1 pr-1">
-                                {(["ALL", "PLATE", "FACE", "TAG"] as const).map((t) => (
-                                    <button
-                                        key={t}
-                                        onClick={() => setActiveType(t)}
-                                        className={cn(
-                                            "w-7 h-7 flex items-center justify-center rounded-lg transition-all",
-                                            activeType === t ? "bg-white/10 text-indigo-400 border border-indigo-500/30" : "text-neutral-600 hover:text-neutral-400 hover:bg-white/5"
-                                        )}
-                                    >
-                                        {t === 'ALL' ? <Zap size={12} /> : t === 'PLATE' ? <Car size={12} /> : t === 'FACE' ? <UserIcon size={12} /> : <CreditCard size={12} />}
-                                    </button>
-                                ))}
+                                <TooltipProvider>
+                                    {(["ALL", "PLATE", "FACE", "TAG"] as const).map((t) => (
+                                        <Tooltip key={t}>
+                                            <TooltipTrigger asChild>
+                                                <button
+                                                    onClick={() => { setActiveType(t); localStorage.setItem('dashboard_activeType', t); }}
+                                                    className={cn(
+                                                        "w-7 h-7 flex items-center justify-center rounded-lg transition-all",
+                                                        activeType === t ? "bg-white/10 text-indigo-400 border border-indigo-500/30" : "text-neutral-600 hover:text-neutral-400 hover:bg-white/5"
+                                                    )}
+                                                >
+                                                    {t === 'ALL' ? <Zap size={12} /> : t === 'PLATE' ? <Car size={12} /> : t === 'FACE' ? <UserIcon size={12} /> : <CreditCard size={12} />}
+                                                </button>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top">
+                                                <p>{t === 'ALL' ? 'Todos los Tipos' : t === 'PLATE' ? 'Solo LPR' : t === 'FACE' ? 'Solo Facial' : 'Solo Credenciales'}</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    ))}
+                                </TooltipProvider>
                             </div>
                         </div>
                     </div>
@@ -495,7 +641,29 @@ export default function AccessDashboard() {
                             <div className="p-2 bg-indigo-500/20 rounded-lg"><Camera className="text-indigo-400" size={18} /></div>
                             <div>
                                 <h3 className="text-sm font-black text-white uppercase tracking-tighter">Últimas Capturas</h3>
-                                <p className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest">Evidencia Visual</p>
+                                <div className="flex items-center gap-2">
+                                    <p className="text-[9px] text-neutral-500 font-bold uppercase tracking-widest">Evidencia Visual</p>
+                                    <div className="flex items-center gap-1 bg-black/40 px-1.5 py-0.5 rounded-full border border-white/5">
+                                        <div className={cn("w-1.5 h-1.5 rounded-full", isConnected ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
+                                        <span className={cn("text-[7px] font-black uppercase tracking-wider", isConnected ? "text-emerald-500" : "text-red-500")}>
+                                            {isConnected ? "LIVE" : "OFFLINE"}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-4 ml-8 pl-8 border-l border-white/5 h-8">
+                                <div className="flex flex-col items-start">
+                                    <span className="text-[8px] text-indigo-400 font-black uppercase tracking-widest leading-none mb-0.5">Entrada</span>
+                                    {lastEntry ? (
+                                        <span className="text-[10px] font-mono font-bold text-white"><TimeAgo timestamp={lastEntry.timestamp} /></span>
+                                    ) : <span className="text-[10px] font-mono text-neutral-600">-</span>}
+                                </div>
+                                <div className="flex flex-col items-start">
+                                    <span className="text-[8px] text-orange-400 font-black uppercase tracking-widest leading-none mb-0.5">Salida</span>
+                                    {lastExit ? (
+                                        <span className="text-[10px] font-mono font-bold text-white"><TimeAgo timestamp={lastExit.timestamp} /></span>
+                                    ) : <span className="text-[10px] font-mono text-neutral-600">-</span>}
+                                </div>
                             </div>
                         </div>
                         <Badge className="bg-indigo-500/20 text-indigo-400 border-indigo-500/30 font-black">{captureEvents.length}</Badge>
@@ -511,7 +679,14 @@ export default function AccessDashboard() {
                                 });
                             }
 
-                            const marca = detailsMap['Marca'];
+                            // Retroactive fix for unmapped brands (e.g., "Brand 1123")
+                            let marca = detailsMap['Marca'];
+                            if (marca?.startsWith("Brand ")) {
+                                const code = marca.replace("Brand ", "");
+                                const mapped = getVehicleBrandName(code);
+                                if (mapped !== marca) marca = mapped;
+                            }
+
                             const color = detailsMap['Color'];
                             let tipo = detailsMap['Tipo']?.toUpperCase();
                             if (tipo === 'VEHICLE' || tipo === 'CAR') tipo = 'AUTO';
@@ -519,6 +694,7 @@ export default function AccessDashboard() {
 
                             const faceCropUrl = getImageUrl(detailsMap['FaceImage']);
                             const similarity = detailsMap['Similitud'];
+                            const cameraName = detailsMap['Rostro'];
 
                             const logoUrl = getCarLogo(marca);
                             const getVehicleIcon = (t: string | undefined) => {
@@ -531,6 +707,8 @@ export default function AccessDashboard() {
                             };
 
                             const isFace = event.accessType === 'FACE';
+                            const isTag = event.accessType === 'TAG' || event.accessType === 'PIN';
+                            const isLPR = !isFace && !isTag;
 
                             return (
                                 <EventDetailsDialog key={event.id} event={event}>
@@ -561,6 +739,8 @@ export default function AccessDashboard() {
                                                 }
                                             </div>
 
+
+
                                             {/* Timestamp */}
                                             <div className="px-2 py-0.5 rounded bg-black/50 backdrop-blur-md border border-white/10 shadow-lg flex items-center gap-1">
                                                 <div className="w-1 h-1 rounded-full bg-indigo-500 animate-pulse" />
@@ -570,25 +750,32 @@ export default function AccessDashboard() {
                                             </div>
                                         </div>
 
-                                        {/* FACE CROP OVERLAY (Bottom Right, left of decision) */}
-                                        {isFace && faceCropUrl && (
-                                            <div className="absolute bottom-3 right-16 z-10 w-10 h-10 rounded-lg overflow-hidden border border-white/30 shadow-2xl bg-black">
+                                        {/* FACE CROP OVERLAY (Above Decision Button) */}
+                                        {isFace && (faceCropUrl || event.user?.cara) && (
+                                            <div className="absolute bottom-12 right-3 z-10 w-14 h-14 rounded-xl overflow-hidden border-2 border-white/50 shadow-2xl bg-black animate-in zoom-in slide-in-from-bottom-4 duration-500">
                                                 <Image
-                                                    src={faceCropUrl}
+                                                    src={faceCropUrl || getImageUrl(event.user?.cara) || ""}
                                                     alt="Face"
                                                     fill
                                                     className="object-cover"
                                                 />
+                                                {similarity && <div className="absolute bottom-0 inset-x-0 bg-black/70 text-[8px] text-white text-center font-bold py-0.5 tracking-tighter">{similarity}%</div>}
                                             </div>
                                         )}
 
                                         {/* Identity / Plate Overlay */}
                                         {/* Center Overlay: Resident Name & Time Status */}
-                                        {(event.user?.name || (detailsMap['Name'] && detailsMap['Name'] !== 'unknown')) && (
+                                        {(event.user?.name || (detailsMap['Name'] && detailsMap['Name'] !== 'unknown') || cameraName) && (
                                             <div className="absolute inset-0 flex flex-col items-center justify-center z-20 pointer-events-none p-4 text-center">
                                                 <h3 className="text-2xl font-black text-white uppercase tracking-tighter drop-shadow-[0_4px_4px_rgba(0,0,0,1)] bg-black/40 px-4 py-1 rounded-full backdrop-blur-[2px]">
-                                                    {event.user?.name || detailsMap['Name']}
+                                                    {event.user?.name || cameraName || detailsMap['Name']}
                                                 </h3>
+                                                {isFace && similarity && (
+                                                    <div className="mt-1 bg-black/60 px-2 py-0.5 rounded text-emerald-400 font-black text-[9px] uppercase tracking-widest shadow-lg backdrop-blur-md">
+                                                        {similarity}% COINCIDENCIA
+                                                    </div>
+                                                )}
+
                                                 {(() => {
                                                     const duration = calculateDuration(event);
                                                     if (duration) {
@@ -606,12 +793,13 @@ export default function AccessDashboard() {
                                                     }
                                                     return null;
                                                 })()}
+
                                             </div>
                                         )}
 
                                         {/* Identity / Plate Overlay (Bottom Left) */}
                                         <div className="absolute bottom-3 left-3 flex flex-col items-start z-10 max-w-[70%]">
-                                            {!(event.user?.name || (detailsMap['Name'] && detailsMap['Name'] !== 'unknown')) && (() => {
+                                            {!(event.user?.name || (detailsMap['Name'] && detailsMap['Name'] !== 'unknown') || cameraName) && (() => {
                                                 const duration = calculateDuration(event);
                                                 if (!duration) return null;
                                                 return (
@@ -623,23 +811,24 @@ export default function AccessDashboard() {
                                                 );
                                             })()}
 
-                                            {isFace ? (
-                                                // FACE IDENTITY STYLE (Only if Unknown, otherwise name is in center)
-                                                !(event.user?.name || (detailsMap['Name'] && detailsMap['Name'] !== 'unknown')) && (
+                                            {(isFace || isTag) ? (
+                                                // FACE/TAG IDENTITY STYLE (Only if Unknown, otherwise name is in center)
+                                                !(event.user?.name || (detailsMap['Name'] && detailsMap['Name'] !== 'unknown') || cameraName) && (
                                                     <div className="flex flex-col items-start">
                                                         <div className="flex items-center gap-2 bg-black/60 backdrop-blur-xl border border-white/10 rounded-lg px-3 py-1.5 shadow-2xl">
-                                                            <UserIcon size={14} className="text-white" />
+                                                            {isFace ? <UserIcon size={14} className="text-white" /> : <CreditCard size={14} className="text-white" />}
                                                             <div>
                                                                 <p className="text-[12px] font-black text-white leading-none uppercase tracking-wide">
-                                                                    Desconocido
+                                                                    {isTag ? "Tarjeta" : "Desconocido"}
                                                                 </p>
-                                                                {similarity && <p className="text-[8px] text-emerald-400 font-bold uppercase tracking-wider">{similarity}% Similitud</p>}
+                                                                {isFace && similarity && <p className="text-[8px] text-emerald-400 font-bold uppercase tracking-wider">{similarity}% Similitud</p>}
+                                                                {isTag && event.plateDetected && <p className="text-[8px] text-neutral-400 font-mono uppercase tracking-wider">{event.plateDetected}</p>}
                                                             </div>
                                                         </div>
                                                     </div>
                                                 )
                                             ) : (
-                                                // PLATE IDENTITY STYLE (Always Show)
+                                                // PLATE IDENTITY STYLE (Always Show for LPR)
                                                 <div className="flex flex-col bg-white border-2 border-neutral-800 rounded-sm overflow-hidden shadow-2xl min-w-[100px]">
                                                     <div className="h-1 bg-blue-600 w-full" />
                                                     <p className="text-[16px] font-black text-black tracking-[0.2em] uppercase px-3 py-0.5 text-center font-mono">
@@ -660,12 +849,20 @@ export default function AccessDashboard() {
                                             </Badge>
                                         </div>
 
-                                        {/* Attributes Overlay (Only for vehicles) */}
-                                        {!isFace && (
+                                        {/* Attributes Overlay (Only for vehicles/tags) */}
+                                        {(isLPR || isTag) && (
                                             <div className="absolute top-3 left-3 flex flex-col gap-2">
-                                                {logoUrl && (
+                                                {/* LPR Logo */}
+                                                {isLPR && logoUrl && (
                                                     <div className="bg-white rounded-lg p-1.5 shadow-2xl w-10 h-10 flex items-center justify-center">
                                                         <div className="relative w-7 h-7"><Image src={logoUrl} alt="Logo" fill className="object-contain" /></div>
+                                                    </div>
+                                                )}
+
+                                                {/* Tag Icon */}
+                                                {isTag && (
+                                                    <div className="bg-black/40 border border-white/10 backdrop-blur-md rounded-lg p-1.5 shadow-2xl w-10 h-10 flex items-center justify-center">
+                                                        <CreditCard className="text-white/80" size={20} />
                                                     </div>
                                                 )}
                                                 <div className="flex flex-col gap-1 items-start pl-1 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">

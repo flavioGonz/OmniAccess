@@ -82,7 +82,14 @@ export function getCarLogo(brandName: string | null | undefined): string | null 
         searchName.includes(entry.name.toLowerCase())
     );
 
-    return logoEntry ? logoEntry.image.optimized : null;
+    if (!logoEntry) return null;
+
+    const url = logoEntry.image.optimized;
+    if (url.startsWith('http')) return url;
+
+    // Fallback for local paths to use remote GitHub raw
+    const relativePath = logoEntry.image.optimized.replace(/^\./, '');
+    return `https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos${relativePath}`;
 }
 
 export const VEHICLE_BRANDS = [

@@ -20,7 +20,10 @@ import {
     HardDrive,
     Download,
     Upload,
-    Table as TableIcon
+    Table as TableIcon,
+    ScanFace,
+    ScanLine,
+    Car
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +36,20 @@ import { useEffect } from "react";
 import { toast } from "sonner";
 
 const SETTINGS_SECTIONS = [
+    {
+        id: "mode_face",
+        icon: ScanFace,
+        label: "Modo Face",
+        description: "Comportamiento Rec. Facial",
+        color: "teal"
+    },
+    {
+        id: "mode_lpr",
+        icon: ScanLine,
+        label: "Modo LPR",
+        description: "Lógica de Matrículas",
+        color: "amber"
+    },
     {
         id: "drivers",
         icon: Camera,
@@ -141,6 +158,34 @@ export default function SettingsPage() {
 
                 {/* Main Content */}
                 <div className="col-span-12 lg:col-span-9">
+                    {/* Mode Face Section */}
+                    {activeSection === "mode_face" && (
+                        <ModeConfiguration
+                            title="Modo Face"
+                            description="Define cómo se comporta el sistema ante eventos de reconocimiento facial"
+                            settingKey="MODE_FACE"
+                            options={[
+                                { id: "BLACKLIST", label: "Lista Negra", desc: "Las capturas identificadas serán DENEGADAS automáticamente.", icon: ShieldAlert, color: "red" },
+                                { id: "WHITELIST", label: "Lista Blanca", desc: "Las capturas identificadas serán PERMITIDAS automáticamente.", icon: ShieldCheck, color: "emerald" },
+                                { id: "LEARNING", label: "Aprendizaje", desc: "Modo en desarrollo. Captura rostros para entrenamiento.", icon: Cpu, color: "amber", disabled: true }
+                            ]}
+                        />
+                    )}
+
+                    {/* Mode LPR Section */}
+                    {activeSection === "mode_lpr" && (
+                        <ModeConfiguration
+                            title="Modo LPR"
+                            description="Define la lógica de control para matrículas detectadas"
+                            settingKey="MODE_LPR"
+                            options={[
+                                { id: "BLACKLIST", label: "Lista Negra", desc: "Las matrículas identificadas en lista serán DENEGADAS.", icon: ShieldAlert, color: "red" },
+                                { id: "WHITELIST", label: "Lista Blanca", desc: "Las matrículas identificadas en lista serán PERMITIDAS.", icon: ShieldCheck, color: "emerald" },
+                                { id: "LEARNING", label: "Aprendizaje", desc: "Agrega matrículas desconocidas a la base de datos.", icon: Activity, color: "blue" }
+                            ]}
+                        />
+                    )}
+
                     {/* Drivers Section */}
                     {activeSection === "drivers" && (
                         <div className="space-y-6">
@@ -811,6 +856,116 @@ function StorageSection() {
                         GUARDAR CONFIGURACIÓN
                     </Button>
                 </div>
+            </div>
+        </div>
+    );
+}
+
+function ModeConfiguration({ title, description, settingKey, options }: {
+    title: string,
+    description: string,
+    settingKey: string,
+    options: { id: string, label: string, desc: string, icon: any, color: string, disabled?: boolean }[]
+}) {
+    const [currentMode, setCurrentMode] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        loadSetting();
+    }, [settingKey]);
+
+    const loadSetting = async () => {
+        setLoading(true);
+        try {
+            const res = await getSetting(settingKey);
+            setCurrentMode(res?.value || null);
+        } catch (err) {
+            console.error("Error loading setting:", err);
+            toast.error("Error al cargar la configuración");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSelect = async (modeId: string) => {
+        setSaving(true);
+        // Optimistic update
+        const prev = currentMode;
+        setCurrentMode(modeId);
+
+        try {
+            await updateSetting(settingKey, modeId);
+            toast.success("Modo actualizado exitosamente");
+        } catch (err) {
+            setCurrentMode(prev); // Revert
+            toast.error("Error al guardar el modo");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-8 space-y-8 animate-in slide-in-from-bottom-5 duration-500">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h2 className="text-2xl font-black text-white">{title}</h2>
+                    <p className="text-sm text-neutral-500 mt-1">{description}</p>
+                </div>
+                {loading && <RefreshCcw className="animate-spin text-blue-500" size={20} />}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {options.map((option) => {
+                    const Icon = option.icon;
+                    const isSelected = currentMode === option.id;
+                    const isDisabled = option.disabled || loading || saving;
+
+                    return (
+                        <button
+                            key={option.id}
+                            onClick={() => !isDisabled && handleSelect(option.id)}
+                            disabled={isDisabled}
+                            className={cn(
+                                "relative p-6 rounded-2xl border text-left transition-all duration-300 group",
+                                isSelected
+                                    ? `bg-${option.color}-500/10 border-${option.color}-500/50 ring-1 ring-${option.color}-500/50 shadow-xl shadow-${option.color}-900/20`
+                                    : isDisabled
+                                        ? "bg-neutral-900/20 border-white/5 opacity-50 cursor-not-allowed"
+                                        : "bg-neutral-900/40 border-white/5 hover:bg-neutral-900/60 hover:border-white/10 hover:scale-[1.02]"
+                            )}
+                        >
+                            {isSelected && (
+                                <div className={`absolute top-4 right-4 w-3 h-3 rounded-full bg-${option.color}-500 shadow-[0_0_10px_currentColor] animate-pulse`} />
+                            )}
+
+                            <div className={cn(
+                                "w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors",
+                                isSelected ? `bg-${option.color}-500/20 text-${option.color}-400` : "bg-white/5 text-neutral-500 group-hover:bg-white/10 group-hover:text-neutral-300"
+                            )}>
+                                <Icon size={24} />
+                            </div>
+
+                            <h3 className={cn(
+                                "text-lg font-black mb-2",
+                                isSelected ? "text-white" : "text-neutral-300"
+                            )}>
+                                {option.label}
+                            </h3>
+
+                            <p className="text-xs text-neutral-500 font-medium leading-relaxed">
+                                {option.desc}
+                            </p>
+
+                            {option.disabled && (
+                                <div className="mt-4 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                                    <Info size={10} />
+                                    <span className="text-[9px] font-black uppercase tracking-wider">En Desarrollo</span>
+                                </div>
+                            )}
+                        </button>
+                    );
+                })}
             </div>
         </div>
     );

@@ -112,11 +112,23 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
     // Helper to get proper image URL from MinIO
     const getImageUrl = (path: string | null | undefined): string => {
         if (!path) return "/placeholder-camera.jpg";
-        if (path.startsWith('http') || path.startsWith('/api/files')) return path;
+        if (path.startsWith('http') || path.startsWith('/')) return path;
         return `/api/files/${path}`;
     };
 
     const meta = parseDetails(event.details);
+
+    // Parse Similarity and Mode
+    let cleanSim = meta.Similitud || '';
+    let detectedMode = 'Estándar';
+    if (cleanSim.includes('(Modo:')) {
+        const m = cleanSim.match(/\(Modo:\s*(\w+)\)/);
+        if (m) {
+            cleanSim = cleanSim.replace(m[0], '').trim();
+            detectedMode = m[1] === 'WHITELIST' ? 'Lista Blanca' : m[1] === 'BLACKLIST' ? 'Lista Negra' : m[1];
+        }
+    }
+
     const logoUrl = isLPR ? getCarLogo(meta.Marca) : null;
     const eventImageUrl = getImageUrl(event.imagePath || event.snapshotPath || event.user?.cara);
     const userImageUrl = event.user?.cara ? getImageUrl(event.user.cara) : null;
@@ -162,7 +174,7 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
                                     event.accessType === 'FACE' ? "w-full h-[500px] lg:h-auto lg:flex-1" : // Face takes full available height
                                         "w-full p-8 aspect-square bg-neutral-950"
                             )}
-                            onMouseEnter={() => setIsImageHovered(true)}
+                            onMouseEnter={() => accessType !== 'FACE' && setIsImageHovered(true)}
                         >
                             <img
                                 src={eventImageUrl}
@@ -185,11 +197,11 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
                                     <div className="absolute bottom-8 left-8 z-30 max-w-[70%]">
                                         <div className="flex items-center gap-2 mb-2">
                                             <div className="px-2 py-0.5 rounded bg-white/20 backdrop-blur-md border border-white/20 text-[10px] font-bold text-white uppercase tracking-widest">
-                                                Lista Permitida
+                                                Lista: {detectedMode}
                                             </div>
-                                            {meta.Similitud && (
+                                            {cleanSim && (
                                                 <div className="px-2 py-0.5 rounded bg-emerald-500/20 backdrop-blur-md border border-emerald-500/30 text-[10px] font-bold text-emerald-300 uppercase tracking-widest">
-                                                    {meta.Similitud}% Similitud
+                                                    {cleanSim} Similitud
                                                 </div>
                                             )}
                                         </div>
@@ -214,10 +226,10 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
                                     </div>
 
                                     {/* Face Crop (Bottom Right) */}
-                                    {meta.FaceImage && (
+                                    {(meta.FaceImage || event.user?.cara) && (
                                         <div className="absolute bottom-8 right-8 z-40 w-32 h-32 rounded-xl overflow-hidden border-2 border-white/50 shadow-2xl bg-black transition-transform hover:scale-110 origin-bottom-right group-hover:border-white">
                                             <img
-                                                src={getImageUrl(meta.FaceImage)}
+                                                src={getImageUrl(meta.FaceImage || event.user?.cara)}
                                                 className="w-full h-full object-cover"
                                                 alt="Rostro"
                                             />
@@ -227,12 +239,29 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
                             )}
 
 
-                            {/* STATUS BADGE (Top Right for Face/Non-LPR) */}
-                            {!isLPR && (
+                            {/* TOP RIGHT: MODE BADGE (Only for Face) */}
+                            {(isLPR || event.accessType === 'FACE') && (
                                 <div className="absolute top-6 right-6 z-30">
+                                    <div className="px-3 py-1 rounded-full bg-black/50 backdrop-blur-md border border-white/10 text-white shadow-xl">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest">
+                                            {event.accessType === 'FACE' ? `Modo: ${detectedMode}` : 'LPR MONITOR'}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* STATUS BADGE & TIME (Moved to Above Face Face/Bottom Right) */}
+                            {!isLPR && (
+                                <div className={cn("absolute z-50 flex flex-col items-end gap-1", (meta.FaceImage || event.user?.cara) ? "bottom-44 right-8" : "bottom-8 right-8")}>
+                                    {/* Date/Time */}
+                                    <div className="bg-black/60 px-2 py-1 rounded backdrop-blur-sm border border-white/10 mb-1">
+                                        <p className="text-[10px] font-mono text-white font-bold">{dateStr} {timeStr}</p>
+                                    </div>
+
+                                    {/* Decision Badge */}
                                     <div className={cn(
                                         "px-4 py-1.5 rounded-full shadow-2xl backdrop-blur-xl border flex items-center gap-2",
-                                        isGrant ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300" : "bg-red-500/20 border-red-500/40 text-red-300"
+                                        isGrant ? "bg-emerald-500/90 border-emerald-500/40 text-white" : "bg-red-500/90 border-red-500/40 text-white"
                                     )}>
                                         {isGrant ? <ShieldCheck size={14} strokeWidth={2.5} /> : <AlertCircle size={14} strokeWidth={2.5} />}
                                         <span className="text-xs font-black uppercase tracking-wider leading-none">
@@ -449,12 +478,16 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
                                 )}
                             </div>
 
-                            {event.user ? (
+                            {(event.user || (accessType === 'FACE' && (meta.Rostro || meta.FaceImage || event.snapshotPath))) ? (
                                 <div className="bg-neutral-900 rounded-xl p-5 border border-neutral-800">
                                     <div className="flex items-start gap-4">
                                         <div className="relative w-20 h-20 rounded-lg overflow-hidden border-2 border-neutral-700 bg-neutral-800 shrink-0">
-                                            {userImageUrl ? (
-                                                <img src={userImageUrl} alt="Usuario" className="w-full h-full object-cover" />
+                                            {(userImageUrl || (meta.FaceImage && getImageUrl(meta.FaceImage)) || getImageUrl(event.snapshotPath)) ? (
+                                                <img
+                                                    src={userImageUrl || getImageUrl(meta.FaceImage) || getImageUrl(event.snapshotPath)}
+                                                    alt="Usuario"
+                                                    className="w-full h-full object-cover"
+                                                />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center"><UserIcon size={32} className="text-neutral-600" /></div>
                                             )}
@@ -467,13 +500,15 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
                                                 </div>
                                             ) : (
                                                 <>
-                                                    <h4 className="text-lg font-black text-white uppercase truncate">{editedUser || event.user.name}</h4>
+                                                    <h4 className="text-lg font-black text-white uppercase truncate">{editedUser || event.user?.name || meta.Rostro || "Desconocido"}</h4>
                                                     <div className="flex items-center gap-2 mb-2">
                                                         <Building2 size={12} className="text-blue-400" />
-                                                        <p className="text-sm font-bold text-blue-400 uppercase truncate">{editedUnit || event.user.unit?.name || 'Sin Unidad'}</p>
+                                                        <p className="text-sm font-bold text-blue-400 uppercase truncate">{editedUnit || event.user?.unit?.name || 'Externo'}</p>
                                                     </div>
                                                     <div className="flex gap-2">
-                                                        <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[9px]">VERIFICADO</Badge>
+                                                        <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[9px]">
+                                                            {event.user ? "VERIFICADO" : "DETECTADO"}
+                                                        </Badge>
                                                     </div>
                                                 </>
                                             )}

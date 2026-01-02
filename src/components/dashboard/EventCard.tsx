@@ -31,30 +31,67 @@ export function EventCard({ event }: EventCardProps) {
                 backdrop-blur-sm
             `}>
                 {/* Images Section */}
+                {/* Images Section */}
                 <div className="flex h-20 relative">
-                    {/* User Face Image */}
-                    <div className="w-1/2 bg-neutral-950 relative flex items-center justify-center overflow-hidden">
-                        {userFaceUrl ? (
-                            <Image src={userFaceUrl} alt="User Face" fill sizes="50vw" className="object-cover group-hover:scale-125 transition-transform duration-700 opacity-60 group-hover:opacity-100" />
-                        ) : (
-                            <UserIcon size={24} className="text-neutral-800" />
-                        )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                    {/* Plate Capture Image */}
-                    <div className="w-1/2 bg-[#080808] relative flex items-center justify-center border-l border-white/5 overflow-hidden">
-                        {plateImageUrl ? (
-                            <Image src={plateImageUrl} alt="Plate Capture" fill sizes="50vw" className="object-cover group-hover:scale-125 transition-transform duration-700 opacity-60 group-hover:opacity-100" />
-                        ) : (
-                            <Car size={24} className="text-neutral-800" />
-                        )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
+                    {event.accessType === "FACE" && plateImageUrl ? (
+                        <>
+                            {/* Full Scene Background */}
+                            <div className="absolute inset-0 bg-[#080808]">
+                                <Image
+                                    src={plateImageUrl}
+                                    alt="Scene Capture"
+                                    fill
+                                    sizes="250px"
+                                    className="object-cover group-hover:scale-110 transition-transform duration-700 opacity-80 group-hover:opacity-100"
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60" />
+                            </div>
 
-                    {/* Quick Status Tag */}
-                    <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-full bg-black/60 text-white text-[7px] font-black uppercase tracking-widest backdrop-blur-md border border-white/5 shadow-2xl z-10">
-                        Intel
-                    </div>
+                            {/* Overlay User Face */}
+                            {userFaceUrl && (
+                                <div className="absolute bottom-1 right-1 w-10 h-14 rounded border border-white/30 bg-black overflow-hidden shadow-xl z-10 group-hover:scale-110 transition-transform origin-bottom-right">
+                                    <Image
+                                        src={userFaceUrl}
+                                        alt="User Face"
+                                        fill
+                                        sizes="50px"
+                                        className="object-cover"
+                                    />
+                                </div>
+                            )}
+
+                            {/* Quick Status Tag */}
+                            <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-full bg-blue-500/80 text-white text-[7px] font-black uppercase tracking-widest backdrop-blur-md border border-white/10 shadow-lg z-20">
+                                FACE ID
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            {/* User Face Image */}
+                            <div className="w-1/2 bg-neutral-950 relative flex items-center justify-center overflow-hidden">
+                                {userFaceUrl ? (
+                                    <Image src={userFaceUrl} alt="User Face" fill sizes="50vw" className="object-cover group-hover:scale-125 transition-transform duration-700 opacity-60 group-hover:opacity-100" />
+                                ) : (
+                                    <UserIcon size={24} className="text-neutral-800" />
+                                )}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
+                            {/* Plate Capture Image */}
+                            <div className="w-1/2 bg-[#080808] relative flex items-center justify-center border-l border-white/5 overflow-hidden">
+                                {plateImageUrl ? (
+                                    <Image src={plateImageUrl} alt="Plate Capture" fill sizes="50vw" className="object-cover group-hover:scale-125 transition-transform duration-700 opacity-60 group-hover:opacity-100" />
+                                ) : (
+                                    <Car size={24} className="text-neutral-800" />
+                                )}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
+
+                            {/* Quick Status Tag */}
+                            <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-full bg-black/60 text-white text-[7px] font-black uppercase tracking-widest backdrop-blur-md border border-white/5 shadow-2xl z-10">
+                                Intel
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 {/* Info Section */}

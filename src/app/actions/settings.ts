@@ -9,6 +9,10 @@ import {
     PutBucketLifecycleConfigurationCommand,
     HeadObjectCommand
 } from "@aws-sdk/client-s3";
+import fs from "fs/promises";
+import path from "path";
+
+// ... existing code ...
 
 export async function getSetting(key: string) {
     const setting = await prisma.setting.findUnique({
@@ -254,6 +258,46 @@ export async function downloadBackup() {
 
         return { success: true, data: backupData };
     } catch (error: any) {
+        return { success: false, message: error.message };
+    }
+}
+
+export async function saveHikvisionBrands(brands: Record<string, string>) {
+    try {
+        // Convert to sorted object string
+        const sortedKeys = Object.keys(brands).sort((a, b) => parseInt(a) - parseInt(b));
+        const entries = sortedKeys.map(key => `    ${key}: '${brands[key].replace(/'/g, "\\'")}'`).join(',\n');
+
+        // 1. Update TS file
+        const tsPath = path.join(process.cwd(), 'src', 'lib', 'hikvision-codes.ts');
+        let tsContent = await fs.readFile(tsPath, 'utf8');
+
+        const tsRegex = /(export const HIKVISION_VEHICLE_BRANDS: \{ \[key: number\]: string \} = \{)[\s\S]*?(\};)/;
+        if (tsRegex.test(tsContent)) {
+            const newTsBlock = `$1\n${entries}\n$2`;
+            tsContent = tsContent.replace(tsRegex, newTsBlock);
+            await fs.writeFile(tsPath, tsContent, 'utf8');
+        } else {
+            console.error("Could not find HIKVISION_VEHICLE_BRANDS in hikvision-codes.ts");
+        }
+
+        // 2. Update JS file
+        const jsPath = path.join(process.cwd(), 'hikvision-codes.js');
+        let jsContent = await fs.readFile(jsPath, 'utf8');
+
+        // JS uses: const HIKVISION_VEHICLE_BRANDS = { ...
+        const jsRegex = /(const HIKVISION_VEHICLE_BRANDS = \{)[\s\S]*?(\};)/;
+        if (jsRegex.test(jsContent)) {
+            const newJsBlock = `$1\n${entries}\n$2`;
+            jsContent = jsContent.replace(jsRegex, newJsBlock);
+            await fs.writeFile(jsPath, jsContent, 'utf8');
+        } else {
+            console.error("Could not find HIKVISION_VEHICLE_BRANDS in hikvision-codes.js");
+        }
+
+        return { success: true };
+    } catch (error: any) {
+        console.error("Failed to save brands:", error);
         return { success: false, message: error.message };
     }
 }

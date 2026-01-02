@@ -1,28 +1,28 @@
 // Mapeo de códigos Hikvision a valores legibles
 // Basado en la documentación de Hikvision ANPR
 
-// Códigos de Color de Vehículo (en Español)
+// Códigos de Color de Vehículo
 const HIKVISION_VEHICLE_COLORS = {
-    0: 'Desconocido',
-    1: 'Blanco',
-    2: 'Plateado',
-    3: 'Gris',
-    4: 'Negro',
-    5: 'Rojo',
-    6: 'Azul Oscuro',
-    7: 'Azul',
-    8: 'Amarillo',
-    9: 'Verde',
-    10: 'Marrón',
-    11: 'Rosa',
-    12: 'Púrpura',
-    13: 'Púrpura Oscuro',
-    14: 'Cian'
+    0: 'Unknown',
+    1: 'White',
+    2: 'Silver',
+    3: 'Gray',
+    4: 'Black',
+    5: 'Red',
+    6: 'Dark Blue',
+    7: 'Blue',
+    8: 'Yellow',
+    9: 'Green',
+    10: 'Brown',
+    11: 'Pink',
+    12: 'Purple',
+    13: 'Dark Purple',
+    14: 'Cyan'
 };
 
-// Códigos de Marca de Vehículo
+// Códigos de Marca de Vehículo (los más comunes)
 const HIKVISION_VEHICLE_BRANDS = {
-    0: 'Desconocido',
+    0: 'Unknown',
     1: 'Volkswagen',
     2: 'Buick',
     3: 'BMW',
@@ -30,7 +30,7 @@ const HIKVISION_VEHICLE_BRANDS = {
     5: 'Nissan',
     6: 'Audi',
     7: 'Citroen',
-    8: 'Mercedes-Benz',
+    8: 'Benz',
     9: 'Peugeot',
     10: 'Ford',
     11: 'Mazda',
@@ -43,55 +43,84 @@ const HIKVISION_VEHICLE_BRANDS = {
     18: 'Renault',
     19: 'Suzuki',
     20: 'Fiat',
-    21: 'Skoda',
-    22: 'Lexus',
-    23: 'Volvo',
-    24: 'Subaru',
-    25: 'Jeep',
-    26: 'Dodge',
-    27: 'Chrysler',
-    28: 'Cadillac',
-    29: 'Lincoln',
-    30: 'Infiniti',
-    31: 'Acura',
-    32: 'Porsche',
-    33: 'Land Rover',
-    34: 'Jaguar',
-    35: 'Mini',
-    36: 'Bentley',
-    37: 'Ferrari',
-    38: 'Lamborghini',
-    39: 'Maserati',
-    40: 'Alfa Romeo',
-    1036: 'Mercedes-Benz', // Código específico detectado en logs
-    1037: 'BMW', // Código específico detectado en logs
-    1044: 'Peugeot', // Código específico detectado en logs
-    1043: 'Honda', // Código específico detectado en logs
-    1053: 'Volkswagen', // Código específico detectado en logs
-    1060: 'Toyota', // Código específico detectado en logs
-    1064: 'Ford', // Código específico detectado en logs
-    1084: 'Jeep', // Código específico detectado en logs
-    1102: 'Suzuki', // Código específico detectado en logs
-    1104: 'Lexus', // Código específico detectado en logs
-    1105: 'Renault', // Código específico detectado en logs
-    1116: 'Opel', // Código específico detectado en logs
-    1121: 'Kia', // Código específico detectado en logs
-    1123: 'Nissan', // Código específico detectado en logs
-    1133: 'Subaru', // Código específico detectado en logs
-    1139: 'Tesla', // Código específico detectado en logs
-    1149: 'Hyundai', // Código específico detectado en logs
-    1151: 'Chevrolet', // Código específico detectado en logs
-    1576: 'Huanghai', // Código específico detectado en logs
-    1579: 'JAC', // Código específico detectado en logs
-    1737: 'Foton Fordland', // Código específico detectado en logs
-    1806: 'XPeng', // Código específico detectado en logs
+    1028: 'Audi',
+    1030: 'Porsche',
+    1036: 'Mercedes-Benz',
+    1037: 'BMW',
+    1038: 'Baojun',
+    1043: 'Honda',
+    1044: 'Peugeot',
+    1045: 'BYD',
+    1048: 'Great Wall',
+    1050: 'DS',
+    1053: 'Volkswagen',
+    1060: 'Toyota',
+    1063: 'Ferrari',
+    1064: 'Ford',
+    1067: 'Fiat',
+    1083: 'Geely',
+    1084: 'Ford',
+    1101: 'Land Rover',
+    1102: 'Suzuki',
+    1104: 'Lexus',
+    1105: 'Renault',
+    1107: 'Mini',
+    1108: 'Fiat',
+    1112: 'Mazda',
+    1116: 'Opel',
+    1120: 'Chery',
+    1121: 'Volkswagen',
+    1123: 'Nissan',
+    1128: 'Mitsubishi',
+    1133: 'Subaru',
+    1144: 'Volvo',
+    1149: 'Hyundai',
+    1151: 'Chevrolet',
+    1152: 'Citroën',
+    1179: 'JAC',
+    1552: 'Dongfeng',
+    1579: 'JAC',
+    1629: 'FAW',
+    1631: 'Iveco',
+    1639: 'JMC',
+    1707: 'Zhongtong',
+    1709: 'BAIC Motor',
+    1765: 'Jetour',
+    1834: 'Dongfeng',
+    1843: 'Changan',
+    1849: 'Mini',
+    1857: 'Maxus',
+    1877: 'MAN',
+    1885: 'BYD'
+};
+
+// Códigos de Tipo de Vehículo
+const HIKVISION_VEHICLE_TYPES = {
+    0: 'Unknown',
+    1: 'Passenger Car',
+    2: 'Large Vehicle',
+    3: 'Motorcycle',
+    4: 'Non-motor Vehicle',
+    5: 'Small Truck',
+    6: 'Light Truck',
+    7: 'Medium Truck',
+    8: 'Heavy Truck',
+    9: 'Minibus',
+    10: 'Large Bus',
+    11: 'SUV',
+    12: 'MPV',
+    13: 'Pickup Truck',
+    14: 'Sedan',
+    15: 'Hatchback',
+    16: 'Coupe',
+    17: 'Wagon',
+    18: 'Van'
 };
 
 /**
- * Convierte un código de color de Hikvision a texto legible en español
+ * Convierte un código de color de Hikvision a texto legible
  */
 function getVehicleColorName(code) {
-    if (!code || code === 'Unknown' || code === 'Desconocido') return 'Desconocido';
     const numCode = typeof code === 'string' ? parseInt(code, 10) : code;
     return HIKVISION_VEHICLE_COLORS[numCode] || `Color ${code}`;
 }
@@ -100,14 +129,23 @@ function getVehicleColorName(code) {
  * Convierte un código de marca de Hikvision a texto legible
  */
 function getVehicleBrandName(code) {
-    if (!code || code === 'Unknown' || code === 'Desconocido') return 'Desconocido';
     const numCode = typeof code === 'string' ? parseInt(code, 10) : code;
-    return HIKVISION_VEHICLE_BRANDS[numCode] || `Marca ${code}`;
+    return HIKVISION_VEHICLE_BRANDS[numCode] || `Brand ${code}`;
+}
+
+/**
+ * Convierte un código de tipo de Hikvision a texto legible
+ */
+function getVehicleTypeName(code) {
+    const numCode = typeof code === 'string' ? parseInt(code, 10) : code;
+    return HIKVISION_VEHICLE_TYPES[numCode] || code.toString();
 }
 
 module.exports = {
     HIKVISION_VEHICLE_COLORS,
     HIKVISION_VEHICLE_BRANDS,
+    HIKVISION_VEHICLE_TYPES,
     getVehicleColorName,
-    getVehicleBrandName
+    getVehicleBrandName,
+    getVehicleTypeName
 };
