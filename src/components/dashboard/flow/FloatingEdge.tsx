@@ -71,13 +71,41 @@ export default function FloatingEdge({ id, source, target, markerEnd, style, dat
             <text>
                 <textPath
                     href={`#${id}`}
-                    style={{ fontSize: 10, fill: isConnected ? '#fff' : '#ef4444' }}
+                    style={{ fontSize: 10, fill: isConnected ? '#fff' : '#ef4444', opacity: 0.6 }}
                     startOffset="50%"
                     textAnchor="middle"
                 >
                     {data?.latency ? `${data.latency}ms` : ''}
                 </textPath>
             </text>
+
+            {/* Data Packet Sphere Animation */}
+            {data?.status === 'active' && (
+                <g>
+                    <defs>
+                        <radialGradient id={`glow-${id}`}>
+                            <stop offset="0%" stopColor={data?.packetColor || "#3b82f6"} stopOpacity="1" />
+                            <stop offset="100%" stopColor={data?.packetColor || "#3b82f6"} stopOpacity="0" />
+                        </radialGradient>
+                    </defs>
+
+                    {/* Outer Glow Aura */}
+                    <circle r="8" fill={`url(#glow-${id})`} style={{ opacity: 0.6 }}>
+                        <animateMotion dur="0.6s" repeatCount="indefinite" path={edgePath} />
+                    </circle>
+
+                    {/* Motion Blur Sphere */}
+                    <circle r="5" fill={data?.packetColor || "#3b82f6"} style={{ filter: 'blur(1.5px)' }}>
+                        <animateMotion dur="0.6s" repeatCount="indefinite" path={edgePath} />
+                    </circle>
+
+                    {/* Solid Core with Pulse */}
+                    <circle r="3" fill="#fff">
+                        <animateMotion dur="0.6s" repeatCount="indefinite" path={edgePath} />
+                        <animate attributeName="r" values="2.5;3.5;2.5" dur="0.3s" repeatCount="indefinite" />
+                    </circle>
+                </g>
+            )}
         </>
     );
 }

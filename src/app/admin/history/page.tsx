@@ -29,7 +29,11 @@ import {
     Building2,
     ArrowUpRight,
     ArrowDownLeft,
-    Phone
+    Phone,
+    MapPin,
+    CheckCircle2,
+    XCircle,
+    X,
 } from "lucide-react";
 import { AccessEvent, User, Unit, Device } from "@prisma/client";
 import Image from "next/image";
@@ -177,92 +181,155 @@ export default function HistoryPage() {
                     </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 bg-black/40 p-2 rounded-2xl border border-white/5 shadow-2xl backdrop-blur-xl">
-                    {/* Universal Search - Merged Plate and Unit */}
-                    <div className="relative lg:w-64 group">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500 group-focus-within:text-red-400 transition-colors" size={14} />
+                <div className="flex flex-wrap items-center gap-1.5 bg-black/40 p-1.5 rounded-xl border border-white/5 shadow-2xl backdrop-blur-xl">
+                    {/* Universal Search - Compact */}
+                    <div className="relative w-52 group">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 group-focus-within:text-red-400 transition-colors" size={12} />
                         <Input
-                            placeholder="Buscar Patente, Unidad o Residente..."
+                            placeholder="Buscar..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-11 bg-white/[0.03] border-white/5 h-11 rounded-xl focus:border-red-500/30 transition-all font-medium text-[11px] text-white placeholder:text-neutral-600 focus:ring-0"
+                            className="pl-8 bg-white/[0.03] border-white/5 h-9 rounded-lg focus:border-red-500/30 transition-all font-medium text-[10px] text-white placeholder:text-neutral-600 focus:ring-0"
                         />
                     </div>
 
-                    <div className="w-px h-6 bg-white/10 mx-1 hidden lg:block" />
-
-                    {/* Date Filters - Consistent style */}
-                    <div className="flex items-center gap-1 bg-white/[0.03] p-1 rounded-xl border border-white/5">
-                        <div className="flex items-center gap-1.5 px-3">
-                            <CalendarIcon size={14} className="text-neutral-500" />
-                            <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest hidden sm:inline">Periodo</span>
-                        </div>
-                        <div className="flex items-center h-9">
-                            <input
-                                type="date"
-                                value={startDate}
-                                onChange={(e) => setStartDate(e.target.value)}
-                                className="bg-transparent border-none text-[10px] font-bold text-white focus:outline-none w-24 uppercase appearance-none"
-                            />
-                            <span className="text-neutral-700 text-[11px] mx-1">-</span>
-                            <input
-                                type="date"
-                                value={endDate}
-                                onChange={(e) => setEndDate(e.target.value)}
-                                className="bg-transparent border-none text-[10px] font-bold text-white focus:outline-none w-24 uppercase appearance-none"
-                            />
-                        </div>
+                    {/* Date Filters - Compact */}
+                    <div className="flex items-center gap-1 bg-white/[0.03] px-2 rounded-lg border border-white/5 h-9">
+                        <CalendarIcon size={11} className="text-neutral-500" />
+                        <input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className="bg-transparent border-none text-[9px] font-bold text-white focus:outline-none w-20 uppercase appearance-none"
+                        />
+                        <span className="text-neutral-700 text-[10px]">-</span>
+                        <input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className="bg-transparent border-none text-[9px] font-bold text-white focus:outline-none w-20 uppercase appearance-none"
+                        />
                     </div>
 
-                    <div className="w-px h-6 bg-white/10 mx-1 hidden lg:block" />
-
-                    {/* Filter Type Group - Stylized */}
-                    <div className="flex bg-white/[0.03] p-1 rounded-xl border border-white/5 shrink-0 h-11 items-center">
+                    {/* Filter Type Group - Compact */}
+                    <div className="flex bg-white/[0.03] p-0.5 rounded-lg border border-white/5 h-9">
                         <button
                             onClick={() => setFilterType("ALL")}
                             className={cn(
-                                "h-full px-3 rounded-lg text-[9px] font-bold uppercase transition-all tracking-widest",
-                                filterType === "ALL" ? "bg-white/10 text-white shadow-lg" : "text-neutral-600 hover:text-neutral-300"
+                                "px-2 rounded text-[8px] font-bold uppercase transition-all",
+                                filterType === "ALL" ? "bg-white/10 text-white" : "text-neutral-600 hover:text-neutral-300"
                             )}
                         >
-                            Todos
+                            Todo
                         </button>
                         <button
                             onClick={() => setFilterType("PLATE")}
                             className={cn(
-                                "h-full px-3 rounded-lg text-[9px] font-bold uppercase transition-all flex items-center gap-2",
-                                filterType === "PLATE" ? "bg-red-500/20 text-red-100 border border-red-500/20 shadow-lg" : "text-neutral-600 hover:text-neutral-300"
+                                "px-2 rounded text-[8px] font-bold uppercase transition-all flex items-center gap-1",
+                                filterType === "PLATE" ? "bg-red-500/20 text-red-100" : "text-neutral-600 hover:text-neutral-300"
                             )}
                         >
-                            <Car size={12} />
+                            <Car size={10} />
                             LPR
                         </button>
                         <button
                             onClick={() => setFilterType("FACE")}
                             className={cn(
-                                "h-full px-3 rounded-lg text-[9px] font-bold uppercase transition-all flex items-center gap-2",
-                                filterType === "FACE" ? "bg-emerald-500/20 text-emerald-100 border border-emerald-500/20 shadow-lg" : "text-neutral-600 hover:text-neutral-300"
+                                "px-2 rounded text-[8px] font-bold uppercase transition-all flex items-center gap-1",
+                                filterType === "FACE" ? "bg-emerald-500/20 text-emerald-100" : "text-neutral-600 hover:text-neutral-300"
                             )}
                         >
-                            <UserIcon size={12} />
-                            Facial
+                            <UserIcon size={10} />
+                            Face
                         </button>
                     </div>
 
-                    <div className="w-px h-6 bg-white/10 mx-1 hidden lg:block" />
+                    {/* Filter Decision Group - Compact */}
+                    <div className="flex bg-white/[0.03] p-0.5 rounded-lg border border-white/5 h-9">
+                        <button
+                            onClick={() => setFilterDecision("GRANT")}
+                            className={cn(
+                                "px-2 rounded text-[8px] font-bold uppercase transition-all flex items-center gap-1",
+                                filterDecision === "GRANT" ? "bg-emerald-500/20 text-emerald-100" : "text-neutral-600 hover:text-neutral-300"
+                            )}
+                        >
+                            <CheckCircle2 size={10} />
+                            OK
+                        </button>
+                        <button
+                            onClick={() => setFilterDecision("DENY")}
+                            className={cn(
+                                "px-2 rounded text-[8px] font-bold uppercase transition-all flex items-center gap-1",
+                                filterDecision === "DENY" ? "bg-red-500/20 text-red-100" : "text-neutral-600 hover:text-neutral-300"
+                            )}
+                        >
+                            <XCircle size={10} />
+                            NO
+                        </button>
+                    </div>
 
-                    {/* Export Button */}
+                    {/* Filter Direction Group - Compact */}
+                    <div className="flex bg-white/[0.03] p-0.5 rounded-lg border border-white/5 h-9">
+                        <button
+                            onClick={() => setFilterDirection("ENTRY")}
+                            className={cn(
+                                "px-2 rounded text-[8px] font-bold uppercase transition-all flex items-center gap-1",
+                                filterDirection === "ENTRY" ? "bg-blue-500/20 text-blue-100" : "text-neutral-600 hover:text-neutral-300"
+                            )}
+                        >
+                            <ArrowDownLeft size={10} />
+                            In
+                        </button>
+                        <button
+                            onClick={() => setFilterDirection("EXIT")}
+                            className={cn(
+                                "px-2 rounded text-[8px] font-bold uppercase transition-all flex items-center gap-1",
+                                filterDirection === "EXIT" ? "bg-orange-500/20 text-orange-100" : "text-neutral-600 hover:text-neutral-300"
+                            )}
+                        >
+                            <ArrowUpRight size={10} />
+                            Out
+                        </button>
+                    </div>
+
+                    {/* Clear Filters - Compact */}
+                    {(searchTerm || filterType !== "ALL" || filterDecision !== "ALL" || filterDirection !== "ALL" || startDate || endDate) && (
+                        <button
+                            onClick={() => {
+                                setSearchTerm("");
+                                setFilterType("ALL");
+                                setFilterDecision("ALL");
+                                setFilterDirection("ALL");
+                                setStartDate("");
+                                setEndDate("");
+                            }}
+                            className="h-9 px-2 flex items-center gap-1 rounded-lg bg-neutral-800 border border-white/5 text-neutral-400 hover:text-white transition-all text-[8px] font-bold uppercase"
+                        >
+                            <X size={10} />
+                        </button>
+                    )}
+
+                    {/* Export Button - Compact */}
                     <button
                         onClick={() => setIsExportDialogOpen(true)}
                         title="Exportar Reporte Excel"
-                        className="h-11 w-11 flex items-center justify-center rounded-xl bg-red-600/10 border border-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-all active:scale-95 shadow-lg group"
+                        className="h-9 w-9 flex items-center justify-center rounded-lg bg-red-600/10 border border-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-all active:scale-95 group ml-auto"
                     >
-                        <Download size={18} className="group-hover:translate-y-0.5 transition-transform" />
+                        <Download size={14} className="group-hover:translate-y-0.5 transition-transform" />
                     </button>
                 </div>
             </header>
 
-            <ExportHistoryDialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen} />
+            <ExportHistoryDialog
+                open={isExportDialogOpen}
+                onOpenChange={setIsExportDialogOpen}
+                filters={{
+                    search: searchTerm,
+                    decision: filterDecision,
+                    type: filterType,
+                    direction: filterDirection
+                }}
+            />
 
             {/* Content Table Area - Transparent and fused with background */}
             <div className="flex-1 min-h-0 overflow-hidden">
@@ -321,28 +388,28 @@ export default function HistoryPage() {
                                                 className="border-white/5 hover:bg-white/[0.03] transition-all cursor-pointer group"
                                             >
                                                 {/* Identification Section */}
-                                                <TableCell className="py-4 px-4">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="relative w-16 h-10 rounded-lg overflow-hidden border border-white/10 bg-black shrink-0 shadow-2xl group-hover:border-blue-500/30 transition-all group-hover:scale-105 duration-500 text-white">
+                                                <TableCell className="py-3 px-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="relative w-12 h-8 rounded overflow-hidden border border-white/10 bg-black shrink-0 shadow-lg group-hover:border-blue-500/30 transition-all text-white">
                                                             {(evt.snapshotPath || evt.user?.cara) ? (
-                                                                <Image src={getImageUrl(evt.snapshotPath) || getImageUrl(evt.user?.cara) || ""} alt="Snapshot" fill sizes="64px" className="object-cover" />
+                                                                <Image src={getImageUrl(evt.snapshotPath) || getImageUrl(evt.user?.cara) || ""} alt="Snapshot" fill sizes="48px" className="object-cover" />
                                                             ) : (
                                                                 <div className="w-full h-full flex items-center justify-center bg-neutral-900">
-                                                                    <Camera size={16} className="text-neutral-700" />
+                                                                    <Camera size={12} className="text-neutral-700" />
                                                                 </div>
                                                             )}
                                                         </div>
 
-                                                        <div className="flex flex-col gap-1">
+                                                        <div className="flex flex-col gap-0.5">
                                                             {evt.accessType === "PLATE" ? (
-                                                                <div className="flex flex-col bg-white border border-neutral-800 rounded-sm overflow-hidden min-w-[90px]">
+                                                                <div className="flex flex-col bg-white border border-neutral-800 rounded-sm overflow-hidden min-w-[80px]">
                                                                     <div className="h-0.5 bg-blue-600 w-full" />
-                                                                    <p className="text-[13px] font-black text-black tracking-widest uppercase px-2 py-0.5 text-center font-mono leading-none">
+                                                                    <p className="text-[11px] font-black text-black tracking-widest uppercase px-1.5 py-0.5 text-center font-mono leading-none">
                                                                         {evt.plateDetected || "-------"}
                                                                     </p>
                                                                 </div>
                                                             ) : (
-                                                                <p className={cn("font-mono text-sm font-black tracking-widest uppercase", isCall ? "text-blue-400" : "text-white")}>
+                                                                <p className={cn("font-mono text-xs font-black tracking-widest uppercase", isCall ? "text-blue-400" : "text-white")}>
                                                                     {isCall ? "LLAMADA" : (evt.plateDetected || "-------")}
                                                                 </p>
                                                             )}
@@ -350,64 +417,70 @@ export default function HistoryPage() {
                                                     </div>
                                                 </TableCell>
 
-                                                {/* Vehicle Details */}
+                                                {/* Vehicle Details - Solo para eventos de tipo PLATE */}
                                                 <TableCell>
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 bg-white rounded-lg border border-white/10 p-1 flex items-center justify-center shrink-0">
-                                                            {logoUrl ? (
-                                                                <div className="relative w-full h-full">
-                                                                    <Image src={logoUrl} alt="Logo" fill sizes="40px" className="object-contain" />
-                                                                </div>
-                                                            ) : (
-                                                                isCall ? <Phone size={18} className="text-blue-400" /> : <Car size={18} className="text-neutral-300" />
-                                                            )}
-                                                        </div>
-                                                        <div className="flex flex-col">
-                                                            <p className="font-black text-white text-xs uppercase tracking-tight">
-                                                                {isCall ? "Intercomunicador" : brandName}
-                                                            </p>
-                                                            <div className="flex items-center gap-2 mt-1">
-                                                                {details.Color && (
-                                                                    <div
-                                                                        className="w-2 h-2 rounded-full border border-white/20"
-                                                                        style={{ backgroundColor: details.Color.toLowerCase() === 'blanco' ? '#fff' : details.Color.toLowerCase() === 'negro' ? '#000' : details.Color }}
-                                                                    />
+                                                    {evt.accessType === "PLATE" ? (
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-8 h-8 bg-white rounded border border-white/10 p-1 flex items-center justify-center shrink-0">
+                                                                {logoUrl ? (
+                                                                    <div className="relative w-full h-full">
+                                                                        <Image src={logoUrl} alt="Logo" fill sizes="32px" className="object-contain" />
+                                                                    </div>
+                                                                ) : (
+                                                                    isCall ? <Phone size={14} className="text-blue-400" /> : <Car size={14} className="text-neutral-300" />
                                                                 )}
-                                                                <span className="text-[10px] text-neutral-500 font-bold uppercase">
-                                                                    {(() => {
-                                                                        if (isCall) return "Comunicación";
-                                                                        let t = details.Tipo || 'Vehículo';
-                                                                        if (t.toUpperCase() === 'SUVMPV') t = 'SUV / MPV';
-                                                                        if (t.toUpperCase() === 'VEHICLE') t = 'AUTO';
-                                                                        if (t.toUpperCase() === 'PICKUPTRUCK') t = 'PICKUP';
-                                                                        return t;
-                                                                    })()}
-                                                                </span>
+                                                            </div>
+                                                            <div className="flex flex-col">
+                                                                <p className="font-black text-white text-[10px] uppercase tracking-tight">
+                                                                    {isCall ? "Intercom" : brandName}
+                                                                </p>
+                                                                <div className="flex items-center gap-1.5 mt-0.5">
+                                                                    {details.Color && (
+                                                                        <div
+                                                                            className="w-1.5 h-1.5 rounded-full border border-white/20"
+                                                                            style={{ backgroundColor: details.Color.toLowerCase() === 'blanco' ? '#fff' : details.Color.toLowerCase() === 'negro' ? '#000' : details.Color }}
+                                                                        />
+                                                                    )}
+                                                                    <span className="text-[9px] text-neutral-500 font-bold uppercase">
+                                                                        {(() => {
+                                                                            if (isCall) return "Comunicación";
+                                                                            let t = details.Tipo || 'Vehículo';
+                                                                            if (t.toUpperCase() === 'SUVMPV') t = 'SUV';
+                                                                            if (t.toUpperCase() === 'VEHICLE') t = 'AUTO';
+                                                                            if (t.toUpperCase() === 'PICKUPTRUCK') t = 'PICKUP';
+                                                                            return t;
+                                                                        })()}
+                                                                    </span>
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                    </div>
+                                                    ) : (
+                                                        <div className="flex items-center justify-center h-full">
+                                                            <span className="text-[9px] text-neutral-600 uppercase font-bold">—</span>
+                                                        </div>
+                                                    )}
                                                 </TableCell>
 
-                                                {/* User Section */}
+                                                {/* User Section - Mostrar foto del rostro identificado */}
                                                 <TableCell>
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-7 h-7 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shrink-0 overflow-hidden">
                                                             {evt.user?.cara ? (
-                                                                <div className="relative w-full h-full rounded-full overflow-hidden">
-                                                                    <Image src={getImageUrl(evt.user.cara)} alt="U" fill sizes="32px" className="object-cover" />
+                                                                <div className="relative w-full h-full">
+                                                                    <Image src={getImageUrl(evt.user.cara)} alt="U" fill sizes="28px" className="object-cover" />
                                                                 </div>
                                                             ) : (
-                                                                <UserIcon size={14} className="text-neutral-600" />
+                                                                <UserIcon size={12} className="text-neutral-600" />
                                                             )}
                                                         </div>
                                                         <div>
                                                             <p className={cn(
-                                                                "font-bold uppercase text-xs tracking-tight",
+                                                                "font-bold uppercase text-[10px] tracking-tight",
                                                                 (evt.user?.name || details.Rostro) ? "text-indigo-400" : "text-neutral-500"
                                                             )}>
-                                                                {evt.user?.name || details.Rostro || (isCall && callDest ? `Destino: ${callDest}` : "Externo / Desconocido")}
+                                                                {evt.user?.name || details.Rostro || (isCall && callDest ? `Dest: ${callDest}` : "Externo")}
                                                             </p>
-                                                            <p className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mt-0.5">
+                                                            <p className="text-[9px] text-neutral-500 font-black uppercase tracking-widest mt-0.5">
                                                                 {evt.user?.unit?.name || (evt.user?.name ? "Residente" : "Sin Unidad")}
                                                             </p>
                                                         </div>
@@ -416,17 +489,28 @@ export default function HistoryPage() {
 
                                                 {/* Access Point */}
                                                 <TableCell>
-                                                    <div className="space-y-1">
-                                                        <p className="text-[10px] font-black text-neutral-300 uppercase tracking-tighter truncate max-w-[140px]">
-                                                            {evt.device?.name || "Nodo LPR"}
-                                                        </p>
-                                                        <div className={cn(
-                                                            "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[8px] font-black border uppercase tracking-widest",
-                                                            evt.device?.direction === 'ENTRY'
-                                                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                                                                : "bg-orange-500/10 text-orange-400 border-orange-500/20"
-                                                        )}>
-                                                            {evt.device?.direction === 'ENTRY' ? "ENTRADA" : "SALIDA"}
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 bg-white/5 rounded-lg border border-white/10 p-1 flex items-center justify-center shrink-0 overflow-hidden">
+                                                            {evt.device?.brand === 'HIKVISION' ? (
+                                                                <Image src="/logos/hikvision.png" alt="H" width={24} height={24} className="object-contain" />
+                                                            ) : evt.device?.brand === 'AKUVOX' ? (
+                                                                <Image src="/logos/akuvox.png" alt="A" width={24} height={24} className="object-contain" />
+                                                            ) : (
+                                                                <MapPin size={14} className="text-neutral-600" />
+                                                            )}
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <p className="text-[10px] font-black text-neutral-300 uppercase tracking-tighter truncate max-w-[140px]">
+                                                                {evt.device?.name || "Nodo LPR"}
+                                                            </p>
+                                                            <div className={cn(
+                                                                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[8px] font-black border uppercase tracking-widest",
+                                                                evt.device?.direction === 'ENTRY'
+                                                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                                                    : "bg-orange-500/10 text-orange-400 border-orange-500/20"
+                                                            )}>
+                                                                {evt.device?.direction === 'ENTRY' ? "ENTRADA" : "SALIDA"}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </TableCell>

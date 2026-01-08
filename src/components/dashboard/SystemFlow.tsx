@@ -90,13 +90,13 @@ const WebhookDriverNode = memo(({ data }: any) => {
                 </button>
             </div>
 
-            {/* Event Info Animation */}
+            {/* Event Info Animation (Bottom Popup) */}
             {isActive && data.eventInfo && (
-                <div className="absolute -top-12 left-0 right-0 animate-in slide-in-from-bottom-2 fade-in duration-300 pointer-events-none">
+                <div className="absolute top-full left-0 right-0 pt-3 animate-in slide-in-from-top-2 fade-in duration-300 pointer-events-none z-50">
                     <div className="bg-blue-600 text-white text-[10px] p-2 rounded-lg shadow-lg flex flex-col items-center text-center">
-                        <span className="font-bold">{data.eventInfo.title}</span>
-                        <span className="opacity-80 font-mono text-[9px]">{data.eventInfo.desc}</span>
-                        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-blue-600 rotate-45 transform" />
+                        <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-blue-600 rotate-45 transform" />
+                        <span className="font-bold relative z-10">{data.eventInfo.title}</span>
+                        <span className="opacity-80 font-mono text-[9px] relative z-10">{data.eventInfo.desc}</span>
                     </div>
                 </div>
             )}
@@ -138,9 +138,9 @@ const initialNodes: Node[] = [
     },
     {
         id: 'waha',
-        data: { label: 'WhatsApp Bot', icon: MessageSquare, sub: 'WAHA Runner', ip: 'internal.gw', port: '3000', status: 'unknown' },
+        data: { label: 'Chatbot', icon: MessageSquare, sub: 'WAHA Agent', ip: 'internal.gw', port: '3000', status: 'unknown' },
         position: { x: 700, y: 250 },
-        style: { background: '#1e1e24', color: '#fff', border: '2px solid #22c55e', width: 200, borderRadius: 12, padding: 12 },
+        style: { background: '#1e1e24', color: '#fff', border: '2px solid #22c55e', width: 220, borderRadius: 12, padding: 12 },
     },
     {
         id: 'webhook-api',
@@ -250,7 +250,6 @@ export default function SystemFlow() {
                     { id: 'e-frontend', source: 'frontend', target: 'lpr-node', type: 'floating', animated: true, data: { latency: 0, status: 'unknown' } },
                     { id: 'e-postgres', source: 'lpr-node', target: 'postgres', type: 'floating', animated: true, data: { latency: 0, status: 'unknown' } },
                     { id: 'e-minio', source: 'lpr-node', target: 'minio', type: 'floating', animated: true, data: { latency: 0, status: 'unknown' } },
-                    { id: 'e-waha', source: 'lpr-node', target: 'waha', type: 'floating', animated: true, data: { latency: 0, status: 'unknown' } },
                     { id: 'e-webhook-core', source: 'webhook-api', target: 'lpr-node', type: 'floating', animated: false, data: { latency: 0, status: 'idle' } },
                     ...webhookDrivers.map(driver => ({
                         id: `e-${driver.id}`,
@@ -313,72 +312,104 @@ export default function SystemFlow() {
             let driverNodeId = '';
             let eventInfo = { title: 'Evento Nuevo', desc: 'Procesando...' };
 
-            if (data.type === 'FACE') {
+            if (data.type === 'FACE' || data.type === 'LPR' || data.type === 'EVENT') {
                 driverNodeId = 'webhook-hikvision';
-                eventInfo = { title: 'Rostro Detectado', desc: 'Hikvision Scanner' };
-            } else if (data.type === 'LPR') {
-                driverNodeId = 'webhook-hikvision';
-                eventInfo = { title: 'LPR Lectura', desc: data.plate || 'Matrícula detectada' };
-            } else if (data.type === 'AKUVOX') {
+                eventInfo = data.type === 'FACE' ? { title: 'Rostro Detectado', desc: 'Hikvision LPR' } :
+                    data.type === 'LPR' ? { title: 'LPR Lectura', desc: data.plate || 'Matrícula' } :
+                        { title: 'Evento Cámara', desc: 'Detección' };
+            } else if (data.type === 'AKUVOX' || data.model === 'AKUVOX') {
                 driverNodeId = 'webhook-akuvox';
                 eventInfo = { title: 'Evento Akuvox', desc: data.eventType || 'Access Log' };
+            } else if (data.origin === 'WAHA' || data.type === 'CHAT') {
+                driverNodeId = 'webhook-waha';
+                const msgSnippet = data.body ? (data.body.length > 20 ? data.body.substring(0, 17) + "..." : data.body) : "Mensaje WA";
+                eventInfo = { title: 'Mensaje WA', desc: msgSnippet };
+            } else {
+                // Generic fallback for other webhooks
+                driverNodeId = webhookDrivers.find(d => data.path?.includes(d.path))?.id || '';
             }
+
+            if (!driverNodeId) return;
+
+            const isWAHA = data.origin === 'WAHA' || data.type === 'CHAT';
+            const packetColor = isWAHA ? '#22c55e' : '#3b82f6';
 
             setWebhookActive(driverNodeId);
 
-            // Update nodes with animation and event info
+            // 1. Stage 1: Animation from Driver to Webhook API
             setNodes(nds => nds.map(node => {
-                if (node.id === 'webhook-api' || node.id === driverNodeId) {
-                    return {
-                        ...node,
-                        data: {
-                            ...node.data,
-                            status: 'active',
-                            lastEvent: new Date().toISOString(),
-                            eventInfo: node.id === driverNodeId ? eventInfo : null
-                        }
-                    };
+                if (node.id === driverNodeId) {
+                    return { ...node, data: { ...node.data, status: 'active', lastEvent: new Date().toISOString(), eventInfo } };
                 }
                 return node;
             }));
 
-            // Animate edges
             setEdges(eds => eds.map(edge => {
-                if (edge.id === `e-${driverNodeId}` || edge.id === 'e-webhook-core') {
-                    return {
-                        ...edge,
-                        animated: true,
-                        data: { ...edge.data, status: 'active' },
-                        style: { stroke: '#3b82f6', strokeWidth: 4 }
-                    };
+                if (edge.id === `e-${driverNodeId}`) {
+                    return { ...edge, animated: true, data: { ...edge.data, status: 'active', packetColor }, style: { stroke: packetColor, strokeWidth: 4 } };
                 }
                 return edge;
             }));
 
-            // Reset after 3 seconds for better readability
+            // 2. Stage 2: Animation from Webhook API to OmniAccess (Core)
+            setTimeout(() => {
+                setNodes(nds => nds.map(node => {
+                    if (node.id === 'webhook-api') {
+                        return { ...node, data: { ...node.data, status: 'active', lastEvent: new Date().toISOString() } };
+                    }
+                    if (node.id === 'lpr-node') {
+                        return { ...node, data: { ...node.data, status: 'active' } };
+                    }
+                    return node;
+                }));
+
+                setEdges(eds => eds.map(edge => {
+                    if (edge.id === 'e-webhook-core') {
+                        return { ...edge, animated: true, data: { ...edge.data, status: 'active', packetColor }, style: { stroke: packetColor, strokeWidth: 4 } };
+                    }
+                    return edge;
+                }));
+            }, 600);
+
+            // 3. Stage 3: Animation from OmniAccess to DB and MinIO/Chatbot (Persistence)
+            setTimeout(() => {
+                setNodes(nds => nds.map(node => {
+                    if (node.id === 'postgres' || (isWAHA ? node.id === 'waha' : node.id === 'minio')) {
+                        return { ...node, data: { ...node.data, status: 'active' } };
+                    }
+                    return node;
+                }));
+
+                setEdges(eds => eds.map(edge => {
+                    const targetId = isWAHA ? 'e-waha' : 'e-minio';
+                    if (edge.id === 'e-postgres' || edge.id === targetId) {
+                        return { ...edge, animated: true, data: { ...edge.data, status: 'active', packetColor }, style: { stroke: packetColor, strokeWidth: 4 } };
+                    }
+                    return edge;
+                }));
+            }, 1200);
+
+            // 4. Reset all after cumulative 4 seconds for a complete flow
             setTimeout(() => {
                 setWebhookActive(null);
                 setNodes(nds => nds.map(node => {
-                    if (node.id === 'webhook-api' || node.id === driverNodeId) {
-                        return {
-                            ...node,
-                            data: { ...node.data, status: 'idle', eventInfo: null }
-                        };
+                    const targets = ['webhook-api', driverNodeId, 'lpr-node', 'postgres', 'minio', 'waha'];
+                    if (targets.includes(node.id)) {
+                        const isCore = node.id === 'lpr-node';
+                        const isConnected = ['lpr-node', 'postgres', 'minio', 'waha'].includes(node.id);
+                        return { ...node, data: { ...node.data, status: isConnected ? 'connected' : 'idle', eventInfo: null } };
                     }
                     return node;
                 }));
                 setEdges(eds => eds.map(edge => {
-                    if (edge.id === `e-${driverNodeId}` || edge.id === 'e-webhook-core') {
-                        return {
-                            ...edge,
-                            animated: false,
-                            data: { ...edge.data, status: 'idle' },
-                            style: { stroke: '#3b82f6', strokeWidth: 2 }
-                        };
+                    const affectedEdges = [`e-${driverNodeId}`, 'e-webhook-core', 'e-postgres', 'e-minio', 'e-waha'];
+                    if (affectedEdges.includes(edge.id)) {
+                        const isPermanent = ['e-postgres', 'e-minio', 'e-waha'].includes(edge.id);
+                        return { ...edge, animated: isPermanent, data: { ...edge.data, status: 'connected' }, style: { stroke: isPermanent ? undefined : '#3b82f6', strokeWidth: 2 } };
                     }
                     return edge;
                 }));
-            }, 3000);
+            }, 4000);
         });
 
         return () => {
@@ -404,7 +435,7 @@ export default function SystemFlow() {
                         status = data.minio.status;
                         latency = data.minio.latency || 0;
                     } else if (edge.id === 'e-waha' && data.waha) {
-                        status = data.waha.status;
+                        status = data.waha.status === 'connected' ? 'connected' : 'error';
                         latency = data.waha.latency || 0;
                     } else if (edge.id === 'e-frontend') {
                         status = 'connected';
@@ -428,11 +459,13 @@ export default function SystemFlow() {
                 }));
 
                 setNodes(nds => nds.map(node => {
-                    if (node.id.startsWith('webhook-')) return node; // Keep webhook nodes as-is
+                    if (node.id.startsWith('webhook-')) return node;
 
                     let nodeStatus = 'unknown';
                     let stats = '';
                     let borderColor = '#6b7280';
+                    let ip = node.data.ip;
+                    let port = node.data.port;
 
                     if (node.id === 'frontend') {
                         nodeStatus = 'connected';
@@ -442,18 +475,26 @@ export default function SystemFlow() {
                         borderColor = nodeStatus === 'connected' ? '#22c55e' : '#ef4444';
                         if (data.primaryDb.details) {
                             stats = `${data.primaryDb.details.tableCount} Tablas | ${(data.primaryDb.details.size / 1024 / 1024).toFixed(0)} MB`;
+                            ip = data.primaryDb.details.host || ip;
+                            port = data.primaryDb.details.port || port;
                         }
                     } else if (node.id === 'minio' && data.minio) {
                         nodeStatus = data.minio.status;
                         borderColor = nodeStatus === 'connected' ? '#22c55e' : '#ef4444';
                         if (data.minio.details) {
                             stats = `LPR: ${data.minio.details.bucket} | Face: ${data.minio.details.faceBucket}`;
+                            const parts = data.minio.details.endpoint.split(':');
+                            if (parts.length > 0) ip = parts[0];
+                            if (parts.length > 1) port = parts[1];
                         }
                     } else if (node.id === 'waha' && data.waha) {
-                        nodeStatus = data.waha.status;
-                        borderColor = nodeStatus === 'connected' ? '#22c55e' : nodeStatus === 'error' ? '#ef4444' : '#6b7280';
+                        nodeStatus = data.waha.status === 'connected' ? 'connected' : 'error';
+                        borderColor = nodeStatus === 'connected' ? '#22c55e' : '#ef4444';
                         if (data.waha.details) {
                             stats = `${data.waha.details.sessions} Sesiones`;
+                            const parts = data.waha.details.endpoint.split(':');
+                            if (parts.length > 0) ip = parts[0];
+                            if (parts.length > 1) port = parts[1];
                         }
                     } else if (node.id === 'lpr-node') {
                         nodeStatus = 'connected';
@@ -462,7 +503,7 @@ export default function SystemFlow() {
 
                     return {
                         ...node,
-                        data: { ...node.data, status: nodeStatus, stats },
+                        data: { ...node.data, status: nodeStatus, stats, ip, port },
                         style: {
                             ...node.style,
                             border: `2px solid ${borderColor}`,
@@ -561,8 +602,10 @@ export default function SystemFlow() {
                     50% { opacity: 0.7; }
                 }
                 @keyframes pulse-webhook {
-                    0%, 100% { opacity: 1; transform: scale(1); }
-                    50% { opacity: 0.95; transform: scale(1.02); }
+                    0%, 100% { transform: scale(1); }
+                    10% { transform: scale(1.1); }
+                    30% { transform: scale(0.95); }
+                    50% { transform: scale(1.05); }
                 }
                 .animate-pulse-subtle {
                     animation: pulse-subtle 3s ease-in-out infinite;
@@ -571,7 +614,7 @@ export default function SystemFlow() {
                     animation: pulse-error 1.5s ease-in-out infinite;
                 }
                 .animate-pulse-webhook {
-                    animation: pulse-webhook 0.5s ease-in-out infinite;
+                    animation: pulse-webhook 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
                 }
             `}</style>
             <ReactFlow

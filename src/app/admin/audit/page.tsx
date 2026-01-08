@@ -39,7 +39,9 @@ import {
     Camera,
     ChevronDown,
     PhoneCall,
-    DoorClosed
+    DoorClosed,
+    Calendar,
+    ScanFace
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -256,6 +258,65 @@ export default function AuditPage() {
         return matchesSearch && matchesDecision;
     });
 
+    const exportToCSV = (data: any[], filename: string) => {
+        if (data.length === 0) {
+            toast.error("No hay datos para exportar");
+            return;
+        }
+
+        const headers = Object.keys(data[0]);
+        const csvContent = [
+            headers.join(","),
+            ...data.map(row =>
+                headers.map(header => {
+                    const value = row[header] ?? "";
+                    return typeof value === 'string' ? `"${value.replace(/"/g, '""')}"` : value;
+                }).join(",")
+            )
+        ].join("\n");
+
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `${filename}_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = "hidden";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const handleDownloadDoorlogs = async () => {
+        if (!selectedDeviceLogs) return;
+        setLoadingHardwareLogs(true);
+        try {
+            // Fetch a larger set for export (e.g., last 500)
+            const allLogs = await getDeviceDoorlogs(selectedDeviceLogs.id, 500, 0);
+            exportToCSV(allLogs, `Doorlog_${selectedDeviceLogs.name}`);
+            toast.success("Doorlog exportado correctamente");
+        } catch (error) {
+            console.error(error);
+            toast.error("Error al exportar doorlog");
+        } finally {
+            setLoadingHardwareLogs(false);
+        }
+    };
+
+    const handleDownloadCalllogs = async () => {
+        if (!selectedDeviceLogs) return;
+        setLoadingHardwareLogs(true);
+        try {
+            const allLogs = await getDeviceCalllogs(selectedDeviceLogs.id, 500, 0);
+            exportToCSV(allLogs, `Calllog_${selectedDeviceLogs.name}`);
+            toast.success("Calllog exportado correctamente");
+        } catch (error) {
+            console.error(error);
+            toast.error("Error al exportar calllog");
+        } finally {
+            setLoadingHardwareLogs(false);
+        }
+    };
+
     const filteredCallLogs = hardwareCallLogs.filter(log => {
         const matchesSearch =
             (log.CallerName || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -362,13 +423,21 @@ export default function AuditPage() {
                                             </TableCell>
                                             <TableCell>
                                                 <div className="flex flex-col gap-2">
-                                                    <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-neutral-900 border border-white/5 w-fit">
-                                                        <div className={cn("w-2 h-2 rounded-full", isOnline ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-red-500")} />
-                                                        <span className="text-[9px] font-black text-neutral-400 uppercase tracking-widest">{isOnline ? "CONECTADO" : "SIN CONEXIÓN"}</span>
+                                                    <div className={cn(
+                                                        "flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all duration-500",
+                                                        isOnline
+                                                            ? "bg-emerald-500/5 border-emerald-500/10 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.05)]"
+                                                            : "bg-rose-500/5 border-rose-500/10 text-rose-400"
+                                                    )}>
+                                                        <div className={cn("w-2 h-2 rounded-full", isOnline ? "bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.5)]" : "bg-rose-500")} />
+                                                        <span className="text-[10px] font-black uppercase tracking-widest">{isOnline ? "En Línea" : "Sin Link"}</span>
                                                     </div>
-                                                    <p className="text-[9px] text-neutral-600 font-bold uppercase tracking-tighter pl-1">
-                                                        {dev.lastOnlinePull ? new Date(dev.lastOnlinePull).toLocaleString() : 'PENDIENTE'}
-                                                    </p>
+                                                    <div className="flex items-center gap-1.5 pl-1 opacity-50">
+                                                        <RefreshCw size={10} className={isOnline ? "animate-spin-slow text-emerald-500" : "text-neutral-600"} />
+                                                        <p className="text-[9px] text-neutral-400 font-black uppercase tracking-tighter">
+                                                            {dev.lastOnlinePull ? new Date(dev.lastOnlinePull).toLocaleTimeString() : 'PENDIENTE'}
+                                                        </p>
+                                                    </div>
                                                 </div>
                                             </TableCell>
                                             <TableCell className="text-right pr-12">
@@ -437,17 +506,32 @@ export default function AuditPage() {
                                             Base de Datos
                                         </TabsTrigger>
                                         {selectedDeviceLogs?.brand === 'AKUVOX' && (
-                                            <>
+                                            <div className="flex items-center gap-2">
                                                 <TabsTrigger value="door" className="text-[10px] px-5 font-black uppercase tracking-widest data-[state=active]:bg-blue-600 data-[state=active]:text-white rounded-lg transition-all">
                                                     Doorlog
                                                 </TabsTrigger>
                                                 <TabsTrigger value="call" className="text-[10px] px-5 font-black uppercase tracking-widest data-[state=active]:bg-blue-600 data-[state=active]:text-white rounded-lg transition-all">
                                                     Calllog
                                                 </TabsTrigger>
-                                            </>
+                                            </div>
                                         )}
                                     </TabsList>
                                 </Tabs>
+
+                                {selectedDeviceLogs?.brand === 'AKUVOX' && (
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={handleDownloadDoorlogs}
+                                            disabled={loadingHardwareLogs}
+                                            className="h-8 bg-emerald-600/10 border-emerald-500/20 text-emerald-500 hover:bg-emerald-600 hover:text-white text-[9px] font-black uppercase rounded-lg"
+                                        >
+                                            <DownloadCloud size={12} className="mr-1.5" />
+                                            Exportar CSV
+                                        </Button>
+                                    </div>
+                                )}
                             </div>
                         </DialogHeader>
 
@@ -516,53 +600,69 @@ export default function AuditPage() {
                                                 </TableHeader>
                                                 <TableBody>
                                                     {filteredDbLogs.map((log) => (
-                                                        <TableRow key={log.id} className="border-white/5 hover:bg-white/[0.02]">
+                                                        <TableRow key={log.id} className="group/log border-b border-white/[0.03] hover:bg-blue-600/[0.02] transition-colors">
                                                             <TableCell className="p-4">
-                                                                <div className="w-14 h-14 rounded-xl bg-neutral-950 border border-white/10 flex items-center justify-center overflow-hidden shadow-inner group relative">
+                                                                <div className="relative w-16 h-16 rounded-2xl bg-neutral-900 border border-white/5 overflow-hidden mx-auto cursor-pointer group/thumb hover:ring-2 hover:ring-blue-500/50 shadow-2xl transition-all duration-500">
                                                                     {log.snapshotPath || log.imagePath ? (
-                                                                        <img
-                                                                            src={log.snapshotPath || log.imagePath}
-                                                                            alt=""
-                                                                            className="w-full h-full object-cover transition-transform group-hover:scale-125"
-                                                                            onError={(e) => {
-                                                                                const target = e.target as HTMLImageElement;
-                                                                                target.style.display = 'none';
-                                                                                target.parentElement?.querySelector('.fallback')?.classList.remove('hidden');
-                                                                            }}
-                                                                        />
-                                                                    ) : null}
-                                                                    <div className={cn("fallback flex items-center justify-center", (log.snapshotPath || log.imagePath) ? "hidden" : "")}>
-                                                                        <Camera size={20} className="text-neutral-800" />
+                                                                        <>
+                                                                            <img
+                                                                                src={log.snapshotPath || log.imagePath}
+                                                                                alt=""
+                                                                                className="w-full h-full object-cover transition-transform duration-500 group-hover/thumb:scale-125"
+                                                                            />
+                                                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity">
+                                                                                <Eye size={16} className="text-white" />
+                                                                            </div>
+                                                                        </>
+                                                                    ) : (
+                                                                        <div className="w-full h-full flex items-center justify-center text-neutral-700 bg-neutral-950/50">
+                                                                            <Camera size={20} className="opacity-20" />
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell className="p-4">
+                                                                <div className="flex flex-col gap-1.5">
+                                                                    <span className="font-black text-white uppercase text-sm tracking-tight group-hover/log:text-blue-400 transition-colors">
+                                                                        {log.userName || log.plateNumber || 'Evento Sin Identificar'}
+                                                                    </span>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Badge className="bg-neutral-900 text-neutral-500 border-white/5 text-[9px] font-black p-0 px-2 h-4 rounded-md">ID: {log.userId || log.id.slice(0, 8)}</Badge>
+                                                                        {log.confidence && (
+                                                                            <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest">{log.confidence}% SIMIL.</span>
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                             </TableCell>
-                                                            <TableCell className="p-4">
-                                                                <p className="text-[13px] font-black text-white uppercase tracking-tight">{log.user?.name || log.plateDetected || "No Identificado"}</p>
-                                                                <p className="text-[9px] font-bold text-neutral-500 uppercase mt-0.5 max-w-[200px] truncate">{log.details}</p>
-                                                            </TableCell>
                                                             <TableCell className="p-4 text-center">
-                                                                <div className="flex flex-col items-center gap-1">
-                                                                    <Badge className={cn(
-                                                                        "text-[8px] font-black px-2 py-0.5 h-auto uppercase tracking-tighter",
-                                                                        log.direction === 'ENTRY' ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-orange-500/10 text-orange-500 border-orange-500/20"
-                                                                    )}>
-                                                                        {log.direction === 'ENTRY' ? 'Entrada' : 'Salida'}
-                                                                    </Badge>
-                                                                    <p className="text-[8px] font-black text-neutral-600 uppercase">{log.accessType}</p>
+                                                                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-neutral-900 border border-white/5 rounded-lg">
+                                                                    {log.authMethod === 'FACE' ? <ScanFace size={12} className="text-blue-400" /> :
+                                                                        log.authMethod === 'PLATE' ? <Camera size={12} className="text-emerald-400" /> :
+                                                                            <Lock size={12} className="text-neutral-500" />}
+                                                                    <span className="text-[9px] font-black text-neutral-300 uppercase tracking-widest">{log.authMethod || 'MÉTODO'}</span>
                                                                 </div>
                                                             </TableCell>
-                                                            <TableCell className="p-4">
-                                                                <div className="flex flex-col">
-                                                                    <p className="text-[10px] font-black text-neutral-400 font-mono">{new Date(log.timestamp).toLocaleDateString()}</p>
-                                                                    <p className="text-[12px] font-black text-white font-mono">{new Date(log.timestamp).toLocaleTimeString()}</p>
+                                                            <TableCell className="p-4 text-center">
+                                                                <div className="flex flex-col gap-1">
+                                                                    <div className="flex items-center gap-2 justify-center">
+                                                                        <Calendar size={12} className="text-neutral-700" />
+                                                                        <span className="text-[10px] font-black text-neutral-400 uppercase tracking-tighter">{new Date(log.timestamp).toLocaleDateString()}</span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2 justify-center">
+                                                                        <Clock size={12} className="text-blue-500/40" />
+                                                                        <span className="text-sm font-mono font-black text-white">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                                                                    </div>
                                                                 </div>
                                                             </TableCell>
                                                             <TableCell className="p-4 text-right">
                                                                 <div className={cn(
-                                                                    "inline-flex px-3 py-1.5 rounded-xl text-[9px] font-black border uppercase tracking-widest",
-                                                                    log.decision === 'GRANT' ? "bg-emerald-600/10 text-emerald-400 border-emerald-500/20" : "bg-rose-600/10 text-rose-400 border-rose-500/20"
+                                                                    "inline-flex flex-col items-center gap-1 px-4 py-1.5 rounded-xl border transition-all",
+                                                                    log.decision === "GRANT"
+                                                                        ? "bg-emerald-600/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.05)]"
+                                                                        : "bg-rose-600/10 text-rose-400 border-rose-500/20"
                                                                 )}>
-                                                                    {log.decision === 'GRANT' ? "ADMITIDO" : "DENEGADO"}
+                                                                    <div className={cn("w-1 h-1 rounded-full", log.decision === 'GRANT' ? "bg-emerald-400 animate-pulse" : "bg-rose-400")} />
+                                                                    <span className="text-[10px] font-black uppercase tracking-widest">{log.decision === 'GRANT' ? 'Paso Concedido' : 'Bloqueado'}</span>
                                                                 </div>
                                                             </TableCell>
                                                         </TableRow>
@@ -595,9 +695,9 @@ export default function AuditPage() {
                                                             <TableCell className="p-4">
                                                                 <div className="flex items-center gap-4">
                                                                     <div className="w-12 h-12 rounded-xl bg-neutral-950 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
-                                                                        {log.PicUrl ? (
+                                                                        {(log.PicUrl || log.PicPath) ? (
                                                                             <img
-                                                                                src={`/api/proxy/device-image?deviceId=${selectedDeviceLogs?.id}&path=${encodeURIComponent(log.PicUrl)}`}
+                                                                                src={`/api/proxy/device-image?deviceId=${selectedDeviceLogs?.id}&path=${encodeURIComponent(log.PicUrl || log.PicPath)}`}
                                                                                 alt=""
                                                                                 className="w-full h-full object-cover"
                                                                                 onError={(e) => {
@@ -607,7 +707,7 @@ export default function AuditPage() {
                                                                                 }}
                                                                             />
                                                                         ) : null}
-                                                                        <div className={cn("fallback flex items-center justify-center", log.PicUrl ? "hidden" : "")}>
+                                                                        <div className={cn("fallback flex items-center justify-center", (log.PicUrl || log.PicPath) ? "hidden" : "")}>
                                                                             <Camera size={18} className="text-neutral-800" />
                                                                         </div>
                                                                     </div>
@@ -724,10 +824,10 @@ export default function AuditPage() {
                                 <div className="p-3 bg-orange-500/10 rounded-2xl border border-orange-500/20">
                                     <ArrowRightLeft className="text-orange-400" size={24} />
                                 </div>
-                                <div>
+                                <div className="flex-1">
                                     <DialogTitle className="text-2xl font-black text-white uppercase tracking-tight">Sincronización de Memoria</DialogTitle>
-                                    <DialogDescription className="text-neutral-500 text-[10px] font-bold uppercase tracking-widest">
-                                        Comparando hardware físico con base de datos para {previewDevice?.name}
+                                    <DialogDescription className="text-neutral-500 text-[10px] font-bold uppercase tracking-widest mt-1">
+                                        Comparando hardware físico con base de datos local • {previewDevice?.name}
                                     </DialogDescription>
                                 </div>
                             </div>
@@ -747,18 +847,21 @@ export default function AuditPage() {
                                         </TabsList>
 
                                         <TabsContent value="door" className="flex-1 overflow-auto custom-scrollbar">
-                                            <div className="grid grid-cols-3 gap-6 mb-8">
-                                                <div className="bg-neutral-900/50 p-6 rounded-2xl border border-white/5">
-                                                    <p className="text-[9px] font-black text-neutral-600 uppercase mb-2">Total en Memoria</p>
-                                                    <p className="text-3xl font-black text-white">{hardwarePreview.length}</p>
+                                            <div className="grid grid-cols-3 gap-4 mb-8">
+                                                <div className="bg-neutral-900 border border-white/5 p-5 rounded-2xl shadow-inner">
+                                                    <p className="text-[9px] font-black text-neutral-600 uppercase mb-2 tracking-widest">Memoria Física</p>
+                                                    <p className="text-3xl font-black text-white leading-none">{hardwarePreview.length}</p>
                                                 </div>
-                                                <div className="bg-emerald-500/5 p-6 rounded-2xl border border-emerald-500/10">
-                                                    <p className="text-[9px] font-black text-emerald-600 uppercase mb-2">Ya registrados</p>
-                                                    <p className="text-3xl font-black text-emerald-400">{hardwarePreview.filter(p => p.exists).length}</p>
+                                                <div className="bg-emerald-500/5 border border-emerald-500/10 p-5 rounded-2xl">
+                                                    <p className="text-[9px] font-black text-emerald-600 uppercase mb-2 tracking-widest">Ya registrados</p>
+                                                    <p className="text-3xl font-black text-emerald-400 leading-none">{hardwarePreview.filter(p => p.exists).length}</p>
                                                 </div>
-                                                <div className="bg-blue-500/5 p-6 rounded-2xl border border-blue-500/10">
-                                                    <p className="text-[9px] font-black text-blue-600 uppercase mb-2">Nuevos por importar</p>
-                                                    <p className="text-3xl font-black text-blue-400">{hardwarePreview.filter(p => !p.exists).length}</p>
+                                                <div className="bg-blue-500/5 border border-blue-500/10 p-5 rounded-2xl">
+                                                    <p className="text-[9px] font-black text-blue-600 uppercase mb-2 tracking-widest">Pendientes</p>
+                                                    <div className="flex items-center gap-3">
+                                                        <p className="text-3xl font-black text-blue-400 leading-none">{hardwarePreview.filter(p => !p.exists).length}</p>
+                                                        {hardwarePreview.filter(p => !p.exists).length > 0 && <div className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />}
+                                                    </div>
                                                 </div>
                                             </div>
 
@@ -855,15 +958,15 @@ export default function AuditPage() {
                                 </div>
                             )}
                         </div>
-                        <DialogFooter className="p-8 bg-neutral-900/20 border-t border-white/5 gap-3 shrink-0">
-                            <Button variant="ghost" onClick={() => setPreviewDialogOpen(false)} className="text-neutral-500 font-black uppercase text-[10px] tracking-widest px-6 h-12">Cancelar</Button>
+                        <DialogFooter className="p-8 bg-[#0a0a0a] border-t border-white/5 gap-3 shrink-0 rounded-b-3xl">
+                            <Button variant="ghost" onClick={() => setPreviewDialogOpen(false)} className="text-neutral-500 font-black uppercase text-[10px] tracking-[0.2em] px-8 h-12 hover:bg-neutral-900 rounded-xl transition-all">Cancelar</Button>
                             <Button
                                 disabled={loadingPreview || syncing === previewDevice?.id || (hardwarePreview.filter(p => !p.exists).length === 0 && hardwareCallPreview.filter(p => !p.exists).length === 0)}
                                 onClick={() => handleSync(previewDevice?.id)}
-                                className="bg-blue-600 hover:bg-blue-500 text-white font-black uppercase text-xs tracking-widest px-10 h-12 rounded-xl shadow-xl shadow-blue-500/20"
+                                className="bg-blue-600 hover:bg-blue-500 text-white font-black uppercase text-[11px] tracking-widest px-12 h-14 rounded-2xl shadow-2xl shadow-blue-500/20 transition-all hover:scale-105 active:scale-95"
                             >
-                                {syncing === previewDevice?.id ? <RefreshCw className="animate-spin mr-2" size={16} /> : <Zap size={16} className="mr-2 fill-current" />}
-                                {syncing === previewDevice?.id ? "Procesando..." : `Importar ${hardwarePreview.filter(p => !p.exists).length + hardwareCallPreview.filter(p => !p.exists).length} Registros`}
+                                {syncing === previewDevice?.id ? <RefreshCw className="animate-spin mr-3" size={18} /> : <Zap size={18} className="mr-3 fill-current" />}
+                                {syncing === previewDevice?.id ? "PROCESANDO..." : `IMPORTAR ${hardwarePreview.filter(p => !p.exists).length + hardwareCallPreview.filter(p => !p.exists).length} REGISTROS`}
                             </Button>
                         </DialogFooter>
                     </DialogContent>

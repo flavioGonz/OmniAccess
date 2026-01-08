@@ -83,6 +83,26 @@ export const BRAND_LOGOS: Record<string, string> = {
     UNIVIEW: "",
 };
 
+export const DEVICE_MODELS: Record<string, Record<string, string>> = {
+    AKUVOX: {
+        FACE_TERMINAL: "https://www.akuvox.com/Upload/products/202103/17/20210317154215865.png", // A05
+        DEFAULT: "https://www.akuvox.com/Upload/products/202005/18/20200518105739832.png"
+    },
+    HIKVISION: {
+        LPR_CAMERA: "https://www.hikvision.com/content/dam/hikvision/products/S000000001/S000000002/S000000003/S000000023/OFR000025/M000000001/image/1.png",
+        FACE_TERMINAL: "https://www.hikvision.com/content/dam/hikvision/products/S000000001/S000000002/S000000009/S000000001/OFR000142/M000038827/image/MinMoe-Face-Recognition-Terminal_Face-Recognition-Terminal_DS-K1T671 Series_1.png",
+        DEFAULT: "https://www.hikvision.com/content/dam/hikvision/products/S000000001/S000000002/S000000003/S000000023/OFR000025/M000000001/image/1.png"
+    },
+    ZKTECO: {
+        FACE_TERMINAL: "https://www.zkteco.com/upload/2019/12/30/1577689945722369.png",
+        DEFAULT: "https://www.zkteco.com/upload/2019/12/30/1577689945722369.png"
+    },
+    DAHUA: {
+        LPR_CAMERA: "https://material.dahuasecurity.com/uploads/image/20230227/29b9f7c00e6a4b1d9bf5b8f6c6d6c4d6.png",
+        DEFAULT: "https://material.dahuasecurity.com/uploads/image/20230227/29b9f7c00e6a4b1d9bf5b8f6c6d6c4d6.png"
+    }
+};
+
 export type DeviceBrand = keyof typeof DRIVER_MODELS;
 
 export function getModelsForBrand(brand: DeviceBrand) {

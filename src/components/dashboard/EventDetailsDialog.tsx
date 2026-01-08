@@ -344,7 +344,7 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
                                     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-stretch gap-2 origin-bottom">
                                         {/* 1. LOGO (White Box) - Smaller */}
                                         {logoUrl && (
-                                            <div className="bg-white rounded-lg w-14 flex items-center justify-center shadow-2xl border border-white/50 shrink-0">
+                                            <div className="bg-white rounded-lg w-14 flex items-center justify-center shadow-2xl border border-white/50 shrink-0 p-1">
                                                 <div className="relative w-8 h-8">
                                                     <img src={logoUrl} alt="Marca" className="w-full h-full object-contain" />
                                                 </div>
@@ -555,7 +555,15 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
                                 </div>
                             </div>
                             <div className="flex items-start gap-3">
-                                <MapPin size={16} className="text-neutral-500 mt-1" />
+                                <div className="w-8 h-8 bg-white rounded-md border border-white/10 p-1 flex items-center justify-center shrink-0 mt-1">
+                                    {event.device?.brand === 'HIKVISION' ? (
+                                        <img src="/logos/hikvision.png" alt="H" className="w-full h-full object-contain" />
+                                    ) : event.device?.brand === 'AKUVOX' ? (
+                                        <img src="/logos/akuvox.png" alt="A" className="w-full h-full object-contain" />
+                                    ) : (
+                                        <MapPin size={16} className="text-neutral-500" />
+                                    )}
+                                </div>
                                 <div>
                                     <p className="text-[10px] font-bold text-neutral-600 uppercase mb-1">Dispositivo</p>
                                     <p className="text-sm font-black text-white uppercase">{event.device?.name || '---'}</p>

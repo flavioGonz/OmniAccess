@@ -107,6 +107,7 @@ const HIKVISION_VEHICLE_BRANDS = {
     1869: 'Geely',
     1877: 'MAN',
     1885: 'BYD',
+    1945: 'Shacman',
     1951: 'FAW',
     1995: 'Hino'
 };

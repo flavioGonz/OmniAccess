@@ -33,6 +33,17 @@ const handleWahaWebhook = async (req, res, logPrefix) => {
 
         console.log(`${logPrefix} [WAHA] Message from ${from}: "${body_text}"`);
 
+        // Notify UI via WebSocket for topology animation
+        if (global.io) {
+            global.io.emit("webhook-event", {
+                type: "CHAT",
+                origin: "WAHA",
+                from: from.split('@')[0],
+                body: body_text,
+                timestamp: new Date().toISOString()
+            });
+        }
+
         // Get WAHA configuration
         const wahaUrlSetting = await prisma.setting.findUnique({ where: { key: 'WAHA_URL' } });
         const wahaApiKeySetting = await prisma.setting.findUnique({ where: { key: 'WAHA_API_KEY' } });

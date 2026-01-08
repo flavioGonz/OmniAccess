@@ -243,10 +243,17 @@ export async function getDbStats() {
             ORDER BY n_live_tup DESC;
         `;
 
+        const dbUrl = process.env.DATABASE_URL || "";
+        const dbMatch = dbUrl.match(/@([^/:]+):?(\d+)?/);
+        const dbHost = dbMatch ? dbMatch[1] : '127.0.0.1';
+        const dbPort = dbMatch ? (dbMatch[2] || '5432') : '5432';
+
         return {
             success: true,
             totalSize: dbSizeQuery[0]?.size || "0 B",
-            tables: tableStats
+            tables: tableStats,
+            host: dbHost,
+            port: dbPort
         };
     } catch (error: any) {
         console.error("Error getting DB stats:", error);

@@ -55,7 +55,7 @@ import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { DeviceMemoryDialog } from "@/components/DeviceMemoryDialog";
 import { DevicePlateListDialog } from "@/components/DevicePlateListDialog";
 import { AkuvoxActionUrlDialog } from "@/components/AkuvoxActionUrlDialog";
-import { DRIVER_MODELS } from "@/lib/driver-models";
+import { DRIVER_MODELS, DEVICE_MODELS } from "@/lib/driver-models";
 
 import {
     DropdownMenu,
@@ -75,8 +75,8 @@ import {
 import { cn } from "@/lib/utils";
 
 const BRAND_CONFIG: Record<string, { label: string, color: string, bg: string, logoUrl: string }> = {
-    HIKVISION: { label: "Hikvision", color: "#E4002B", bg: "bg-red-500/10", logoUrl: "https://www.hikvision.com/content/dam/hikvision/products/S000000001/S000000002/S000000003/S000000023/OFR000025/M000000001/image/1.png" },
-    AKUVOX: { label: "Akuvox", color: "#005BA4", bg: "bg-blue-500/10", logoUrl: "/uploads/brands/1766750081921_akuvox.png" },
+    HIKVISION: { label: "Hikvision", color: "#E4002B", bg: "bg-red-500/10", logoUrl: "/logos/hikvision.png" },
+    AKUVOX: { label: "Akuvox", color: "#005BA4", bg: "bg-blue-500/10", logoUrl: "/logos/akuvox.png" },
     INTELBRAS: { label: "Intelbras", color: "#009639", bg: "bg-emerald-500/10", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/f/ff/Intelbras_logo.svg" },
     DAHUA: { label: "Dahua", color: "#ED1C24", bg: "bg-red-500/10", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/b/b3/Dahua_Technology_logo.svg" },
     ZKTECO: { label: "ZKTeco", color: "#0191D2", bg: "bg-sky-500/10", logoUrl: "https://www.zkteco.com/upload/201908/5d4d3c3f3f0f7.png" },
@@ -86,25 +86,6 @@ const BRAND_CONFIG: Record<string, { label: string, color: string, bg: string, l
     UNIVIEW: { label: "Uniview", color: "#005EB8", bg: "bg-blue-700/10", logoUrl: "https://www.uniview.com/etc/designs/uniview/logo.png" },
 };
 
-const DEVICE_MODELS: Record<string, Record<string, string>> = {
-    AKUVOX: {
-        FACE_TERMINAL: "https://www.akuvox.com/Upload/products/202103/17/20210317154215865.png", // A05
-        DEFAULT: "https://www.akuvox.com/Upload/products/202005/18/20200518105739832.png"
-    },
-    HIKVISION: {
-        LPR_CAMERA: "https://www.hikvision.com/content/dam/hikvision/products/S000000001/S000000002/S000000003/S000000023/OFR000025/M000000001/image/1.png",
-        FACE_TERMINAL: "https://www.hikvision.com/content/dam/hikvision/products/S000000001/S000000002/S000000009/S000000001/OFR000142/M000038827/image/MinMoe-Face-Recognition-Terminal_Face-Recognition-Terminal_DS-K1T671 Series_1.png",
-        DEFAULT: "https://www.hikvision.com/content/dam/hikvision/products/S000000001/S000000002/S000000003/S000000023/OFR000025/M000000001/image/1.png"
-    },
-    ZKTECO: {
-        FACE_TERMINAL: "https://www.zkteco.com/upload/2019/12/30/1577689945722369.png",
-        DEFAULT: "https://www.zkteco.com/upload/2019/12/30/1577689945722369.png"
-    },
-    DAHUA: {
-        LPR_CAMERA: "https://material.dahuasecurity.com/uploads/image/20230227/29b9f7c00e6a4b1d9bf5b8f6c6d6c4d6.png",
-        DEFAULT: "https://material.dahuasecurity.com/uploads/image/20230227/29b9f7c00e6a4b1d9bf5b8f6c6d6c4d6.png"
-    }
-};
 
 export default function DevicesPage() {
     const router = useRouter();
@@ -307,6 +288,7 @@ export default function DevicesPage() {
                     <TableHeader className="bg-[#0f0f0f]">
                         <TableRow className="border-neutral-800 hover:bg-transparent">
                             <TableHead className="text-neutral-400 font-black tracking-widest py-5 px-8 uppercase text-[10px]">Nodo de Acceso</TableHead>
+                            <TableHead className="text-neutral-400 font-black tracking-widest uppercase text-[10px]">Marca y Modelo</TableHead>
                             <TableHead className="text-neutral-400 font-black tracking-widest uppercase text-[10px]">Protocolo / Red</TableHead>
                             <TableHead className="text-neutral-400 font-black tracking-widest text-center uppercase text-[10px]">Enlace</TableHead>
                             <TableHead className="text-neutral-400 font-black tracking-widest text-center uppercase text-[10px]">Estado</TableHead>
@@ -316,7 +298,7 @@ export default function DevicesPage() {
                     <TableBody>
                         {filteredDevices.length === 0 && !loading && (
                             <TableRow>
-                                <TableCell colSpan={5} className="text-center py-32 text-neutral-700">
+                                <TableCell colSpan={6} className="text-center py-32 text-neutral-700">
                                     <div className="flex flex-col items-center gap-4">
                                         <div className="p-8 bg-neutral-900 rounded-full border border-dashed border-neutral-800">
                                             <Server size={64} className="opacity-10" />
@@ -430,6 +412,25 @@ export default function DevicesPage() {
                                                         )}
                                                     </div>
                                                 </div>
+                                            </div>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/10 p-2 flex items-center justify-center overflow-hidden shrink-0">
+                                                <img
+                                                    src={dev.brandLogo || brand.logoUrl || "/placeholder-brand.png"}
+                                                    alt={brand.label}
+                                                    className="max-w-full max-h-full object-contain group-hover:scale-110 transition-transform duration-500"
+                                                    onError={(e) => {
+                                                        const target = e.target as HTMLImageElement;
+                                                        target.src = "/placeholder-brand.png";
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="space-y-0.5">
+                                                <p className="text-[10px] font-black text-neutral-500 uppercase tracking-widest leading-none mb-1">{brand.label}</p>
+                                                <p className="text-[11px] font-black text-white uppercase tracking-tight">{dev.deviceModel || "Default"}</p>
                                             </div>
                                         </div>
                                     </TableCell>

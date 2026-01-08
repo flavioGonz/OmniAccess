@@ -713,27 +713,45 @@ export class AkuvoxDriver implements IDeviceDriver {
                 const response = await this.request("POST", `/api/${api}/get`, payload, device);
 
                 if (response && response.retcode === 0 && response.data?.item) {
-                    // console.log(`[Akuvox] ✓ Successfully fetched ${response.data.item.length} items from ${api}`);
                     return response.data.item.map((item: any) => {
-                        // Normalize Time/Date for UI compatibility
-                        if (item.Time && (!item.Date || !item.TimeOnly)) {
-                            const [d, t] = item.Time.split(' ');
-                            return { ...item, Date: d, Time: t || d };
+                        let date = item.Date || item.date || "";
+                        let time = item.Time || item.time || "";
+
+                        if (time.includes(' ') && (time.includes('-') || time.includes('/'))) {
+                            const [d, t] = time.split(' ');
+                            date = d;
+                            time = t;
+                        } else if (time && !date && !time.includes('-') && !time.includes('/')) {
+                            date = new Date().toISOString().split('T')[0];
                         }
-                        return item;
+
+                        if (!item.PicUrl && !item.PicPath && !item.pic_url && !item.snap_path && date && time) {
+                            item.PicPath = `PROXY_FACE|${date}|${time}`;
+                        }
+
+                        return { ...item, Date: date, Time: time };
                     });
                 }
 
-                // Fallback: Some versions might use GET
                 if (!response || response.retcode !== 0) {
                     const getResponse = await this.request("GET", `/api/${api}/get?num=${num}&offset=${offset}`, null, device);
                     if (getResponse && getResponse.retcode === 0 && getResponse.data?.item) {
                         return getResponse.data.item.map((item: any) => {
-                            if (item.Time && (!item.Date || !item.TimeOnly)) {
-                                const [d, t] = item.Time.split(' ');
-                                return { ...item, Date: d, Time: t || d };
+                            let date = item.Date || item.date || "";
+                            let time = item.Time || item.time || "";
+
+                            if (time.includes(' ') && (time.includes('-') || time.includes('/'))) {
+                                const [d, t] = time.split(' ');
+                                date = d;
+                                time = t;
+                            } else if (time && !date && !time.includes('-') && !time.includes('/')) {
+                                date = new Date().toISOString().split('T')[0];
                             }
-                            return item;
+
+                            if (!item.PicUrl && !item.PicPath && !item.pic_url && !item.snap_path && date && time) {
+                                item.PicPath = `PROXY_FACE|${date}|${time}`;
+                            }
+                            return { ...item, Date: date, Time: time };
                         });
                     }
                 }

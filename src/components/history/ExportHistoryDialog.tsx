@@ -18,9 +18,15 @@ import ExcelJS from "exceljs";
 interface ExportHistoryDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    filters?: {
+        search?: string;
+        decision?: "ALL" | "GRANT" | "DENY";
+        type?: "ALL" | "PLATE" | "FACE" | "TAG";
+        direction?: "ALL" | "ENTRY" | "EXIT";
+    }
 }
 
-export function ExportHistoryDialog({ open, onOpenChange }: ExportHistoryDialogProps) {
+export function ExportHistoryDialog({ open, onOpenChange, filters }: ExportHistoryDialogProps) {
     const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
     const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
     const [isExporting, setIsExporting] = useState(false);
@@ -32,6 +38,10 @@ export function ExportHistoryDialog({ open, onOpenChange }: ExportHistoryDialogP
             const response = await getAccessEvents({
                 from: new Date(startDate + "T00:00:00"),
                 to: new Date(endDate + "T23:59:59"),
+                search: filters?.search,
+                decision: filters?.decision,
+                type: filters?.type,
+                direction: filters?.direction,
                 take: 10000, // Limit to 10k for safety
                 skip: 0
             });
@@ -41,24 +51,64 @@ export function ExportHistoryDialog({ open, onOpenChange }: ExportHistoryDialogP
             const workbook = new ExcelJS.Workbook();
             const worksheet = workbook.addWorksheet("Historial de Accesos");
 
-            // Define columns
+            // 1. Add Filter Summary at the top
+            worksheet.addRow(["REPORTE DE HISTORIAL - OMNIACCESS"]).font = { bold: true, size: 14 };
+            worksheet.addRow([`Generado el: ${new Date().toLocaleString()}`]);
+            worksheet.addRow([`Periodo: ${startDate} a ${endDate}`]);
+
+            const filterTerms = [];
+            if (filters?.search) filterTerms.push(`Búsqueda: "${filters.search}"`);
+            if (filters?.type !== "ALL") filterTerms.push(`Tipo: ${filters?.type}`);
+            if (filters?.decision !== "ALL") filterTerms.push(`Resultado: ${filters?.decision}`);
+            if (filters?.direction !== "ALL") filterTerms.push(`Sentido: ${filters?.direction}`);
+
+            if (filterTerms.length > 0) {
+                worksheet.addRow([`Filtros activos: ${filterTerms.join(" | ")}`]);
+            }
+
+            worksheet.addRow([]); // Gap
+
+            // 2. Calculate and add statistics
+            const stats = {
+                total: events.length,
+                entradas: events.filter((e: any) => e.direction === 'ENTRY').length,
+                salidas: events.filter((e: any) => e.direction === 'EXIT').length,
+                permitidos: events.filter((e: any) => e.decision === 'GRANT').length,
+                denegados: events.filter((e: any) => e.decision === 'DENY').length,
+                lpr: events.filter((e: any) => e.accessType === 'PLATE').length,
+                facial: events.filter((e: any) => e.accessType === 'FACE').length,
+                tag: events.filter((e: any) => e.accessType === 'TAG').length,
+            };
+
+            worksheet.addRow(["ESTADÍSTICAS DEL PERIODO"]).font = { bold: true, size: 12, color: { argb: "FF6366F1" } };
+            worksheet.addRow([`Total de Eventos: ${stats.total}`]);
+            worksheet.addRow([`Entradas: ${stats.entradas} | Salidas: ${stats.salidas}`]);
+            worksheet.addRow([`Permitidos: ${stats.permitidos} | Denegados: ${stats.denegados}`]);
+            worksheet.addRow([`LPR: ${stats.lpr} | Facial: ${stats.facial} | TAG/RFID: ${stats.tag}`]);
+
+            worksheet.addRow([]); // Gap
+
+            // Define columns (Widths and Keys only, headers added manually)
             worksheet.columns = [
-                { header: "ID de Evento", key: "id", width: 25 },
-                { header: "Fecha", key: "date", width: 15 },
-                { header: "Hora", key: "time", width: 15 },
-                { header: "Matrícula", key: "plate", width: 15 },
-                { header: "Tipo de Acceso", key: "type", width: 15 },
-                { header: "Sujeto / Residente", key: "user", width: 30 },
-                { header: "Unidad / Lote", key: "unit", width: 20 },
-                { header: "Departamento", key: "apartment", width: 15 },
-                { header: "Punto de Acceso", key: "device", width: 25 },
-                { header: "Sentido", key: "direction", width: 12 },
-                { header: "Resultado", key: "decision", width: 15 },
-                { header: "Detalles Técnicos", key: "details", width: 40 },
+                { key: "id", width: 25 },
+                { key: "date", width: 15 },
+                { key: "time", width: 15 },
+                { key: "plate", width: 15 },
+                { key: "type", width: 15 },
+                { key: "user", width: 30 },
+                { key: "unit", width: 20 },
+                { key: "apartment", width: 15 },
+                { key: "device", width: 25 },
+                { key: "direction", width: 12 },
+                { key: "decision", width: 15 },
+                { key: "details", width: 40 },
             ];
 
-            // Style headers
-            const headerRow = worksheet.getRow(1);
+            // Add Header Row Manually
+            const headerRow = worksheet.addRow([
+                "ID de Evento", "Fecha", "Hora", "Matrícula", "Tipo", "Sujeto / Residente", "Unidad", "Depto", "Punto de Acceso", "Dirección", "Resultado", "Detalles"
+            ]);
+
             headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
             headerRow.fill = {
                 type: "pattern",
@@ -66,6 +116,7 @@ export function ExportHistoryDialog({ open, onOpenChange }: ExportHistoryDialogP
                 fgColor: { argb: "FFC52828" } // Red-600
             };
             headerRow.alignment = { vertical: "middle", horizontal: "center" };
+            headerRow.height = 25;
 
             // Add rows
             events.forEach((e: any, index: number) => {
@@ -122,8 +173,11 @@ export function ExportHistoryDialog({ open, onOpenChange }: ExportHistoryDialogP
                 });
             });
 
-            // Auto-filter
-            worksheet.autoFilter = "A1:L1";
+            // Auto-filter on the header row
+            const startCol = "A";
+            const endCol = "L";
+            const headerRowNumber = headerRow.number;
+            worksheet.autoFilter = `${startCol}${headerRowNumber}:${endCol}${headerRowNumber}`;
 
             // Generate buffer and download
             const buffer = await workbook.xlsx.writeBuffer();

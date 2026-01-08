@@ -109,7 +109,7 @@ const fetchCameraSnapshot = async (device) => {
     }
 
     const authHeaderBasic = "Basic " + Buffer.from(`${device.username}:${device.password}`).toString("base64");
-    console.log(`\n[Snap-v7] 🔍 ${device.name} (${device.ip})`);
+    // console.log(`\n[Snap-v7] 🔍 ${device.name} (${device.ip})`);
 
     for (const port of ports) {
         let currentBaseUrl = baseUrl;
@@ -124,7 +124,7 @@ const fetchCameraSnapshot = async (device) => {
             }
         }
 
-        console.log(`[Snap] 🔌 Trying port: ${port || 'default'}`);
+        // console.log(`[Snap] 🔌 Trying port: ${port || 'default'}`);
 
         for (const path of basePaths) {
             const urlToTry = currentBaseUrl + path;
@@ -137,7 +137,7 @@ const fetchCameraSnapshot = async (device) => {
                     validateStatus: s => s === 200
                 });
                 if (isValidImage(response.data, response.headers['content-type'])) {
-                    console.log(`[Snap] ✓ SUCCESS! ${path} (Port: ${port || 'default'}) [No-Auth]`);
+                    // console.log(`[Snap] ✓ SUCCESS! ${path} (Port: ${port || 'default'}) [No-Auth]`);
                     return response.data;
                 }
             } catch (e) {
@@ -151,10 +151,10 @@ const fetchCameraSnapshot = async (device) => {
                 if (firstRes.status === 401) {
                     const wwwAuth = firstRes.headers["www-authenticate"] || "";
                     if (wwwAuth.toLowerCase().includes("digest")) {
-                        console.log(`[Snap] 🔐 401 Digest detected on ${path}. Negotiating...`);
+                        // console.log(`[Snap] 🔐 401 Digest detected on ${path}. Negotiating...`);
                         const digestResult = await tryFetchWithDigest(urlToTry, path, device);
                         if (digestResult) {
-                            console.log(`[Snap] ✓ SUCCESS! ${path} via Digest`);
+                            // console.log(`[Snap] ✓ SUCCESS! ${path} via Digest`);
                             return digestResult;
                         }
                     } else if (wwwAuth.toLowerCase().includes("basic")) {
@@ -164,7 +164,7 @@ const fetchCameraSnapshot = async (device) => {
                             timeout: 4000
                         });
                         if (isValidImage(resBasic.data, resBasic.headers['content-type'])) {
-                            console.log(`[Snap] ✓ SUCCESS! ${path} [Basic]`);
+                            // console.log(`[Snap] ✓ SUCCESS! ${path} [Basic]`);
                             return resBasic.data;
                         }
                     }
@@ -507,7 +507,7 @@ const fetchAkuvoxFaceImage = async (device, options = {}) => {
                 url: url,
                 headers: { 'Authorization': authHeaderBasic },
                 responseType: isJson ? 'json' : 'arraybuffer',
-                timeout: 25000 // ULTRA-TIMEOUT for slow Torres
+                timeout: 5000 // Reduced from 25s to 5s to avoid blocking
             };
             if (postBody) {
                 config.data = postBody;
@@ -543,7 +543,7 @@ const fetchAkuvoxFaceImage = async (device, options = {}) => {
                             url: url,
                             headers: { 'Authorization': authStr },
                             responseType: isJson ? 'json' : 'arraybuffer',
-                            timeout: 25000
+                            timeout: 8000 // Reduced from 25s to 8s
                         };
                         if (postBody) {
                             retryConfig.data = postBody;
@@ -556,7 +556,7 @@ const fetchAkuvoxFaceImage = async (device, options = {}) => {
                     }
                 }
             }
-            console.warn(`[Akuvox] Request failed to ${url}: ${e.message}`);
+            // console.warn(`[Akuvox] Request failed to ${url}: ${e.message}`);
             return null;
         }
     };
@@ -577,7 +577,7 @@ const fetchAkuvoxFaceImage = async (device, options = {}) => {
     const logApis = ["doorlog", "searchlog", "accesslog"];
     const apiPorts = [null, "8080"];
 
-    for (let retry = 0; retry < 6; retry++) {
+    for (let retry = 0; retry < 2; retry++) { // Reduced from 6 retries to 2
         // console.log(`[Akuvox] Log Polling Attempt ${retry + 1}/6...`);
 
         for (const port of apiPorts) {
@@ -1464,7 +1464,24 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
         });
 
         if (!device) {
-            console.warn(`${logPrefix} Unknown Akuvox Device MAC: ${macAddress}`);
+            // RECOVERY: If MAC is invalid (macro literal like $mac) or not found, try by IP
+            const remoteIp = req.socket.remoteAddress;
+            const cleanRemoteIp = remoteIp ? remoteIp.replace(/^.*:/, '') : null;
+
+            console.log(`${logPrefix} [RECOVERY] MAC not matched ($mac or unknown). Attempting IP match for: ${cleanRemoteIp}`);
+
+            if (cleanRemoteIp) {
+                device = allDevices.find(d => d.ip === cleanRemoteIp || d.ip.includes(cleanRemoteIp));
+            }
+
+            if (!device && allDevices.length === 1 && allDevices[0].brand === 'AKUVOX') {
+                device = allDevices[0];
+                console.log(`${logPrefix} [RECOVERY] Only one Akuvox device in DB. Auto-matching...`);
+            }
+        }
+
+        if (!device) {
+            console.warn(`${logPrefix} Unknown Akuvox Device. MAC: ${macAddress}, IP: ${req.socket.remoteAddress}`);
         }
 
         let accessDecision = "DENY";
@@ -1842,21 +1859,10 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
 const requestHandler = async (req, res) => {
     const logPrefix = `[${new Date().toISOString()}]`;
     const remoteIp = req.socket.remoteAddress;
-    // --- LOG ALL REQUESTS (SILENCED V19 - Use only for DEEP debugging) ---
-    // console.log(`${logPrefix} 📥 [REQUEST] ${req.method} ${req.url} from ${remoteIp}`);
-
-    // Emit initial debug to socket so we can see arrival even if it fails later
-    /*
-    addDebugLog({
-        id: `raw-${Date.now()}`,
-        timestamp: new Date(),
-        source: 'raw',
-        method: req.method,
-        url: req.url,
-        params: { remoteIp, headers: req.headers },
-        credentialValue: "INCOMING POLLING"
-    });
-    */
+    // --- LOG POST/PUT REQUESTS (For Webhook Debugging) ---
+    if (req.method === 'POST' || req.method === 'PUT') {
+        console.log(`${logPrefix} 📥 [${req.method}] ${req.url} from ${remoteIp}`);
+    }
 
     // Health check
     if (req.url === '/health' || req.url === '/ping') {
@@ -1971,8 +1977,116 @@ const requestHandler = async (req, res) => {
         }
 
         console.error(`${logPrefix} [Proxy-Face] 🚫 Not found for ${device.name} using strict spec after trying Door & Intercom.`);
-        res.writeHead(404);
         res.end("Image not found");
+        return;
+    }
+
+    // DISPOSITIVO IMAGE PROXY (Generic for Doorlogs/Memory)
+    if (url.includes('/api/proxy/device-image')) {
+        const query = new URL(req.url, `http://${req.headers.host}`).searchParams;
+        const deviceId = query.get('deviceId');
+        const pathParam = query.get('path');
+
+        if (!deviceId || !pathParam) {
+            res.writeHead(400);
+            res.end("Missing parameters (deviceId, path)");
+            return;
+        }
+
+        const device = await prisma.device.findUnique({ where: { id: deviceId } });
+        if (!device) {
+            res.writeHead(404);
+            res.end("Device not found");
+            return;
+        }
+
+        // Handle synthetic path from AkuvoxDriver (PROXY_FACE|date|time)
+        if (pathParam.startsWith('PROXY_FACE|')) {
+            const [, date, time] = pathParam.split('|');
+            const hms = time.split(':');
+            const cleanTime = hms.map(t => parseInt(t, 10)).join('-');
+            const leadZeroTime = hms.join('-');
+            const compactTime = hms.join('');
+            const compactDate = date.replace(/-/g, '');
+
+            const fileNameVariations = [
+                `${date}_${cleanTime}_0.jpg`,
+                `${date}_${cleanTime}.jpg`,
+                `${date}_${leadZeroTime}_0.jpg`,
+                `${date}_${leadZeroTime}.jpg`,
+                `${compactDate}_${compactTime}_0.jpg`,
+                `${compactDate}_${compactTime}.jpg`,
+                `${compactDate}${compactTime}.jpg`
+            ];
+
+            const folders = ['DoorPicture', 'IntercomPicture', 'CapPicture', 'Snapshot'];
+            const pureIp = device.ip.replace(/^https?:\/\//, '').split(':')[0];
+            const ports = [null, '8080'];
+
+            for (const port of ports) {
+                const currentIp = port ? `${pureIp}:${port}` : pureIp;
+
+                for (const folder of folders) {
+                    for (const fileName of fileNameVariations) {
+                        const finalUrl = `http://${currentIp}/Image/${folder}/${fileName}`;
+                        const relativePath = `/Image/${folder}/${fileName}`;
+
+                        // console.log(`${logPrefix} [Proxy-Device-Image] 🔍 Testing synthetic -> ${finalUrl}`);
+                        try {
+                            let imageRes = await axios.get(finalUrl, {
+                                responseType: 'arraybuffer',
+                                timeout: 3500, // Shorter timeout to try many variations quickly
+                                validateStatus: (status) => status === 200,
+                                httpsAgent: agent
+                            }).catch(async (e) => {
+                                if (e.response?.status === 401) {
+                                    return { data: await tryFetchWithDigest(finalUrl, relativePath, device), status: 200 };
+                                }
+                                return null;
+                            });
+
+                            const buffer = imageRes?.data;
+                            if (buffer && isValidImage(buffer)) {
+                                console.log(`${logPrefix} [Proxy-Device-Image] ✅ Success! (${folder}/${fileName}) Port: ${port || '80'}`);
+                                res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' });
+                                res.end(buffer);
+                                return;
+                            }
+                        } catch (e) { /* continue */ }
+                    }
+                }
+            }
+        } else {
+            // Direct path proxy
+            const pureIp = device.ip.replace(/^https?:\/\//, '').split(':')[0];
+            const finalUrl = pathParam.startsWith('http') ? pathParam : `http://${pureIp}${pathParam.startsWith('/') ? '' : '/'}${pathParam}`;
+
+            try {
+                let imageRes = await axios.get(finalUrl, {
+                    responseType: 'arraybuffer',
+                    timeout: 10000,
+                    validateStatus: (status) => status === 200,
+                    httpsAgent: agent
+                }).catch(async (e) => {
+                    if (e.response?.status === 401) {
+                        return { data: await tryFetchWithDigest(finalUrl, pathParam, device), status: 200 };
+                    }
+                    return null;
+                });
+
+                const buffer = imageRes?.data;
+                if (buffer && isValidImage(buffer)) {
+                    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' });
+                    res.end(buffer);
+                    return;
+                }
+            } catch (e) {
+                console.error(`${logPrefix} [Proxy-Device-Image] Direct path failed: ${finalUrl}`);
+            }
+        }
+
+        res.writeHead(404);
+        res.end("Not found");
         return;
     }
 
@@ -2056,7 +2170,9 @@ const requestHandler = async (req, res) => {
     }
 
     // AKUVOX (FACE/TAG/DOOR)
-    if (url.includes('akuvox')) {
+    // Detection: Explicit path OR Characteristic parameters (mac + event/card)
+    const isAkuvoxParams = (req.url.includes('mac=') && (req.url.includes('event=') || req.url.includes('card=') || req.url.includes('user=')));
+    if (url.includes('akuvox') || isAkuvoxParams) {
         console.log(`${logPrefix} 🎯 Match: AKUVOX Driver (Path: ${req.url})`);
         await handleAkuvoxWebhook(req, res, logPrefix);
         return;

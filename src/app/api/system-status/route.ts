@@ -9,22 +9,36 @@ export async function GET(req: NextRequest) {
     // 1. Check Primary Database
     try {
         const startDb = performance.now();
-        const result = await prisma.$queryRaw`SELECT 
-            pg_database_size(current_database()) as size,
-            (SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public') as table_count,
-            (SELECT count(*) FROM pg_stat_activity) as connections,
-            version() as version`;
 
-        const dbInfo: any = Array.isArray(result) ? result[0] : result;
+        // Basic connectivity check
+        await prisma.$queryRaw`SELECT 1`;
+
+        // Attempt to get metadata (might fail if permissions are restricted)
+        let metadata: any = {};
+        try {
+            const results: any[] = await prisma.$queryRaw`SELECT 
+                pg_database_size(current_database()) as size,
+                (SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public') as table_count,
+                version() as version`;
+            metadata = results[0] || {};
+        } catch (e) {
+            console.warn("DB Metadata fetch failed (permissions?), using defaults");
+        }
+
+        const dbUrl = process.env.DATABASE_URL || "";
+        const dbMatch = dbUrl.match(/@([^/:]+):?(\d+)?/);
+        const dbHost = dbMatch ? dbMatch[1] : '127.0.0.1';
+        const dbPort = dbMatch ? (dbMatch[2] || '5432') : '5432';
 
         status.primaryDb = {
             status: 'connected',
             latency: Math.floor(performance.now() - startDb),
             details: {
-                size: Number(dbInfo.size),
-                tableCount: Number(dbInfo.table_count),
-                connections: Number(dbInfo.connections),
-                version: dbInfo.version?.split(' ')[1] || 'Unknown'
+                size: Number(metadata.size || 0),
+                tableCount: Number(metadata.table_count || 0),
+                version: metadata.version?.split(' ')[1] || 'PostgreSQL',
+                host: dbHost,
+                port: dbPort
             }
         };
     } catch (error: any) {

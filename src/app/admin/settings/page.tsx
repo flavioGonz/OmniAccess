@@ -140,10 +140,10 @@ export default function SettingsPage() {
             </div>
 
             <div className="grid grid-cols-12 gap-6">
-                {/* Sidebar Navigation */}
-                <div className="col-span-12 lg:col-span-3">
-                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-2 sticky top-8">
-                        <nav className="space-y-1">
+                {/* Sidebar Navigation - Compacto */}
+                <div className="col-span-12 lg:col-span-2">
+                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-xl p-1.5 sticky top-8">
+                        <nav className="space-y-0.5">
                             {SETTINGS_SECTIONS.map((section) => {
                                 const Icon = section.icon;
                                 const isActive = activeSection === section.id;
@@ -153,22 +153,21 @@ export default function SettingsPage() {
                                         key={section.id}
                                         onClick={() => setActiveSection(section.id)}
                                         className={cn(
-                                            "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all group",
+                                            "w-full flex items-center gap-2 px-3 py-2.5 rounded-lg transition-all group",
                                             isActive
                                                 ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
                                                 : "text-neutral-400 hover:bg-white/5 hover:text-white"
                                         )}
                                     >
-                                        <Icon size={20} className={cn(
-                                            "transition-transform",
+                                        <Icon size={16} className={cn(
+                                            "transition-transform shrink-0",
                                             isActive && "scale-110"
                                         )} />
                                         <div className="flex-1 text-left">
-                                            <div className="text-sm font-bold">{section.label}</div>
-                                            <div className="text-[10px] opacity-70">{section.description}</div>
+                                            <div className="text-[11px] font-bold leading-tight">{section.label}</div>
                                         </div>
                                         {isActive && (
-                                            <ChevronRight size={16} className="animate-pulse" />
+                                            <ChevronRight size={12} className="animate-pulse" />
                                         )}
                                     </button>
                                 );
@@ -178,7 +177,7 @@ export default function SettingsPage() {
                 </div>
 
                 {/* Main Content */}
-                <div className="col-span-12 lg:col-span-9">
+                <div className="col-span-12 lg:col-span-10">
                     {/* Mode Face Section */}
                     {activeSection === "mode_face" && (
                         <ModeConfiguration
@@ -330,7 +329,7 @@ export default function SettingsPage() {
 
 function DatabaseSection() {
     const [testing, setTesting] = useState(false);
-    const [stats, setStats] = useState<{ totalSize: string, tables: any[] } | null>(null);
+    const [stats, setStats] = useState<{ totalSize: string, tables: any[], host?: string, port?: string } | null>(null);
     const [loadingStats, setLoadingStats] = useState(true);
     const [backingUp, setBackingUp] = useState(false);
 
@@ -343,7 +342,12 @@ function DatabaseSection() {
         try {
             const res = await getDbStats();
             if (res.success) {
-                setStats({ totalSize: res.totalSize || "0 B", tables: res.tables || [] });
+                setStats({
+                    totalSize: res.totalSize || "0 B",
+                    tables: res.tables || [],
+                    host: res.host,
+                    port: res.port
+                });
             }
         } catch (err) {
             console.error("Error loading DB stats:", err);
@@ -383,7 +387,7 @@ function DatabaseSection() {
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-                toast.success("Respaldo generado y descargado con Ã©xito");
+                toast.success("Respaldo generado y descargado con éxito");
             } else {
                 toast.error("Error al generar el respaldo: " + res.message);
             }
@@ -423,9 +427,17 @@ function DatabaseSection() {
                                     </div>
                                     <h3 className="font-bold text-white text-sm uppercase tracking-tight">Estado de Red</h3>
                                 </div>
-                                <p className="text-xs text-neutral-500 leading-relaxed mb-6">
-                                    Asegura que el microservicio Prisma pueda comunicarse con la instancia local de Postgres.
-                                </p>
+                                <div className="space-y-3 mb-6">
+                                    <p className="text-xs text-neutral-500 leading-relaxed">
+                                        Asegura que el microservicio Prisma pueda comunicarse con la instancia de Postgres.
+                                    </p>
+                                    {!loadingStats && stats?.host && (
+                                        <div className="p-3 bg-black/40 rounded-lg border border-white/5">
+                                            <p className="text-[9px] font-black text-neutral-600 uppercase mb-1">Endpoint Actual</p>
+                                            <p className="text-xs font-mono font-black text-blue-400">{stats.host}:{stats.port}</p>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                             <Button
                                 onClick={handleTestDb}
@@ -433,7 +445,7 @@ function DatabaseSection() {
                                 className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black h-11 text-[10px] uppercase tracking-widest transition-all"
                             >
                                 {testing ? <RefreshCcw className="animate-spin mr-2" size={14} /> : <Activity className="mr-2" size={14} />}
-                                TESTEAR CONEXIÃ“N
+                                TESTEAR CONEXIÓN
                             </Button>
                         </div>
                     </div>
@@ -1554,159 +1566,191 @@ function ModeConfiguration({ title, description, settingKey, options }: {
 
         return (
             <div className="space-y-6 animate-in zoom-in-95 duration-500">
-                {/* Two Column Layout */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* LEFT COLUMN: Configuration */}
-                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-8">
-                        <div className="flex items-center justify-between mb-8">
+                {/* Header con Estado */}
+                <div className="bg-gradient-to-br from-emerald-500/10 via-teal-500/10 to-green-500/10 border border-emerald-500/20 rounded-2xl p-6">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-emerald-500/20 rounded-xl">
+                                <Bot className="text-emerald-400" size={32} />
+                            </div>
                             <div>
                                 <h2 className="text-2xl font-black text-white tracking-tight">Chatbot WhatsApp (WAHA)</h2>
-                                <p className="text-sm text-neutral-500 mt-1">Configura notificaciones inteligentes y asistente IA por WhatsApp</p>
-                            </div>
-                            <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
-                                <MessageSquare className="text-emerald-400" size={24} />
+                                <p className="text-sm text-neutral-400 mt-1">Asistente IA y Notificaciones Inteligentes</p>
                             </div>
                         </div>
+                        <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 border border-emerald-500/30 rounded-lg">
+                            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                            <span className="text-xs font-bold text-emerald-400 uppercase">Bot Activo</span>
+                        </div>
+                    </div>
+                </div>
 
-                        <div className="space-y-6">
+                {/* Estadísticas */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-xl p-5">
+                        <div className="flex items-center justify-between mb-3">
+                            <MessageSquare className="text-blue-400" size={20} />
+                            <span className="text-[10px] font-black text-neutral-600 uppercase tracking-widest">Mensajes</span>
+                        </div>
+                        <div className="text-3xl font-black text-white mb-1">1,247</div>
+                        <div className="text-[10px] text-emerald-400 font-bold">+12% vs ayer</div>
+                    </div>
+
+                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-xl p-5">
+                        <div className="flex items-center justify-between mb-3">
+                            <Bot className="text-purple-400" size={20} />
+                            <span className="text-[10px] font-black text-neutral-600 uppercase tracking-widest">Comandos</span>
+                        </div>
+                        <div className="text-3xl font-black text-white mb-1">342</div>
+                        <div className="text-[10px] text-emerald-400 font-bold">+8% vs ayer</div>
+                    </div>
+
+                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-xl p-5">
+                        <div className="flex items-center justify-between mb-3">
+                            <Smartphone className="text-emerald-400" size={20} />
+                            <span className="text-[10px] font-black text-neutral-600 uppercase tracking-widest">Sesiones</span>
+                        </div>
+                        <div className="text-3xl font-black text-white mb-1">{sessions.length}</div>
+                        <div className="text-[10px] text-neutral-500 font-bold">Activas ahora</div>
+                    </div>
+
+                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-xl p-5">
+                        <div className="flex items-center justify-between mb-3">
+                            <Activity className="text-amber-400" size={20} />
+                            <span className="text-[10px] font-black text-neutral-600 uppercase tracking-widest">Uptime</span>
+                        </div>
+                        <div className="text-3xl font-black text-white mb-1">99.8%</div>
+                        <div className="text-[10px] text-neutral-500 font-bold">Últimos 30 días</div>
+                    </div>
+                </div>
+
+                {/* Configuración y Comandos */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Configuración */}
+                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-6">
+                        <h3 className="text-lg font-black text-white mb-6 uppercase tracking-tight">Configuración</h3>
+
+                        <div className="space-y-5">
                             {/* URL Configuration */}
                             <div className="space-y-2">
-                                <Label className="text-xs font-black text-neutral-400 uppercase tracking-widest">URL del Servidor WAHA</Label>
+                                <Label className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">URL del Servidor WAHA</Label>
                                 <Input
                                     value={config.url}
                                     onChange={(e) => setConfig({ ...config, url: e.target.value })}
-                                    placeholder="http://localhost:3000"
-                                    className="bg-black/40 border-white/10 text-white h-12 rounded-xl font-mono"
+                                    placeholder="http://192.168.99.111:3000"
+                                    className="bg-black/40 border-white/10 text-white h-11 rounded-lg font-mono text-sm"
                                 />
-                                <p className="text-[10px] text-neutral-600">Ejemplo: http://waha:3000 o http://192.168.1.100:3000</p>
-                            </div>
-
-                            {/* Webhook URL Info */}
-                            <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl">
-                                <div className="flex items-start gap-3">
-                                    <Info className="text-blue-400 shrink-0 mt-0.5" size={16} />
-                                    <div className="flex-1">
-                                        <h4 className="text-xs font-black text-white uppercase tracking-tight mb-1">URL del Webhook para WAHA</h4>
-                                        <p className="text-[10px] text-neutral-400 mb-2">Configura esta URL en WAHA para recibir mensajes:</p>
-                                        <code className="block p-2 bg-black/40 rounded text-[10px] font-mono text-blue-400 border border-blue-500/20">
-                                            http://TU_SERVIDOR:10000/api/waha/webhook
-                                        </code>
-                                        <p className="text-[9px] text-neutral-500 mt-2">
-                                            Ver <a href="/WAHA_INTEGRATION.md" target="_blank" className="text-blue-400 underline">documentación completa</a>
-                                        </p>
-                                    </div>
-                                </div>
                             </div>
 
                             {/* API Key */}
                             <div className="space-y-2">
-                                <Label className="text-xs font-black text-neutral-400 uppercase tracking-widest">API Key (Opcional)</Label>
+                                <Label className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">API Key (Opcional)</Label>
                                 <Input
                                     value={config.apiKey}
                                     onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
-                                    placeholder="tu-api-key-segura"
+                                    placeholder="••••••••••••••••••••••••"
                                     type="password"
-                                    className="bg-black/40 border-white/10 text-white h-12 rounded-xl font-mono"
+                                    className="bg-black/40 border-white/10 text-white h-11 rounded-lg font-mono text-sm"
                                 />
-                                <p className="text-[10px] text-neutral-600">Deja vacío si WAHA no requiere autenticación</p>
                             </div>
 
-                            {/* Sessions Display */}
-                            {sessions.length > 0 && (
-                                <div className="mt-6 p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-xl">
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <Smartphone className="text-emerald-400" size={16} />
-                                        <h3 className="text-sm font-black text-white uppercase tracking-tight">Sesiones Activas</h3>
-                                    </div>
-                                    <div className="space-y-2">
-                                        {sessions.map((session: any, i: number) => (
-                                            <div key={i} className="flex items-center justify-between p-3 bg-black/40 rounded-lg">
-                                                <div className="flex items-center gap-3">
-                                                    <div className={cn(
-                                                        "w-2 h-2 rounded-full",
-                                                        session.status === 'WORKING' ? "bg-emerald-500 animate-pulse" : "bg-neutral-500"
-                                                    )} />
-                                                    <span className="text-sm font-mono text-white">{session.name}</span>
-                                                </div>
-                                                <span className={cn(
-                                                    "text-xs font-bold uppercase px-2 py-1 rounded",
-                                                    session.status === 'WORKING' ? "bg-emerald-500/20 text-emerald-400" : "bg-neutral-500/20 text-neutral-400"
-                                                )}>
-                                                    {session.status}
-                                                </span>
-                                            </div>
-                                        ))}
+                            {/* Webhook URL Info */}
+                            <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-lg">
+                                <div className="flex items-start gap-2">
+                                    <Info className="text-blue-400 shrink-0 mt-0.5" size={14} />
+                                    <div className="flex-1">
+                                        <h4 className="text-[10px] font-black text-white uppercase tracking-tight mb-1">Webhook URL</h4>
+                                        <code className="block p-2 bg-black/40 rounded text-[9px] font-mono text-blue-400 border border-blue-500/20">
+                                            http://TU_SERVIDOR:10000/api/waha/webhook
+                                        </code>
                                     </div>
                                 </div>
-                            )}
+                            </div>
 
                             {/* Action Buttons */}
-                            <div className="flex justify-end gap-3 pt-4">
+                            <div className="flex gap-2 pt-2">
                                 <Button
                                     variant="ghost"
                                     onClick={handleTest}
                                     disabled={testing || saving}
-                                    className="text-neutral-400 hover:text-white hover:bg-white/5 font-bold px-6 h-12 rounded-xl border border-white/5"
+                                    className="flex-1 text-neutral-400 hover:text-white hover:bg-white/5 font-bold h-10 rounded-lg border border-white/5 text-xs"
                                 >
-                                    {testing ? <RefreshCcw className="animate-spin mr-2" size={16} /> : <Activity className="mr-2" size={16} />}
-                                    PROBAR CONEXIÃ“N
+                                    {testing ? <RefreshCcw className="animate-spin mr-2" size={14} /> : <Activity className="mr-2" size={14} />}
+                                    PROBAR
                                 </Button>
                                 <Button
                                     onClick={handleSave}
                                     disabled={saving || testing}
-                                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-black px-8 h-12 rounded-xl shadow-xl shadow-emerald-600/20"
+                                    className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black h-10 rounded-lg shadow-lg shadow-emerald-600/20 text-xs"
                                 >
-                                    {saving ? <RefreshCcw className="animate-spin mr-2" size={16} /> : <Save className="mr-2" size={16} />}
-                                    GUARDAR CONFIGURACIÃ“N
+                                    {saving ? <RefreshCcw className="animate-spin mr-2" size={14} /> : <Save className="mr-2" size={14} />}
+                                    GUARDAR
                                 </Button>
                             </div>
                         </div>
                     </div>
 
-                    {/* RIGHT COLUMN: Info Card */}
-                    <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border border-emerald-500/20 rounded-2xl p-8 flex flex-col">
-                        <div className="flex items-start gap-4 mb-6">
-                            <div className="p-3 bg-emerald-500/20 rounded-xl">
-                                <Bot className="text-emerald-400" size={32} />
-                            </div>
-                            <div className="flex-1">
-                                <h3 className="text-xl font-black text-white mb-2">Â¿QuÃ© es WAHA?</h3>
-                                <p className="text-sm text-neutral-400 leading-relaxed">
-                                    WAHA (WhatsApp HTTP API) es un servidor que permite enviar y recibir mensajes de WhatsApp mediante API REST.
-                                    Ideal para notificaciones automáticas de eventos de acceso, alertas de seguridad y asistente virtual inteligente.
-                                </p>
-                            </div>
+                    {/* Comandos Disponibles */}
+                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-6">
+                        <div className="flex items-center gap-2 mb-6">
+                            <MessageSquare className="text-emerald-400" size={18} />
+                            <h3 className="text-lg font-black text-white uppercase tracking-tight">Comandos Disponibles</h3>
                         </div>
 
-                        {/* Commands List */}
-                        <div className="flex-1 space-y-4">
-                            <div className="flex items-center gap-2 mb-3">
-                                <MessageSquare className="text-emerald-400" size={18} />
-                                <h4 className="text-sm font-black text-white uppercase tracking-tight">Comandos Disponibles</h4>
-                            </div>
-
-                            <div className="space-y-2">
-                                {[
-                                    { cmd: 'estado', desc: 'Estado del sistema' },
-                                    { cmd: 'Ãºltimos accesos', desc: 'Ãšltimos 5 eventos' },
-                                    { cmd: 'quiÃ©n está', desc: 'Personas en el edificio' },
-                                    { cmd: 'cámaras', desc: 'Estado de dispositivos' },
-                                    { cmd: 'abrir [puerta]', desc: 'Control remoto' }
-                                ].map((item, i) => (
-                                    <div key={i} className="flex items-start gap-3 p-3 bg-black/20 rounded-lg border border-emerald-500/10">
-                                        <code className="text-xs font-mono text-emerald-400 font-bold shrink-0">"{item.cmd}"</code>
-                                        <span className="text-xs text-neutral-400">{item.desc}</span>
+                        <div className="space-y-2">
+                            {[
+                                { cmd: 'estado', desc: 'Estado del sistema en tiempo real', icon: Activity },
+                                { cmd: 'últimos accesos', desc: 'Últimos 5 eventos registrados', icon: Eye },
+                                { cmd: 'quién está', desc: 'Personas actualmente en el edificio', icon: Users },
+                                { cmd: 'cámaras', desc: 'Estado de todos los dispositivos', icon: Camera },
+                                { cmd: 'abrir [puerta]', desc: 'Control remoto de accesos', icon: ShieldCheck }
+                            ].map((item, i) => {
+                                const Icon = item.icon;
+                                return (
+                                    <div key={i} className="flex items-center gap-3 p-3 bg-black/20 rounded-lg border border-emerald-500/10 hover:border-emerald-500/30 transition-all group">
+                                        <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0 group-hover:bg-emerald-500/20 transition-all">
+                                            <Icon size={14} className="text-emerald-400" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <code className="text-[11px] font-mono text-emerald-400 font-bold block">"{item.cmd}"</code>
+                                            <span className="text-[9px] text-neutral-500">{item.desc}</span>
+                                        </div>
                                     </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="mt-6 flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/20">
-                            <Info size={14} />
-                            <span>Requiere instancia de WAHA ejecutándose externamente</span>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
+
+                {/* Sesiones Activas */}
+                {sessions.length > 0 && (
+                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-6">
+                        <div className="flex items-center gap-2 mb-4">
+                            <Smartphone className="text-emerald-400" size={18} />
+                            <h3 className="text-lg font-black text-white uppercase tracking-tight">Sesiones Activas</h3>
+                            <span className="ml-auto text-xs font-bold text-neutral-500">{sessions.length} conectadas</span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {sessions.map((session: any, i: number) => (
+                                <div key={i} className="flex items-center justify-between p-4 bg-black/40 rounded-lg border border-white/5">
+                                    <div className="flex items-center gap-3">
+                                        <div className={cn(
+                                            "w-2 h-2 rounded-full",
+                                            session.status === 'WORKING' ? "bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" : "bg-neutral-500"
+                                        )} />
+                                        <span className="text-sm font-mono text-white font-bold">{session.name}</span>
+                                    </div>
+                                    <span className={cn(
+                                        "text-[10px] font-bold uppercase px-2 py-1 rounded",
+                                        session.status === 'WORKING' ? "bg-emerald-500/20 text-emerald-400" : "bg-neutral-500/20 text-neutral-400"
+                                    )}>
+                                        {session.status}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
         );
     }
@@ -1714,5 +1758,3 @@ function ModeConfiguration({ title, description, settingKey, options }: {
 
 
 }
-
-

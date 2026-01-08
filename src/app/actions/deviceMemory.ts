@@ -10,37 +10,32 @@ export async function getDeviceFaces(deviceId: string) {
     const device = await prisma.device.findUnique({ where: { id: deviceId } });
     if (!device) throw new Error("Device not found");
 
+    let items: any[] = [];
     if (device.brand === 'AKUVOX') {
         const driver = new AkuvoxDriver();
-        return await driver.getFaceList(device);
-    }
-
-    if (device.brand === 'HIKVISION') {
+        items = await driver.getFaceList(device);
+    } else if (device.brand === 'HIKVISION') {
         const driver = new HikvisionDriver();
 
         if (device.deviceType === 'FACE_TERMINAL') {
-            // Fetch Faces
             const faces = await driver.getFacesFromCamera(device);
-            console.log(`[DeviceMemory] Fetched ${faces.length} faces from Hikvision Terminal`);
-
-            return faces.map((f: any, index: number) => ({
+            items = faces.map((f: any, index: number) => ({
                 ID: f.FPID || f.faceURL || `HIKFACE-${index}`,
-                UserID: f.name || "Desconocido", // Often name is in 'name' field
+                UserID: f.name || "Desconocido",
                 Name: f.name || `Rostro ${index + 1}`,
-                CardCode: "", // Hikvision might associate cards, usually separate
+                CardCode: "",
                 HasFace: true,
                 HasTag: false,
                 IsPlate: false,
-                FaceUrl: f.faceURL // Hikvision often provides a query URL here
+                FaceUrl: f.faceURL
             }));
         } else {
-            // Default to LPR
             const plates = await driver.getPlates(device);
-            return plates.map((plateNumber: string, index: number) => ({
-                ID: plateNumber, // Using plate number as ID
+            items = plates.map((plateNumber: string, index: number) => ({
+                ID: plateNumber,
                 UserID: `HIK-${index}`,
                 Name: `Placa ${plateNumber}`,
-                CardCode: plateNumber, // Show plate in card field for table
+                CardCode: plateNumber,
                 HasFace: false,
                 HasTag: true,
                 IsPlate: true
@@ -48,7 +43,40 @@ export async function getDeviceFaces(deviceId: string) {
         }
     }
 
-    return [];
+    // Mirroring: Update HardwareMirror table to have a "cached" version of hardware memory
+    const mirroredItems = [];
+    if (items.length > 0) {
+        try {
+            for (const item of items) {
+                const mirror = await prisma.hardwareMirror.upsert({
+                    where: { deviceId_hardwareId: { deviceId: device.id, hardwareId: String(item.ID) } },
+                    update: {
+                        name: item.Name,
+                        cardCode: item.CardCode,
+                        pin: item.PIN || null,
+                        faceUrl: item.FaceUrl,
+                        lastUpdated: new Date()
+                    },
+                    create: {
+                        deviceId: device.id,
+                        hardwareId: String(item.ID),
+                        name: item.Name,
+                        cardCode: item.CardCode,
+                        pin: item.PIN || null,
+                        faceUrl: item.FaceUrl,
+                        syncStatus: "ONLY_HARDWARE"
+                    }
+                });
+                mirroredItems.push({ ...item, SyncStatus: mirror.syncStatus });
+            }
+            return mirroredItems;
+        } catch (e) {
+            console.error("[Mirror] Failed to update HardwareMirror:", e);
+            return items.map(i => ({ ...i, SyncStatus: 'UNKNOWN' }));
+        }
+    }
+
+    return items;
 }
 
 export async function getDatabaseStats() {
@@ -123,9 +151,8 @@ export async function syncIdentityAction(deviceId: string, item: any, unitId?: s
             data: {
                 name: item.Name,
                 phone: "N/A",
-                dni: item.UserID || "",
+                dni: String(item.UserID || ""),
                 unitId: unitId || null,
-                // Cara (si hay URL)
                 cara: item.FaceUrl || null
             }
         });
@@ -159,17 +186,21 @@ export async function syncIdentityAction(deviceId: string, item: any, unitId?: s
                 const fileName = `import_${item.ID}_${Date.now()}.jpg`;
                 const fileUrl = await uploadToS3(imageBuffer, fileName, "image/jpeg", "face");
 
-                // Update user with S3 link (proxied)
                 await prisma.user.update({
                     where: { id: user.id },
                     data: { cara: fileUrl }
                 });
-                console.log(`[Import] Saved face image for ${item.Name} to S3: ${fileName}`);
             }
         } catch (e) {
             console.error(`[Import] Failed to save face image for ${item.Name}:`, e);
         }
     }
+
+    // Update Mirror Status
+    await prisma.hardwareMirror.update({
+        where: { deviceId_hardwareId: { deviceId: device.id, hardwareId: String(item.ID) } },
+        data: { syncStatus: "IN_SYNC" }
+    });
 
     return {
         success: true,
@@ -446,24 +477,24 @@ export async function syncHardwareCallLogs(deviceId: string) {
             const startTime = new Date(timestamp.getTime() - 2000);
             const endTime = new Date(timestamp.getTime() + 2000);
 
-            const existing = await prisma.accessEvent.findFirst({
+            const existing = await prisma.callEvent.findFirst({
                 where: {
                     deviceId: device.id,
-                    timestamp: { gte: startTime, lte: endTime },
-                    details: { contains: 'Llamada' }
+                    timestamp: { gte: startTime, lte: endTime }
                 }
             });
 
             if (!existing) {
-                await prisma.accessEvent.create({
+                await prisma.callEvent.create({
                     data: {
                         timestamp: timestamp,
                         deviceId: device.id,
-                        decision: "GRANT",
-                        details: `SINCRO_HW: Llamada - ${log.Result || 'Desconocido'} (${log.TalkTime}s)`,
-                        plateDetected: `${log.CallerID} -> ${log.CalleeID}`,
-                        direction: device.direction,
-                        location: device.location,
+                        callerName: log.Name || null,
+                        callerId: log.CallerID || null,
+                        calleeId: log.CalleeID || null,
+                        duration: parseInt(log.TalkTime || "0"),
+                        status: log.Status === "1" ? "SUCCESS" : "MISSED",
+                        direction: log.Type === "0" ? "INCOMING" : "OUTGOING"
                     }
                 });
                 created++;

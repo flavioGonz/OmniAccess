@@ -209,6 +209,9 @@ model Device {
   lastOnlinePush DateTime?      // Device -> Server heartbeat
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
+  
+  callEvents       CallEvent[]
+  hardwareMirrors  HardwareMirror[]
 }
 
 enum AccessDecision {
@@ -234,6 +237,36 @@ model AccessEvent {
   plateNumber   String?
   details       String?
   createdAt     DateTime        @default(now())
+}
+
+model CallEvent {
+  id           String   @id @default(cuid())
+  timestamp    DateTime
+  deviceId     String
+  device       Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  callerName   String?
+  callerId     String?
+  calleeName   String?
+  calleeId     String?
+  duration     Int      @default(0) // in seconds
+  status       String   // "SUCCESS", "MISSED", etc.
+  direction    String   // "INCOMING", "OUTGOING"
+  createdAt    DateTime @default(now())
+}
+
+model HardwareMirror {
+  id           String   @id @default(cuid())
+  deviceId     String
+  device       Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  hardwareId   String   // The ID on the physical device (e.g. index or UserID)
+  name         String?
+  cardCode     String?
+  pin          String?
+  faceUrl      String?
+  syncStatus   String   @default("IN_SYNC") // "IN_SYNC", "ONLY_HARDWARE", "OUTDATED"
+  lastUpdated  DateTime @default(now())
+  
+  @@unique([deviceId, hardwareId])
 }
 
 model Setting {
