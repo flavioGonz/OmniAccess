@@ -6,7 +6,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Check, ShieldCheck, Server, Activity, Plus, Trash2, Save, Zap, Workflow, Code, Car, ChevronsUpDown, Loader2, Search } from "lucide-react";
+import { Check, ShieldCheck, Server, Activity, Plus, Trash2, Save, Zap, Workflow, Code, Car, ChevronsUpDown, Loader2, Search, Pencil, X, AlertTriangle, Copy } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DRIVER_MODELS, type DeviceBrand } from "@/lib/driver-models";
 import { Button } from "@/components/ui/button";
@@ -88,6 +88,9 @@ export function DriverDetailsDialog({ brand, isOpen, onClose }: DriverDetailsDia
     const [newModel, setNewModel] = useState({ value: "", label: "", category: "", photo: "" });
     const [isAdding, setIsAdding] = useState(false);
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
+    const [editingModel, setEditingModel] = useState<string | null>(null);
+    const [editValues, setEditValues] = useState({ value: "", label: "", category: "", photo: "" });
+    const [isUpdating, setIsUpdating] = useState(false);
 
     if (!brand) return null;
 
@@ -127,6 +130,37 @@ export function DriverDetailsDialog({ brand, isOpen, onClose }: DriverDetailsDia
             window.location.reload();
         } else {
             alert("Error al eliminar modelo: " + result.error);
+        }
+    };
+
+    const startEditing = (model: { value: string; label: string; category: string; photo: string }) => {
+        setEditingModel(model.value);
+        setEditValues({ ...model });
+    };
+
+    const cancelEditing = () => {
+        setEditingModel(null);
+        setEditValues({ value: "", label: "", category: "", photo: "" });
+    };
+
+    const handleUpdateModel = async () => {
+        if (!editingModel) return;
+        if (!editValues.label || !editValues.category) {
+            toast.error("Nombre y categoría son requeridos");
+            return;
+        }
+
+        setIsUpdating(true);
+        const { updateDeviceModel } = await import("@/app/actions/driver-models");
+        const result = await updateDeviceModel(brand, editingModel, editValues);
+        setIsUpdating(false);
+
+        if (result.success) {
+            toast.success("Modelo actualizado exitosamente");
+            setEditingModel(null);
+            window.location.reload();
+        } else {
+            toast.error("Error al actualizar: " + result.error);
         }
     };
 
@@ -178,20 +212,28 @@ export function DriverDetailsDialog({ brand, isOpen, onClose }: DriverDetailsDia
                 </div>
 
                 {/* Right Side: Models Management */}
-                <div className="w-full md:w-2/3 p-8 bg-neutral-950/50 flex flex-col">
+                <div className="w-full md:w-2/3 p-8 bg-neutral-950/50 flex flex-col min-h-0 overflow-hidden">
                     <Tabs defaultValue="models" className="flex-1 flex flex-col min-h-0">
                         <TabsList className="bg-black/20 border border-white/5 p-1 self-start mb-6">
                             <TabsTrigger value="models" className="text-[10px] font-black uppercase tracking-widest px-6 data-[state=active]:bg-blue-600">
                                 <Code size={14} className="mr-2" />
                                 Modelos Certificados
                             </TabsTrigger>
-                            <TabsTrigger value="brands" className="text-[10px] font-black uppercase tracking-widest px-6 data-[state=active]:bg-blue-600">
-                                <Car size={14} className="mr-2" />
-                                Marcas de Autos
-                            </TabsTrigger>
+                            {brandKey === 'HIKVISION' && (
+                                <TabsTrigger value="brands" className="text-[10px] font-black uppercase tracking-widest px-6 data-[state=active]:bg-blue-600">
+                                    <Car size={14} className="mr-2" />
+                                    Marcas de Autos
+                                </TabsTrigger>
+                            )}
+                            {brandKey === 'AKUVOX' && (
+                                <TabsTrigger value="webhooks" className="text-[10px] font-black uppercase tracking-widest px-6 data-[state=active]:bg-blue-600">
+                                    <Zap size={14} className="mr-2" />
+                                    Action URLs
+                                </TabsTrigger>
+                            )}
                         </TabsList>
 
-                        <TabsContent value="models" className="flex-1 flex flex-col min-h-0 m-0 focus-visible:ring-0">
+                        <TabsContent value="models" className="flex-1 flex flex-col min-h-0 overflow-hidden m-0 focus-visible:ring-0">
                             {/* ... existing Add Model Form & Models List codes ... */}
                             {/* Add Model Form */}
                             <div className="mb-6 p-4 bg-white/5 rounded-2xl border border-white/10">
@@ -247,42 +289,113 @@ export function DriverDetailsDialog({ brand, isOpen, onClose }: DriverDetailsDia
                             </div>
 
                             {/* Models List */}
-                            <ScrollArea className="flex-1 pr-4">
+                            <ScrollArea className="flex-1 min-h-0 pr-4">
                                 <div className="space-y-2">
                                     {models.map((model, idx) => (
-                                        <div key={idx} className="group relative bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl p-4 transition-all duration-300 flex items-center justify-between">
-                                            <div className="flex-1">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 rounded-lg bg-black/40 border border-white/5 flex items-center justify-center overflow-hidden">
-                                                        {model.photo ? (
-                                                            <img src={model.photo} alt={model.label} className="w-full h-full object-cover" />
-                                                        ) : (
-                                                            <Workflow size={18} className="text-neutral-700" />
-                                                        )}
-                                                    </div>
-                                                    <div>
-                                                        <h4 className="font-bold text-white text-sm">{model.label}</h4>
-                                                        <div className="flex items-center gap-2 mt-0.5">
-                                                            <p className="text-[10px] text-blue-400 font-black uppercase tracking-wider">{model.category}</p>
-                                                            <span className="text-neutral-700 text-[10px]">•</span>
-                                                            <p className="text-[10px] text-neutral-500 font-mono tracking-tighter">{model.value}</p>
+                                        <div key={idx} className={cn(
+                                            "group relative border rounded-xl p-4 transition-all duration-300",
+                                            editingModel === model.value
+                                                ? "bg-blue-500/10 border-blue-500/30"
+                                                : "bg-white/5 hover:bg-white/10 border-white/5"
+                                        )}>
+                                            {editingModel === model.value ? (
+                                                // Edit Mode
+                                                <div className="space-y-3">
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div>
+                                                            <Label className="text-[9px] uppercase font-black text-neutral-500 tracking-widest mb-1 block">Nombre</Label>
+                                                            <Input
+                                                                value={editValues.label}
+                                                                onChange={(e) => setEditValues({ ...editValues, label: e.target.value })}
+                                                                className="h-8 bg-black/40 border-white/10 text-xs"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <Label className="text-[9px] uppercase font-black text-neutral-500 tracking-widest mb-1 block">Categoría</Label>
+                                                            <Input
+                                                                value={editValues.category}
+                                                                onChange={(e) => setEditValues({ ...editValues, category: e.target.value })}
+                                                                className="h-8 bg-black/40 border-white/10 text-xs"
+                                                            />
                                                         </div>
                                                     </div>
+                                                    <div>
+                                                        <Label className="text-[9px] uppercase font-black text-neutral-500 tracking-widest mb-1 block">URL de Foto (opcional)</Label>
+                                                        <Input
+                                                            value={editValues.photo}
+                                                            onChange={(e) => setEditValues({ ...editValues, photo: e.target.value })}
+                                                            placeholder="https://..."
+                                                            className="h-8 bg-black/40 border-white/10 text-xs"
+                                                        />
+                                                    </div>
+                                                    <div className="flex gap-2 pt-2">
+                                                        <Button
+                                                            size="sm"
+                                                            onClick={handleUpdateModel}
+                                                            disabled={isUpdating}
+                                                            className="h-8 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold flex-1"
+                                                        >
+                                                            {isUpdating ? <Loader2 size={12} className="animate-spin mr-1" /> : <Check size={12} className="mr-1" />}
+                                                            Guardar
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={cancelEditing}
+                                                            className="h-8 text-neutral-400 hover:text-white text-[10px] font-bold"
+                                                        >
+                                                            <X size={12} className="mr-1" />
+                                                            Cancelar
+                                                        </Button>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => handleDeleteModel(model.value)}
-                                                disabled={isDeleting === model.value}
-                                                className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0 text-red-500 hover:text-red-400 hover:bg-red-500/10"
-                                            >
-                                                {isDeleting === model.value ? (
-                                                    <div className="h-4 w-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
-                                                ) : (
-                                                    <Trash2 size={14} />
-                                                )}
-                                            </Button>
+                                            ) : (
+                                                // View Mode
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-10 h-10 rounded-lg bg-black/40 border border-white/5 flex items-center justify-center overflow-hidden">
+                                                                {model.photo ? (
+                                                                    <img src={model.photo} alt={model.label} className="w-full h-full object-cover" />
+                                                                ) : (
+                                                                    <Workflow size={18} className="text-neutral-700" />
+                                                                )}
+                                                            </div>
+                                                            <div>
+                                                                <h4 className="font-bold text-white text-sm">{model.label}</h4>
+                                                                <div className="flex items-center gap-2 mt-0.5">
+                                                                    <p className="text-[10px] text-blue-400 font-black uppercase tracking-wider">{model.category}</p>
+                                                                    <span className="text-neutral-700 text-[10px]">•</span>
+                                                                    <p className="text-[10px] text-neutral-500 font-mono tracking-tighter">{model.value}</p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-1">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => startEditing(model)}
+                                                            className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
+                                                        >
+                                                            <Pencil size={14} />
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => handleDeleteModel(model.value)}
+                                                            disabled={isDeleting === model.value}
+                                                            className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0 text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                                                        >
+                                                            {isDeleting === model.value ? (
+                                                                <div className="h-4 w-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+                                                            ) : (
+                                                                <Trash2 size={14} />
+                                                            )}
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
                                     {models.length === 0 && (
@@ -299,10 +412,265 @@ export function DriverDetailsDialog({ brand, isOpen, onClose }: DriverDetailsDia
                         <TabsContent value="brands" className="flex-1 flex flex-col min-h-0 m-0 focus-visible:ring-0">
                             <BrandEditor />
                         </TabsContent>
+
+                        {/* Akuvox Action URLs Tab */}
+                        <TabsContent value="webhooks" className="flex-1 flex flex-col min-h-0 m-0 focus-visible:ring-0">
+                            <AkuvoxActionUrls />
+                        </TabsContent>
                     </Tabs>
                 </div>
             </DialogContent>
         </Dialog>
+    );
+}
+
+function AkuvoxActionUrls() {
+    const [serverUrl, setServerUrl] = useState(typeof window !== 'undefined' ? window.location.origin.replace(':10001', ':10000') : 'http://YOUR_SERVER_IP:10000');
+    const [copied, setCopied] = useState<string | null>(null);
+
+    const actionUrls = [
+        // Access Events - Face
+        {
+            id: 'face_success',
+            label: 'Valid Face Recognition',
+            description: 'Rostro reconocido exitosamente (usuario identificado)',
+            path: '/api/webhooks/akuvox?event=face_valid&mac=$mac&user=$user_name&userid=$userid&unlocktype=$unlocktype&time=$time',
+            method: 'GET',
+            color: 'purple',
+            category: 'access'
+        },
+        {
+            id: 'face_failed',
+            label: 'Invalid Face Recognition',
+            description: 'Rostro no reconocido (persona desconocida)',
+            path: '/api/webhooks/akuvox?event=face_invalid&mac=$mac&unlocktype=$unlocktype&time=$time',
+            method: 'GET',
+            color: 'red',
+            category: 'access'
+        },
+        // Access Events - Card
+        {
+            id: 'card_success',
+            label: 'Valid Card Entered',
+            description: 'Tarjeta RFID válida detectada',
+            path: '/api/webhooks/akuvox?event=card_valid&mac=$mac&card=$card_sn&user=$user_name&userid=$userid&time=$time',
+            method: 'GET',
+            color: 'amber',
+            category: 'access'
+        },
+        {
+            id: 'card_failed',
+            label: 'Invalid Card Entered',
+            description: 'Tarjeta RFID no registrada',
+            path: '/api/webhooks/akuvox?event=card_invalid&mac=$mac&card=$card_sn&time=$time',
+            method: 'GET',
+            color: 'orange',
+            category: 'access'
+        },
+        // Access Events - PIN Code
+        {
+            id: 'code_success',
+            label: 'Valid Code Entered',
+            description: 'Código PIN válido ingresado',
+            path: '/api/webhooks/akuvox?event=code_valid&mac=$mac&code=$code&user=$user_name&userid=$userid&time=$time',
+            method: 'GET',
+            color: 'emerald',
+            category: 'access'
+        },
+        {
+            id: 'code_failed',
+            label: 'Invalid Code Entered',
+            description: 'Código PIN incorrecto',
+            path: '/api/webhooks/akuvox?event=code_invalid&mac=$mac&code=$code&time=$time',
+            method: 'GET',
+            color: 'rose',
+            category: 'access'
+        },
+        // Access Events - QR Code
+        {
+            id: 'qr_success',
+            label: 'Valid QR Code',
+            description: 'Código QR válido escaneado',
+            path: '/api/webhooks/akuvox?event=qr_valid&mac=$mac&unlocktype=$unlocktype&time=$time',
+            method: 'GET',
+            color: 'cyan',
+            category: 'access'
+        },
+        // Relay Events
+        {
+            id: 'relay_a_open',
+            label: 'Relay A Triggered',
+            description: 'Relé A activado (puerta abierta)',
+            path: '/api/webhooks/akuvox?event=relay_open&mac=$mac&relay=A&status=$relay1status&time=$time',
+            method: 'GET',
+            color: 'teal',
+            category: 'relay'
+        },
+        {
+            id: 'relay_a_close',
+            label: 'Relay A Closed',
+            description: 'Relé A desactivado (puerta cerrada)',
+            path: '/api/webhooks/akuvox?event=relay_close&mac=$mac&relay=A&status=$relay1status&time=$time',
+            method: 'GET',
+            color: 'slate',
+            category: 'relay'
+        },
+        // Call Events
+        {
+            id: 'call_start',
+            label: 'Make Call',
+            description: 'Llamada saliente iniciada',
+            path: '/api/webhooks/akuvox?event=call_start&mac=$mac&remote=$remote&time=$time',
+            method: 'GET',
+            color: 'blue',
+            category: 'call'
+        },
+        {
+            id: 'call_end',
+            label: 'Hang Up',
+            description: 'Llamada finalizada',
+            path: '/api/webhooks/akuvox?event=call_end&mac=$mac&remote=$remote&time=$time',
+            method: 'GET',
+            color: 'indigo',
+            category: 'call'
+        },
+        // Alarm Events
+        {
+            id: 'tamper',
+            label: 'Tamper Alarm',
+            description: 'Alarma de manipulación del dispositivo',
+            path: '/api/webhooks/akuvox?event=tamper&mac=$mac&status=$alarmstatus&time=$time',
+            method: 'GET',
+            color: 'red',
+            category: 'alarm'
+        },
+        // System Events
+        {
+            id: 'boot',
+            label: 'Setup Completed',
+            description: 'Dispositivo encendido y listo',
+            path: '/api/webhooks/akuvox?event=boot&mac=$mac&model=$model&firmware=$firmware&ip=$ip',
+            method: 'GET',
+            color: 'neutral',
+            category: 'system'
+        }
+    ];
+
+    const handleCopy = (id: string, url: string) => {
+        navigator.clipboard.writeText(url);
+        setCopied(id);
+        setTimeout(() => setCopied(null), 2000);
+    };
+
+    return (
+        <div className="flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-right-4 duration-500">
+            {/* Header Info */}
+            <div className="p-4 bg-gradient-to-r from-blue-600/10 to-purple-600/10 border border-blue-500/20 rounded-2xl mb-4 shrink-0">
+                <h4 className="text-sm font-black text-white uppercase tracking-widest mb-2 flex items-center gap-2">
+                    <Zap size={16} className="text-blue-500" />
+                    URLs de Acción para Akuvox
+                </h4>
+                <p className="text-[11px] text-neutral-400 leading-relaxed font-medium">
+                    Configure estas URLs en la sección <span className="text-blue-400 font-bold">"Intercom → Action URL"</span> de su terminal Akuvox.
+                    El servidor escucha en el puerto <span className="text-white font-mono bg-white/10 px-1.5 py-0.5 rounded">10000</span> para webhooks.
+                </p>
+            </div>
+
+            {/* Warning: No Images */}
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl mb-4 shrink-0">
+                <div className="flex items-start gap-2">
+                    <AlertTriangle size={16} className="text-amber-500 shrink-0 mt-0.5" />
+                    <div>
+                        <p className="text-[11px] text-amber-300 font-bold uppercase tracking-wider mb-1">Importante: Sin imágenes en webhooks</p>
+                        <p className="text-[10px] text-amber-200/70 leading-relaxed">
+                            Los dispositivos Akuvox <strong className="text-amber-200">NO envían imágenes de rostros</strong> en los webhooks Action URL.
+                            Solo envían datos de texto (nombre, tarjeta, etc). Las imágenes se obtienen vía Doorlog API.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Server URL Config */}
+            <div className="bg-white/5 p-4 rounded-xl border border-white/5 mb-4 shrink-0">
+                <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                        <label className="text-[9px] uppercase font-black text-neutral-500 tracking-widest mb-1 block">IP del Servidor</label>
+                        <input
+                            type="text"
+                            value={serverUrl}
+                            onChange={(e) => setServerUrl(e.target.value)}
+                            placeholder="http://192.168.1.100:10000"
+                            className="w-full h-9 px-3 bg-black/40 border border-white/10 rounded-lg text-xs text-white font-mono focus:outline-none focus:border-blue-500/50"
+                        />
+                    </div>
+                    <div className="text-[10px] text-neutral-500 pt-4">
+                        <span className="block">Puerto Webhook:</span>
+                        <span className="text-blue-400 font-bold">10000</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Action URLs List - Scrollable */}
+            <div className="flex-1 min-h-0 overflow-hidden">
+                <ScrollArea className="h-full pr-2">
+                    <div className="space-y-3 pb-4">
+                        {actionUrls.map((action) => {
+                            const fullUrl = `${serverUrl}${action.path}`;
+                            const isCopied = copied === action.id;
+
+                            return (
+                                <div
+                                    key={action.id}
+                                    className={`bg-${action.color}-500/5 border border-${action.color}-500/20 rounded-xl p-4 hover:bg-${action.color}-500/10 transition-all group`}
+                                >
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <h5 className="font-black text-white text-sm">{action.label}</h5>
+                                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded bg-${action.color}-500/20 text-${action.color}-400`}>
+                                                    {action.method}
+                                                </span>
+                                            </div>
+                                            <p className="text-[10px] text-neutral-500 mb-3">{action.description}</p>
+                                            <div className="flex items-center gap-2">
+                                                <code className="flex-1 bg-black/40 px-3 py-2 rounded-lg text-[11px] text-blue-300 font-mono truncate">
+                                                    {fullUrl}
+                                                </code>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => handleCopy(action.id, fullUrl)}
+                                                    className={`h-8 px-3 text-[10px] font-bold ${isCopied ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 text-neutral-400 hover:text-white hover:bg-white/10'}`}
+                                                >
+                                                    {isCopied ? (
+                                                        <><Check size={12} className="mr-1" /> Copiado</>
+                                                    ) : (
+                                                        'Copiar'
+                                                    )}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </ScrollArea>
+            </div>
+
+            {/* Instructions Footer */}
+            <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl shrink-0">
+                <div className="flex items-start gap-3">
+                    <Server size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                    <p className="text-[10px] text-amber-200/80 leading-relaxed">
+                        <span className="font-bold">Configuración en Akuvox:</span> Ingrese al panel web del terminal →
+                        <span className="text-white font-mono"> Intercom</span> →
+                        <span className="text-white font-mono"> Action URL</span> →
+                        Pegue la URL correspondiente al tipo de evento.
+                    </p>
+                </div>
+            </div>
+        </div>
     );
 }
 

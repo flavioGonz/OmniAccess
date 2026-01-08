@@ -53,6 +53,14 @@ export default function AkuvoxDocsPage() {
                             <Webhook className="mr-2" size={16} />
                             Webhook Events
                         </TabsTrigger>
+                        <TabsTrigger value="face-capture" className="data-[state=active]:bg-blue-600">
+                            <ImageIcon className="mr-2" size={16} />
+                            Captura de Rostros
+                        </TabsTrigger>
+                        <TabsTrigger value="troubleshooting" className="data-[state=active]:bg-red-600">
+                            <Zap className="mr-2" size={16} />
+                            Troubleshooting
+                        </TabsTrigger>
                         <TabsTrigger value="sync" className="data-[state=active]:bg-purple-600">
                             <RefreshCw className="mr-2" size={16} />
                             Sincronización
@@ -128,11 +136,15 @@ export default function AkuvoxDocsPage() {
                                         </div>
                                         <div className="flex items-center gap-3">
                                             <Badge className="bg-purple-600 text-white">4</Badge>
-                                            <p className="text-xs text-neutral-300">Driver gestiona usuarios con ID determinista</p>
+                                            <p className="text-xs text-neutral-300">Driver gestiona usuarios con ID determinista (Compatible con Linux AC/Android)</p>
                                         </div>
                                         <div className="flex items-center gap-3">
                                             <Badge className="bg-purple-600 text-white">5</Badge>
-                                            <p className="text-xs text-neutral-300">Apertura de puerta mediante API o credenciales especiales</p>
+                                            <p className="text-xs text-neutral-300">Apertura de puerta mediante API Unificada o CGI Legacy</p>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <Badge className="bg-purple-600 text-white">6</Badge>
+                                            <p className="text-xs text-neutral-300">Captura Atómica: Webhook dispara fetch inmediato de imagen facial</p>
                                         </div>
                                     </div>
                                 </div>
@@ -159,9 +171,9 @@ export default function AkuvoxDocsPage() {
                                     <code className="text-[10px] text-purple-400 bg-black/40 px-2 py-1 rounded block mb-2">
                                         /api/user/add
                                     </code>
-                                    <p className="text-xs text-neutral-400 mb-3">Crea un usuario con credenciales (TAGs, PIN, Face)</p>
+                                    <p className="text-xs text-neutral-400 mb-3">Crea un usuario con credenciales (TAGs, PIN, Face). Soporta campos mandatory de modelos Linux.</p>
                                     <details className="text-xs">
-                                        <summary className="text-purple-400 cursor-pointer mb-2">Ver Payload</summary>
+                                        <summary className="text-purple-400 cursor-pointer mb-2">Ver Payload (Linux Compatible)</summary>
                                         <pre className="bg-black/60 p-3 rounded text-[10px] text-neutral-300 overflow-x-auto">
                                             {`{
   "target": "user",
@@ -169,6 +181,7 @@ export default function AkuvoxDocsPage() {
   "data": {
     "item": [{
       "ID": "123456",
+      "UserID": "123456",        // Mandatory for Linux AC
       "Name": "Juan Pérez",
       "UserCode": "123456",
       "Type": "0",
@@ -176,7 +189,9 @@ export default function AkuvoxDocsPage() {
       "Role": "-1",
       "CardCode": "1234567890",
       "PrivatePIN": "1234",
-      "ScheduleRelay": "1001-1;1001-2;"
+      "LiftFloorNum": "0",       // Mandatory for Linux AC
+      "WebRelay": "0",           // Mandatory for Linux AC
+      "ScheduleRelay": "1001-1;" // Format strict: ScheduleID-RelayNum;
     }]
   }
 }`}
@@ -287,17 +302,35 @@ export default function AkuvoxDocsPage() {
                                     <div className="flex items-center justify-between mb-3">
                                         <div className="flex items-center gap-2">
                                             <Play className="text-purple-400" size={16} />
-                                            <h3 className="text-sm font-bold text-white">Abrir Puerta</h3>
+                                            <h3 className="text-sm font-bold text-white">Abrir Puerta (Unified)</h3>
                                         </div>
-                                        <Badge className="bg-purple-600 text-white">GET</Badge>
+                                        <div className="flex gap-1">
+                                            <Badge className="bg-purple-600 text-white">POST</Badge>
+                                            <Badge className="bg-neutral-700 text-white">GET</Badge>
+                                        </div>
                                     </div>
                                     <code className="text-[10px] text-purple-400 bg-black/40 px-2 py-1 rounded block mb-2">
-                                        /fcgi/do?action=OpenDoor&UserName=api&Password=Api*2011&DoorNum=1
+                                        POST /api/relay/trig
                                     </code>
-                                    <p className="text-xs text-neutral-400 mb-3">Activa el relé para abrir la puerta</p>
+                                    <p className="text-xs text-neutral-400 mb-3">Método moderno unificado para Android/Linux. Soporta fallback automático a CGI.</p>
+                                    <details className="text-xs">
+                                        <summary className="text-purple-400 cursor-pointer mb-2">Ver Payload JSON</summary>
+                                        <pre className="bg-black/60 p-3 rounded text-[10px] text-neutral-300 overflow-x-auto">
+                                            {`{
+  "target": "relay",
+  "action": "trig",
+  "data": {
+    "mode": 0,
+    "num": 1,
+    "level": 0,
+    "delay": 5
+  }
+}`}
+                                        </pre>
+                                    </details>
                                     <div className="mt-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded">
                                         <p className="text-[10px] text-blue-400">
-                                            <strong>Credenciales especiales:</strong> Se usan credenciales dedicadas (api/Api*2011) solo para control de relés.
+                                            <strong>Fallback CGI:</strong> Si la API unificada falla, el driver intenta <code>/fcgi/do?action=OpenDoor</code> automáticamente.
                                         </p>
                                     </div>
                                 </div>
@@ -565,20 +598,20 @@ export default function AkuvoxDocsPage() {
                                         <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-4">
                                             <div className="flex items-center gap-2 mb-3">
                                                 <Badge className="bg-emerald-600 text-white">✓ FACE VALID</Badge>
-                                                <span className="text-xs text-emerald-400 font-bold">Reconocimiento Facial Exitoso</span>
+                                                <span className="text-xs text-emerald-400 font-bold">Smart User Sync (Recomendado)</span>
                                             </div>
                                             <div className="space-y-2">
                                                 <div className="bg-black/40 p-3 rounded">
-                                                    <p className="text-[10px] text-neutral-500 mb-1">URL Configurada en Akuvox:</p>
+                                                    <p className="text-[10px] text-neutral-500 mb-1">URL Optimizada (Action URL en Akuvox):</p>
                                                     <code className="text-[9px] text-purple-400 block break-all">
-                                                        http://TU_SERVIDOR:10000/api/webhooks/akuvox?event=face_valid&mac=$mac&user=$name&time=$time
+                                                        http://TU_SERVIDOR:10000/api/webhooks/akuvox?event=face_valid&mac=$mac&user=$user_name&userid=$userid&FaceUrl=$FaceUrl&PicUrl=$pic_url&time=$time
                                                     </code>
                                                 </div>
                                                 <div className="bg-black/40 p-3 rounded">
-                                                    <p className="text-[10px] text-neutral-500 mb-1">Ejemplo de Request Real:</p>
-                                                    <code className="text-[9px] text-emerald-400 block break-all">
-                                                        GET /api/webhooks/akuvox?event=face_valid&mac=00:1A:2B:3C:4D:5E&user=Juan%20Perez&time=1703945123
-                                                    </code>
+                                                    <p className="text-[10px] text-neutral-500 mb-1">Beneficio:</p>
+                                                    <p className="text-[9px] text-neutral-400">
+                                                        El uso de <code className="text-emerald-400">$userid</code> y las variables de imagen <code className="text-blue-400">$FaceUrl/$pic_url</code> permite al sistema capturar la evidencia instantáneamente sin depender del polling.
+                                                    </p>
                                                 </div>
                                             </div>
                                         </div>
@@ -593,7 +626,7 @@ export default function AkuvoxDocsPage() {
                                                 <div className="bg-black/40 p-3 rounded">
                                                     <p className="text-[10px] text-neutral-500 mb-1">URL Configurada:</p>
                                                     <code className="text-[9px] text-purple-400 block break-all">
-                                                        http://TU_SERVIDOR:10000/api/webhooks/akuvox?event=face_invalid&mac=$mac&time=$time
+                                                        http://TU_SERVIDOR:10000/api/webhooks/akuvox?event=face_invalid&mac=$mac&FaceUrl=$FaceUrl&PicUrl=$pic_url&time=$time
                                                     </code>
                                                 </div>
                                                 <div className="bg-black/40 p-3 rounded">
@@ -613,15 +646,25 @@ export default function AkuvoxDocsPage() {
                                             </div>
                                             <div className="space-y-2">
                                                 <div className="bg-black/40 p-3 rounded">
-                                                    <p className="text-[10px] text-neutral-500 mb-1">URL Configurada:</p>
+                                                    <p className="text-[10px] text-neutral-500 mb-1">URL Recomendada:</p>
                                                     <code className="text-[9px] text-purple-400 block break-all">
-                                                        http://TU_SERVIDOR:10000/api/webhooks/akuvox?event=card_valid&mac=$mac&card=$card_sn&time=$time
+                                                        http://TU_SERVIDOR:10000/api/webhooks/akuvox?event=card_valid&mac=$mac&card=$card_sn&userid=$userid&time=$time
                                                     </code>
                                                 </div>
+                                            </div>
+                                        </div>
+
+                                        {/* QR Code Valid */}
+                                        <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <Badge className="bg-blue-600 text-white">📱 QR VALID</Badge>
+                                                <span className="text-xs text-blue-400 font-bold">Código QR / Temp Key</span>
+                                            </div>
+                                            <div className="space-y-2">
                                                 <div className="bg-black/40 p-3 rounded">
-                                                    <p className="text-[10px] text-neutral-500 mb-1">Ejemplo de Request:</p>
-                                                    <code className="text-[9px] text-emerald-400 block break-all">
-                                                        GET /api/webhooks/akuvox?event=card_valid&mac=00:1A:2B:3C:4D:5E&card=1234567890&time=1703945789
+                                                    <p className="text-[10px] text-neutral-500 mb-1">URL Recomendada:</p>
+                                                    <code className="text-[9px] text-purple-400 block break-all">
+                                                        http://TU_SERVIDOR:10000/api/webhooks/akuvox?event=qr_valid&mac=$mac&qrcode=$qrcode&time=$time
                                                     </code>
                                                 </div>
                                             </div>
@@ -818,6 +861,14 @@ export default function AkuvoxDocsPage() {
                                             <code className="text-blue-400">$remote</code>
                                             <p className="text-neutral-500 mt-1">Extensión/SIP destino</p>
                                         </div>
+                                        <div className="bg-black/40 p-2 rounded">
+                                            <code className="text-blue-400">$FaceUrl</code>
+                                            <p className="text-neutral-500 mt-1">Ruta interna de imagen facial</p>
+                                        </div>
+                                        <div className="bg-black/40 p-2 rounded">
+                                            <code className="text-blue-400">$pic_url</code>
+                                            <p className="text-neutral-500 mt-1">URL temporal de captura (Linux)</p>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -828,6 +879,289 @@ export default function AkuvoxDocsPage() {
                                         El sistema funciona principalmente mediante sincronización activa (polling) desde el servidor. Los webhooks deben configurarse
                                         manualmente en <strong>Phone &gt; Action URL</strong> del dispositivo.
                                     </p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    {/* FACE CAPTURE TAB */}
+                    <TabsContent value="face-capture" className="space-y-6">
+                        <Card className="bg-neutral-900 border-neutral-800">
+                            <CardHeader>
+                                <CardTitle className="text-white flex items-center gap-2">
+                                    <ImageIcon className="text-blue-400" size={20} />
+                                    Mecánica de Evidencia Facial (Proxy v13)
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-6">
+                                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+                                    <h3 className="text-sm font-bold text-blue-400 mb-3 flex items-center gap-2">
+                                        🛡️ El Proxy Inteligente
+                                    </h3>
+                                    <p className="text-xs text-neutral-300 leading-relaxed mb-4">
+                                        Debido a las restricciones de seguridad (CORS), certificados auto-firmados y la lentitud extrema de algunos modelos (Torre 1/2), el sistema utiliza un <strong>Face Proxy</strong> en el servidor que actúa como intermediario para garantizar la descarga de la evidencia.
+                                    </p>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="bg-black/40 p-3 rounded border border-neutral-800">
+                                            <h4 className="text-xs font-bold text-white mb-2">Protocol Switching</h4>
+                                            <p className="text-[10px] text-neutral-400">
+                                                Versión 13+: Intenta primero vía <strong>HTTPS</strong> (estándar Android) y hace fallback automático a <strong>HTTP</strong> si falla.
+                                            </p>
+                                        </div>
+                                        <div className="bg-black/40 p-3 rounded border border-neutral-800">
+                                            <h4 className="text-xs font-bold text-white mb-2">Ultra-Patience (30s)</h4>
+                                            <p className="text-[10px] text-neutral-400">
+                                                Diseñado para equipos lentos. El proxy espera hasta 30 segundos para completar la negociación Digest y la descarga.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-neutral-950 p-4 rounded-lg border border-neutral-800">
+                                    <h3 className="text-sm font-bold text-purple-400 mb-3">⭐ La "Regla de Oro" de Archivos</h3>
+                                    <p className="text-xs text-neutral-300 mb-4">
+                                        Akuvox utiliza un sistema de nombres de archivos que varía según la generación del dispositivo:
+                                    </p>
+
+                                    <div className="space-y-3">
+                                        <div className="bg-black/40 p-3 rounded">
+                                            <p className="text-xs font-bold text-emerald-400 mb-1">1. Formato Strict (No-Zeros)</p>
+                                            <p className="text-[10px] text-neutral-500 mb-2">Elimina ceros a la izquierda en hora, minuto y segundo.</p>
+                                            <code className="text-[10px] text-emerald-300">2026-01-07_14-7-47.jpg</code>
+                                            <p className="text-[9px] text-neutral-600 mt-1 italic">Ejemplo: 14:07:47 se convierte en 14-7-47</p>
+                                        </div>
+
+                                        <div className="bg-black/40 p-3 rounded">
+                                            <p className="text-xs font-bold text-blue-400 mb-1">2. Suffix Android/Linux (_0)</p>
+                                            <p className="text-[10px] text-neutral-500 mb-2">Obligatorio en modelos como la Torre 2 (.204).</p>
+                                            <code className="text-[10px] text-blue-300">2026-01-07_11-2-47_0.jpg</code>
+                                        </div>
+
+                                        <div className="bg-black/40 p-3 rounded">
+                                            <p className="text-xs font-bold text-neutral-400 mb-1">3. Legacy Fallback</p>
+                                            <p className="text-[10px] text-neutral-500 mb-2">Algunos firmwares conservan los ceros.</p>
+                                            <code className="text-[10px] text-neutral-300">2026-01-07_08-05-07.jpg</code>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-neutral-950 p-4 rounded-lg border border-neutral-800">
+                                    <h3 className="text-sm font-bold text-purple-400 mb-3">📂 Estructura de Carpetas</h3>
+                                    <p className="text-xs text-neutral-300 mb-3">El sistema rotará por estas ubicaciones hasta encontrar el archivo:</p>
+                                    <ul className="text-[10px] text-neutral-400 space-y-1 list-disc list-inside">
+                                        <li><code>/Image/DoorPicture/</code> (Prioridad para registros de puerta)</li>
+                                        <li><code>/Image/IntercomPicture/</code> (Fallback para logs de llamadas)</li>
+                                    </ul>
+                                </div>
+
+                                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4">
+                                    <h3 className="text-sm font-bold text-emerald-400 mb-3 flex items-center gap-2">
+                                        🧪 Cómo Testear Manualmente
+                                    </h3>
+                                    <p className="text-xs text-neutral-300 mb-4">Puedes probar el proxy directamente pegando esto en tu navegador:</p>
+                                    <code className="text-[10px] text-purple-400 bg-black/60 px-3 py-2 rounded block break-all mb-4">
+                                        http://localhost:10000/api/proxy/face?deviceId=ID_DEL_EQUIPO&date=2026-01-07&time=11:02:47
+                                    </code>
+                                    <div className="space-y-2">
+                                        <p className="text-[10px] text-neutral-400">Si el proxy funciona, verás los logs de V13 en la consola del servidor:</p>
+                                        <code className="text-[9px] text-emerald-400 bg-black/40 p-2 rounded block">
+                                            [Proxy-Face-V13] 🔍 Testing -{'>'} https://10.10.10.204/Image/DoorPicture/2026-01-07_11-2-47_0.jpg{"\n"}
+                                            [Proxy-Face] 🔐 Negotiating Auth for 2026-01-07_11-2-47_0.jpg{"\n"}
+                                            [Proxy-Face] ✅ Success via Auth!
+                                        </code>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    {/* TROUBLESHOOTING TAB */}
+                    <TabsContent value="troubleshooting" className="space-y-6">
+                        <Card className="bg-neutral-900 border-neutral-800">
+                            <CardHeader>
+                                <CardTitle className="text-white flex items-center gap-2">
+                                    <Zap className="text-red-400" size={20} />
+                                    Troubleshooting: Eventos Faciales
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-6">
+                                {/* Problema Identificado */}
+                                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+                                    <h3 className="text-sm font-bold text-red-400 mb-3 flex items-center gap-2">
+                                        🔴 Problema Identificado
+                                    </h3>
+                                    <div className="space-y-3 text-xs text-neutral-300">
+                                        <div className="bg-black/40 p-3 rounded">
+                                            <p className="font-bold text-red-300 mb-2">Síntoma:</p>
+                                            <ul className="list-disc list-inside space-y-1 text-[11px]">
+                                                <li>Los eventos faciales de Akuvox se catalogan como <strong>"No Identificado"</strong></li>
+                                                <li>La foto NO aparece en el dashboard ni en el historial</li>
+                                                <li>La puerta se abre (dice "AUTORIZADO"), pero la lógica está mal</li>
+                                                <li>Eventos muestran "EXTERNO / DESCONOCIDO" en lugar del usuario real</li>
+                                            </ul>
+                                        </div>
+                                        <div className="bg-black/40 p-3 rounded">
+                                            <p className="font-bold text-yellow-300 mb-2">Log en Consola:</p>
+                                            <code className="text-[10px] text-yellow-400 bg-black/60 px-2 py-1 rounded block">
+                                                [2026-01-07T11:54:16.996Z] [SOCKET] Emitting access_event for Akuvox event: face_valid
+                                            </code>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Root Cause Analysis */}
+                                <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-4">
+                                    <h3 className="text-sm font-bold text-orange-400 mb-3 flex items-center gap-2">
+                                        🔍 Causas Raíz (Root Cause)
+                                    </h3>
+                                    <div className="space-y-3">
+                                        <div className="bg-black/40 p-3 rounded">
+                                            <p className="text-xs font-bold text-orange-300 mb-2">1. NO se buscaba credencial tipo FACE en la base de datos</p>
+                                            <p className="text-[10px] text-neutral-400 mb-2">
+                                                El código solo buscaba credenciales de tipo TAG y PIN, pero NO de tipo FACE. Por lo tanto, aunque el usuario existiera en la DB con su credencial facial, nunca se vinculaba al evento.
+                                            </p>
+                                            <code className="text-[9px] text-red-400 bg-black/60 px-2 py-1 rounded block">
+                                                {"// ANTES: Solo se buscaban credenciales TAG/PIN\nif (credentialValue && credentialType) {\n  // Pero NO se aplicaba MODE_FACE ni se vinculaba usuario\n}"}
+                                            </code>
+                                        </div>
+
+                                        <div className="bg-black/40 p-3 rounded">
+                                            <p className="text-xs font-bold text-orange-300 mb-2">2. NO se aplicaba lógica MODE_FACE (Blacklist/Whitelist)</p>
+                                            <p className="text-[10px] text-neutral-400 mb-2">
+                                                Similar al MODE_LPR, el sistema debe tener un MODE_FACE que defina si los rostros identificados en la DB deben ser DENEGADOS (modo Blacklist) o AUTORIZADOS (modo Whitelist).
+                                            </p>
+                                            <code className="text-[9px] text-red-400 bg-black/60 px-2 py-1 rounded block">
+                                                // FALTABA: Lógica para consultar setting 'MODE_FACE'{"\n"}
+                                                // Y tomar decisión de acceso basado en ese modo
+                                            </code>
+                                        </div>
+
+                                        <div className="bg-black/40 p-3 rounded">
+                                            <p className="text-xs font-bold text-orange-300 mb-2">3. NO se capturaban las fotos correctamente</p>
+                                            <p className="text-[10px] text-neutral-400 mb-2">
+                                                Las variables <code className="text-blue-400">$FaceUrl</code> y <code className="text-blue-400">$PicUrl</code> no se estaban usando correctamente en el Action URL, y el sistema no loggeaba suficiente información para debugging.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Solución Implementada */}
+                                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4">
+                                    <h3 className="text-sm font-bold text-emerald-400 mb-3 flex items-center gap-2">
+                                        ✅ Solución Implementada
+                                    </h3>
+                                    <div className="space-y-3">
+                                        <div className="bg-black/40 p-3 rounded">
+                                            <p className="text-xs font-bold text-emerald-300 mb-2">1. Búsqueda de Credenciales FACE en la Base de Datos</p>
+                                            <ul className="list-disc list-inside space-y-1 text-[10px] text-neutral-300 ml-2">
+                                                <li>Ahora el sistema busca credenciales con <code className="text-purple-400">type: 'FACE'</code></li>
+                                                <li>Cuando encuentra la credencial, vincula el usuario al evento</li>
+                                                <li>Loggea el resultado para debugging: <code className="text-emerald-400">"✓ User found by FACE credential"</code></li>
+                                            </ul>
+                                            <pre className="mt-2 bg-black/60 p-2 rounded text-[9px] text-emerald-300 overflow-x-auto">
+                                                {`console.log(\`\${logPrefix} 🔍 [DB-SEARCH] Searching for credential: "\${credentialValue}" (type: \${credentialType})\`);
+const credential = await prisma.credential.findFirst({
+  where: { value: credentialValue, type: credentialType },
+  include: { user: true }
+});
+
+if (credential) {
+  user = credential.user;
+  userId = user.id;
+  console.log(\`\${logPrefix} ✓ User found by \${credentialType} credential: \${user.name} (\${user.id})\`);
+  // Aplicar MODE_FACE aquí...
+}`}
+                                            </pre>
+                                        </div>
+
+                                        <div className="bg-black/40 p-3 rounded">
+                                            <p className="text-xs font-bold text-emerald-300 mb-2">2. Implementación de Lógica MODE_FACE</p>
+                                            <ul className="list-disc list-inside space-y-1 text-[10px] text-neutral-300 ml-2">
+                                                <li><strong>Modo WHITELIST</strong> (Por defecto): Rostros en la DB son AUTORIZADOS, desconocidos son DENEGADOS</li>
+                                                <li><strong>Modo BLACKLIST</strong>: Rostros en la DB son DENEGADOS, desconocidos son AUTORIZADOS</li>
+                                            </ul>
+                                            <pre className="mt-2 bg-black/60 p-2 rounded text-[9px] text-emerald-300 overflow-x-auto">
+                                                {`if (credentialType === 'FACE') {
+  const modeSetting = await prisma.setting.findUnique({ 
+    where: { key: 'MODE_FACE' } 
+  });
+  const mode = modeSetting?.value || 'WHITELIST';
+
+  if (mode === 'BLACKLIST') {
+    accessDecision = "DENY";
+    console.log('⛔ [MODE-FACE] BLACKLIST Active - Face found in DB => DENIED.');
+  } else if (mode === 'WHITELIST') {
+    accessDecision = "GRANT";
+    console.log('✅ [MODE-FACE] WHITELIST Active - Face found in DB => GRANTED.');
+  }
+}`}
+                                            </pre>
+                                        </div>
+
+                                        <div className="bg-black/40 p-3 rounded">
+                                            <p className="text-xs font-bold text-emerald-300 mb-2">3. Captura Mejorada de Imágenes Faciales</p>
+                                            <ul className="list-disc list-inside space-y-1 text-[10px] text-neutral-300 ml-2">
+                                                <li>Se agregaron logs detallados de los parámetros FaceUrl/PicUrl</li>
+                                                <li>Se mejoró el logging de éxito/fallo en la captura de imágenes</li>
+                                                <li>Se usa correctamente la función <code className="text-purple-400">fetchAkuvoxFaceImage</code></li>
+                                            </ul>
+                                            <pre className="mt-2 bg-black/60 p-2 rounded text-[9px] text-emerald-300 overflow-x-auto">
+                                                {`console.log(\`\${logPrefix} [AUTO-SNAP] Params: FaceUrl=\${params.FaceUrl}, PicUrl=\${params.PicUrl}, userid=\${params.userid}\`);
+
+const snapBuffer = await fetchAkuvoxFaceImage(device, {
+  userId: params.userid,
+  name: params.user || params.name,
+  path: params.FaceUrl || params.PicUrl
+});
+
+if (snapBuffer) {
+  const filename = \`aku_face_\${device.id}_\${Date.now()}.jpg\`;
+  snapPath = await uploadToS3(snapBuffer, filename, "image/jpeg", "face");
+  console.log(\`\${logPrefix} [AUTO-SNAP] ✓ Face image uploaded to S3: \${snapPath}\`);
+} else {
+  console.warn(\`\${logPrefix} [AUTO-SNAP] ✗ Failed to fetch face image from device\`);
+}`}
+                                            </pre>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Cómo Verificar */}
+                                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+                                    <h3 className="text-sm font-bold text-blue-400 mb-3">🧪 Cómo Verificar la Corrección</h3>
+                                    <div className="space-y-2">
+                                        <div className="bg-black/40 p-3 rounded">
+                                            <p className="text-xs font-bold text-blue-300 mb-2">Paso 1: Verificar Logs en Consola</p>
+                                            <p className="text-[10px] text-neutral-400 mb-1">Después de un evento facial, debes ver:</p>
+                                            <code className="text-[9px] text-blue-400 bg-black/60 px-2 py-1 rounded block">
+                                                [SOCKET] Emitting access_event for Akuvox event: face_valid{"\n"}
+                                                🔍 [DB-SEARCH] Searching for credential: "Juan Pérez" (type: FACE){"\n"}
+                                                ✓ User found by FACE credential: Juan Pérez (user-123){"\n"}
+                                                ✅ [MODE-FACE] WHITELIST Active - Face found in DB ={'>'} GRANTED.{"\n"}
+                                                [AUTO-SNAP] ✓ Face image uploaded to S3: face/aku_face_device1_1704812345678.jpg
+                                            </code>
+                                        </div>
+                                        <div className="bg-black/40 p-3 rounded">
+                                            <p className="text-xs font-bold text-blue-300 mb-2">Paso 2: Verificar Dashboard</p>
+                                            <ul className="list-disc list-inside space-y-1 text-[10px] text-neutral-300 ml-2">
+                                                <li>El evento debe mostrar el nombre del usuario (no "No Identificado")</li>
+                                                <li>Debe aparecer la foto facial capturada</li>
+                                                <li>El tipo de credencial debe ser "RECONOCIMIENTO FACIAL"</li>
+                                                <li>La decisión de acceso debe estar correcta según el MODE_FACE configurado</li>
+                                            </ul>
+                                        </div>
+                                        <div className="bg-black/40 p-3 rounded">
+                                            <p className="text-xs font-bold text-blue-300 mb-2">Paso 3: Probar Diferentes Modos</p>
+                                            <p className="text-[10px] text-neutral-400 mb-2">
+                                                Ir a <strong>Configuración &gt; Modo Face</strong> y probar:
+                                            </p>
+                                            <ul className="list-disc list-inside space-y-1 text-[10px] text-neutral-300 ml-2">
+                                                <li><strong>WHITELIST</strong>: Usuario conocido → GRANT, desconocido → DENY</li>
+                                                <li><strong>BLACKLIST</strong>: Usuario conocido → DENY, desconocido → GRANT</li>
+                                            </ul>
+                                        </div>
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>

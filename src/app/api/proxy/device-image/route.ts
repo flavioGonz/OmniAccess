@@ -11,8 +11,8 @@ export async function GET(req: NextRequest) {
     const path = searchParams.get("path");
     const type = searchParams.get("type") || "face"; // face or other
 
-    if (!deviceId || !userId) {
-        return new NextResponse("Missing params", { status: 400 });
+    if (!deviceId || (!userId && !path)) {
+        return new NextResponse("Missing params (deviceId + userId or path required)", { status: 400 });
     }
 
     try {

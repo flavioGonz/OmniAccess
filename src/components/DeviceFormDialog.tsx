@@ -146,12 +146,12 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
             <DialogTrigger asChild>
                 {children}
             </DialogTrigger>
-            <DialogContent className="max-w-6xl p-0 bg-neutral-900 border-neutral-800 overflow-hidden sm:rounded-lg gap-0 shadow-2xl border-white/5">
+            <DialogContent className="max-w-7xl p-0 bg-neutral-900 border-neutral-800 overflow-hidden sm:rounded-lg gap-0 shadow-2xl border-white/5">
                 <DialogHeader className="sr-only">
                     <DialogTitle>{isEdit ? "Editar Dispositivo" : "Nuevo Dispositivo"}</DialogTitle>
                     <DialogDescription>Configuración técnica del nodo de acceso</DialogDescription>
                 </DialogHeader>
-                <div className="flex flex-col md:flex-row h-full min-h-[610px] bg-neutral-950 overflow-hidden">
+                <div className="flex flex-col md:flex-row h-full min-h-[750px] bg-neutral-950 overflow-hidden">
                     {/* LEFT SIDE: Active Form Content */}
                     <div className="flex-1 p-10 flex flex-col justify-between border-r border-white/5">
                         <div className="flex-1">

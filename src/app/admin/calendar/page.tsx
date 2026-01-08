@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EventDetailsDialog } from "@/components/dashboard/EventDetailsDialog";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // Helper to get days in month
 function getDaysInMonth(year: number, month: number) {
@@ -258,18 +259,84 @@ export default function CalendarPage() {
                             {Array.from({ length: emptySlots }).map((_, i) => (
                                 <div key={`empty-${i}`} className="p-2" />
                             ))}
-                            {Array.from({ length: daysInMonth }).map((_, i) => {
-                                const day = i + 1;
-                                const dayEvents = events.filter(e => new Date(e.timestamp).getDate() === day);
+                            {loading ? (
+                                // Skeleton loader for calendar grid
+                                Array.from({ length: daysInMonth }).map((_, i) => (
+                                    <div key={`skeleton-${i}`} className="relative p-2 rounded-xl min-h-[80px] bg-neutral-800/30 animate-pulse">
+                                        <Skeleton className="h-6 w-8 bg-neutral-700/50 rounded" />
+                                        <div className="mt-4 space-y-1">
+                                            <Skeleton className="h-1.5 w-full bg-neutral-700/30 rounded-full" />
+                                            <Skeleton className="h-3 w-16 bg-neutral-700/20 rounded" />
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                Array.from({ length: daysInMonth }).map((_, i) => {
+                                    const day = i + 1;
+                                    const dayEvents = events.filter(e => new Date(e.timestamp).getDate() === day);
+                                    const hasEvents = dayEvents.length > 0;
+                                    const isSelected = selectedDate === day;
+                                    const isToday = day === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
+                                    const grants = dayEvents.filter(e => e.decision === 'GRANT').length;
+                                    const denies = dayEvents.filter(e => e.decision === 'DENY').length;
+
+                                    return (
+                                        <DayCell
+                                            key={day}
+                                            day={day}
+                                            isSelected={isSelected}
+                                            isToday={isToday}
+                                            hasEvents={hasEvents}
+                                            grants={grants}
+                                            denies={denies}
+                                            eventCount={dayEvents.length}
+                                            onClick={() => setSelectedDate(day)}
+                                        />
+                                    );
+                                })
+                            )}
+                        </>
+                    )}
+
+                    {/* Week View Implementation (Simplified: Just show 7 days of current week) */}
+                    {view === 'week' && (
+                        loading ? (
+                            // Skeleton loader for week view
+                            Array.from({ length: 7 }).map((_, i) => (
+                                <div key={`week-skeleton-${i}`} className="relative p-3 rounded-xl min-h-[200px] bg-neutral-800/30 animate-pulse flex flex-col">
+                                    <Skeleton className="h-8 w-10 bg-neutral-700/50 rounded mb-4" />
+                                    <div className="flex-1 space-y-2">
+                                        <Skeleton className="h-2 w-full bg-neutral-700/30 rounded-full" />
+                                        <Skeleton className="h-2 w-3/4 bg-neutral-700/20 rounded-full" />
+                                    </div>
+                                    <Skeleton className="h-4 w-20 bg-neutral-700/20 rounded mt-auto" />
+                                </div>
+                            ))
+                        ) : (
+                            Array.from({ length: 7 }).map((_, i) => {
+                                // Calculate date for this slot
+                                const dayOfWeek = currentDate.getDay();
+                                const startDiff = i - dayOfWeek; // e.g. Sunday(0) - Sunday(0) = 0.
+                                const slotDate = new Date(currentDate);
+                                slotDate.setDate(currentDate.getDate() + startDiff);
+
+                                const day = slotDate.getDate();
+                                // Filter events (Note: matches only if in fetched month range, limitation of current fetch logic)
+                                const dayEvents = events.filter(e => {
+                                    const d = new Date(e.timestamp);
+                                    return d.getDate() === day && d.getMonth() === slotDate.getMonth();
+                                });
+
                                 const hasEvents = dayEvents.length > 0;
-                                const isSelected = selectedDate === day;
-                                const isToday = day === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
+                                const isSelected = selectedDate === day; // Simple selection logic
+                                const isToday = day === new Date().getDate() && slotDate.getMonth() === new Date().getMonth();
+
                                 const grants = dayEvents.filter(e => e.decision === 'GRANT').length;
                                 const denies = dayEvents.filter(e => e.decision === 'DENY').length;
 
                                 return (
                                     <DayCell
-                                        key={day}
+                                        key={i}
                                         day={day}
                                         isSelected={isSelected}
                                         isToday={isToday}
@@ -277,62 +344,34 @@ export default function CalendarPage() {
                                         grants={grants}
                                         denies={denies}
                                         eventCount={dayEvents.length}
-                                        onClick={() => setSelectedDate(day)}
+                                        onClick={() => { setSelectedDate(day); setCurrentDate(slotDate); }}
+                                        className="h-full min-h-[200px]"
                                     />
                                 );
-                            })}
-                        </>
-                    )}
-
-                    {/* Week View Implementation (Simplified: Just show 7 days of current week) */}
-                    {view === 'week' && (
-                        Array.from({ length: 7 }).map((_, i) => {
-                            // Calculate date for this slot
-                            const dayOfWeek = currentDate.getDay();
-                            const startDiff = i - dayOfWeek; // e.g. Sunday(0) - Sunday(0) = 0.
-                            const slotDate = new Date(currentDate);
-                            slotDate.setDate(currentDate.getDate() + startDiff);
-
-                            const day = slotDate.getDate();
-                            // Filter events (Note: matches only if in fetched month range, limitation of current fetch logic)
-                            const dayEvents = events.filter(e => {
-                                const d = new Date(e.timestamp);
-                                return d.getDate() === day && d.getMonth() === slotDate.getMonth();
-                            });
-
-                            const hasEvents = dayEvents.length > 0;
-                            const isSelected = selectedDate === day; // Simple selection logic
-                            const isToday = day === new Date().getDate() && slotDate.getMonth() === new Date().getMonth();
-
-                            const grants = dayEvents.filter(e => e.decision === 'GRANT').length;
-                            const denies = dayEvents.filter(e => e.decision === 'DENY').length;
-
-                            return (
-                                <DayCell
-                                    key={i}
-                                    day={day}
-                                    isSelected={isSelected}
-                                    isToday={isToday}
-                                    hasEvents={hasEvents}
-                                    grants={grants}
-                                    denies={denies}
-                                    eventCount={dayEvents.length}
-                                    onClick={() => { setSelectedDate(day); setCurrentDate(slotDate); }}
-                                    className="h-full min-h-[200px]"
-                                />
-                            );
-                        })
+                            })
+                        )
                     )}
 
                     {/* Day View Implementation */}
                     {view === 'day' && (
-                        <div className="h-full flex items-center justify-center p-10 bg-neutral-800/20 rounded-2xl border border-dashed border-neutral-800">
-                            <div className="text-center">
-                                <h2 className="text-4xl font-black text-white">{currentDate.getDate()}</h2>
-                                <p className="text-xl text-neutral-500 uppercase font-bold">{monthNames[currentDate.getMonth()]}</p>
-                                <p className="mt-4 text-xs text-neutral-600">Vista detallada disponible en el panel lateral.</p>
+                        loading ? (
+                            // Skeleton loader for day view
+                            <div className="h-full flex items-center justify-center p-10 bg-neutral-800/20 rounded-2xl border border-dashed border-neutral-800 animate-pulse">
+                                <div className="text-center space-y-4">
+                                    <Skeleton className="h-12 w-16 mx-auto bg-neutral-700/50 rounded" />
+                                    <Skeleton className="h-6 w-32 mx-auto bg-neutral-700/30 rounded" />
+                                    <Skeleton className="h-4 w-48 mx-auto bg-neutral-700/20 rounded mt-4" />
+                                </div>
                             </div>
-                        </div>
+                        ) : (
+                            <div className="h-full flex items-center justify-center p-10 bg-neutral-800/20 rounded-2xl border border-dashed border-neutral-800">
+                                <div className="text-center">
+                                    <h2 className="text-4xl font-black text-white">{currentDate.getDate()}</h2>
+                                    <p className="text-xl text-neutral-500 uppercase font-bold">{monthNames[currentDate.getMonth()]}</p>
+                                    <p className="mt-4 text-xs text-neutral-600">Vista detallada disponible en el panel lateral.</p>
+                                </div>
+                            </div>
+                        )
                     )}
                 </div>
             </div>
@@ -381,7 +420,23 @@ export default function CalendarPage() {
                         }
                     }}
                 >
-                    {selectedDate ? (
+                    {loading ? (
+                        // Skeleton loader for events list
+                        <div className="space-y-3">
+                            {Array.from({ length: 8 }).map((_, i) => (
+                                <div key={`event-skeleton-${i}`} className="bg-neutral-900/50 p-3 rounded-xl flex items-start gap-3 animate-pulse">
+                                    <Skeleton className="w-4 h-4 rounded-full bg-neutral-700/50 mt-1" />
+                                    <div className="flex-1 space-y-2">
+                                        <div className="flex justify-between">
+                                            <Skeleton className="h-4 w-32 bg-neutral-700/50 rounded" />
+                                            <Skeleton className="h-3 w-12 bg-neutral-700/30 rounded" />
+                                        </div>
+                                        <Skeleton className="h-3 w-48 bg-neutral-700/30 rounded" />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : selectedDate ? (
                         selectedDayEvents.length > 0 ? (
                             selectedDayEvents.slice(0, visibleCount).map(evt => (
                                 <EventDetailsDialog key={evt.id} event={evt}>

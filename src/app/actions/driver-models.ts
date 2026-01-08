@@ -55,3 +55,37 @@ export async function deleteDeviceModel(brand: string, modelValue: string) {
         return { success: false, error: (error as Error).message };
     }
 }
+
+export async function updateDeviceModel(
+    brand: string,
+    originalValue: string,
+    model: { value: string; label: string; category: string; photo: string }
+) {
+    try {
+        const fileContent = await fs.readFile(MODELS_FILE_PATH, "utf-8");
+
+        // Find and replace the specific model
+        // Match the model with the original value
+        const modelRegex = new RegExp(
+            `(\\{\\s*value:\\s*"${originalValue}",\\s*label:\\s*")[^"]*(",\\s*category:\\s*")[^"]*(",\\s*photo:\\s*")[^"]*("\\s*\\})`,
+            "gm"
+        );
+
+        const updatedContent = fileContent.replace(
+            modelRegex,
+            `{ value: "${model.value}", label: "${model.label}", category: "${model.category}", photo: "${model.photo}" }`
+        );
+
+        if (updatedContent === fileContent) {
+            throw new Error(`Model with value "${originalValue}" not found`);
+        }
+
+        await fs.writeFile(MODELS_FILE_PATH, updatedContent, "utf-8");
+        revalidatePath("/admin/settings");
+
+        return { success: true };
+    } catch (error) {
+        console.error("Error updating device model:", error);
+        return { success: false, error: (error as Error).message };
+    }
+}

@@ -17,16 +17,35 @@ export async function getDeviceFaces(deviceId: string) {
 
     if (device.brand === 'HIKVISION') {
         const driver = new HikvisionDriver();
-        const plates = await driver.getPlates(device);
-        return plates.map((plateNumber: string, index: number) => ({
-            ID: plateNumber, // Using plate number as ID
-            UserID: `HIK-${index}`,
-            Name: `Placa ${plateNumber}`,
-            CardCode: plateNumber, // Show plate in card field for table
-            HasFace: false,
-            HasTag: true,
-            IsPlate: true
-        }));
+
+        if (device.deviceType === 'FACE_TERMINAL') {
+            // Fetch Faces
+            const faces = await driver.getFacesFromCamera(device);
+            console.log(`[DeviceMemory] Fetched ${faces.length} faces from Hikvision Terminal`);
+
+            return faces.map((f: any, index: number) => ({
+                ID: f.FPID || f.faceURL || `HIKFACE-${index}`,
+                UserID: f.name || "Desconocido", // Often name is in 'name' field
+                Name: f.name || `Rostro ${index + 1}`,
+                CardCode: "", // Hikvision might associate cards, usually separate
+                HasFace: true,
+                HasTag: false,
+                IsPlate: false,
+                FaceUrl: f.faceURL // Hikvision often provides a query URL here
+            }));
+        } else {
+            // Default to LPR
+            const plates = await driver.getPlates(device);
+            return plates.map((plateNumber: string, index: number) => ({
+                ID: plateNumber, // Using plate number as ID
+                UserID: `HIK-${index}`,
+                Name: `Placa ${plateNumber}`,
+                CardCode: plateNumber, // Show plate in card field for table
+                HasFace: false,
+                HasTag: true,
+                IsPlate: true
+            }));
+        }
     }
 
     return [];
@@ -215,4 +234,242 @@ export async function importAllFromDevice(deviceId: string) {
     return results;
 }
 
+export async function getDeviceDoorlogs(deviceId: string, limit: number = 50, offset: number = 0) {
+    const device = await prisma.device.findUnique({ where: { id: deviceId } });
+    if (!device) throw new Error("Device not found");
 
+    if (device.brand === 'AKUVOX') {
+        const driver = new AkuvoxDriver();
+        return await driver.getDoorlog(device, limit, offset);
+    }
+
+    return [];
+}
+
+export async function getDeviceCalllogs(deviceId: string, limit: number = 50, offset: number = 0) {
+    const device = await prisma.device.findUnique({ where: { id: deviceId } });
+    if (!device) throw new Error("Device not found");
+
+    if (device.brand === 'AKUVOX') {
+        const driver = new AkuvoxDriver();
+        return await driver.getCalllog(device, limit, offset);
+    }
+
+    return [];
+}
+
+export async function syncHardwareLogs(deviceId: string) {
+    const device = await prisma.device.findUnique({ where: { id: deviceId } });
+    if (!device) throw new Error("Device not found");
+
+    if (device.brand === 'AKUVOX') {
+        const driver = new AkuvoxDriver();
+        const logs = await driver.getDoorlog(device, 100); // Fetch last 100
+
+        let created = 0;
+        for (const log of logs) {
+            const timestamp = new Date(log.Time);
+            if (isNaN(timestamp.getTime())) continue;
+
+            // Use a 2-second buffer to capture events already synced by webhooks
+            const startTime = new Date(timestamp.getTime() - 2000);
+            const endTime = new Date(timestamp.getTime() + 2000);
+
+            // Check if exists
+            const existing = await prisma.accessEvent.findFirst({
+                where: {
+                    deviceId: device.id,
+                    timestamp: {
+                        gte: startTime,
+                        lte: endTime
+                    }
+                }
+            });
+
+            if (!existing) {
+                // Try to find user by card or name
+                const user = await prisma.user.findFirst({
+                    where: {
+                        OR: [
+                            { name: log.Name },
+                            { credentials: { some: { value: log.Card } } }
+                        ]
+                    }
+                });
+
+                await prisma.accessEvent.create({
+                    data: {
+                        timestamp: timestamp,
+                        deviceId: device.id,
+                        userId: user?.id,
+                        decision: log.Status === "0" || log.Status === 0 ? "GRANT" : "DENY",
+                        details: `SINCRO_HW: ${log.Mode || log.Event || "Acceso"}`,
+                        plateDetected: log.Name || "Desconocido",
+                        direction: device.direction,
+                        location: device.location,
+                        imagePath: (log.PicUrl || log.PicPath || log.pic_url || log.snap_path || log.PicName)
+                            ? `/api/proxy/device-image?deviceId=${device.id}&path=${encodeURIComponent(log.PicUrl || log.PicPath || log.pic_url || log.snap_path || log.PicName)}`
+                            : null,
+                    }
+                });
+                created++;
+            }
+        }
+        return { success: true, count: created };
+    }
+
+    return { success: false, message: "Marca no compatible para sincronización de memoria" };
+}
+
+export async function getSyncedEvents(take: number = 50) {
+    return await prisma.accessEvent.findMany({
+        where: {
+            OR: [
+                { details: { contains: "SINCRO_HW" } },
+                { details: { contains: "Sincro Hardware", mode: 'insensitive' } }
+            ]
+        },
+        take,
+        orderBy: { timestamp: "desc" },
+        include: {
+            user: {
+                select: {
+                    name: true,
+                    unit: { select: { name: true } }
+                }
+            },
+            device: true
+        }
+    });
+}
+
+export async function getDeviceAccessEvents(deviceId: string, take: number = 100) {
+    return await prisma.accessEvent.findMany({
+        where: { deviceId },
+        take,
+        orderBy: { timestamp: "desc" },
+        include: {
+            user: {
+                select: {
+                    name: true,
+                    unit: { select: { name: true } }
+                }
+            },
+            device: true
+        }
+    });
+}
+
+export async function previewHardwareLogs(deviceId: string) {
+    const device = await prisma.device.findUnique({ where: { id: deviceId } });
+    if (!device) throw new Error("Device not found");
+
+    if (device.brand === 'AKUVOX') {
+        const driver = new AkuvoxDriver();
+        const logs = await driver.getDoorlog(device, 50); // Preview last 50
+
+        const preview = [];
+        for (const log of logs) {
+            const timestamp = new Date(log.Time);
+            if (isNaN(timestamp.getTime())) continue;
+
+            const startTime = new Date(timestamp.getTime() - 2000);
+            const endTime = new Date(timestamp.getTime() + 2000);
+
+            const existing = await prisma.accessEvent.findFirst({
+                where: {
+                    deviceId: device.id,
+                    timestamp: { gte: startTime, lte: endTime }
+                }
+            });
+
+            preview.push({
+                ...log,
+                exists: !!existing,
+                timestamp: timestamp
+            });
+        }
+        return preview;
+    }
+
+    return [];
+}
+
+export async function previewHardwareCallLogs(deviceId: string) {
+    const device = await prisma.device.findUnique({ where: { id: deviceId } });
+    if (!device) throw new Error("Device not found");
+
+    if (device.brand === 'AKUVOX') {
+        const driver = new AkuvoxDriver();
+        const logs = await driver.getCalllog(device, 50);
+
+        const preview = [];
+        for (const log of logs) {
+            const timestamp = new Date(log.Time);
+            if (isNaN(timestamp.getTime())) continue;
+
+            const startTime = new Date(timestamp.getTime() - 2000);
+            const endTime = new Date(timestamp.getTime() + 2000);
+
+            const existing = await prisma.accessEvent.findFirst({
+                where: {
+                    deviceId: device.id,
+                    timestamp: { gte: startTime, lte: endTime },
+                    details: { contains: 'Llamada' }
+                }
+            });
+
+            preview.push({
+                ...log,
+                exists: !!existing,
+                timestamp: timestamp
+            });
+        }
+        return preview;
+    }
+    return [];
+}
+
+export async function syncHardwareCallLogs(deviceId: string) {
+    const device = await prisma.device.findUnique({ where: { id: deviceId } });
+    if (!device) throw new Error("Device not found");
+
+    if (device.brand === 'AKUVOX') {
+        const driver = new AkuvoxDriver();
+        const logs = await driver.getCalllog(device, 100);
+
+        let created = 0;
+        for (const log of logs) {
+            const timestamp = new Date(log.Time);
+            if (isNaN(timestamp.getTime())) continue;
+
+            const startTime = new Date(timestamp.getTime() - 2000);
+            const endTime = new Date(timestamp.getTime() + 2000);
+
+            const existing = await prisma.accessEvent.findFirst({
+                where: {
+                    deviceId: device.id,
+                    timestamp: { gte: startTime, lte: endTime },
+                    details: { contains: 'Llamada' }
+                }
+            });
+
+            if (!existing) {
+                await prisma.accessEvent.create({
+                    data: {
+                        timestamp: timestamp,
+                        deviceId: device.id,
+                        decision: "GRANT",
+                        details: `SINCRO_HW: Llamada - ${log.Result || 'Desconocido'} (${log.TalkTime}s)`,
+                        plateDetected: `${log.CallerID} -> ${log.CalleeID}`,
+                        direction: device.direction,
+                        location: device.location,
+                    }
+                });
+                created++;
+            }
+        }
+        return { success: true, count: created };
+    }
+    return { success: false, message: "No compatible" };
+}

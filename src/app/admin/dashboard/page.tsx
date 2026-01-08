@@ -165,11 +165,11 @@ export default function AccessDashboard() {
         // We iterate and process events. We need to skip events that are part of a sequence we already attached to a parent.
         const handledIds = new Set<string>();
 
-        // Pre-sort might be needed if events aren't strictly ordered, but typically they are new-to-old.
-        // Assuming 'events' is sorted Newest First (descending time).
+        // Pre-sort events by timestampDescending to ensure correct order
+        const sortedEvents = [...events].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-        for (let i = 0; i < events.length; i++) {
-            const e = events[i];
+        for (let i = 0; i < sortedEvents.length; i++) {
+            const e = sortedEvents[i];
 
             if (handledIds.has(e.id)) continue;
 
@@ -208,7 +208,7 @@ export default function AccessDashboard() {
             if (plate === 'DOOR_OPEN' || plate === 'DOOR_CLOSE') {
                 // We typically hide these unless they are orphan (no credential event found nearby).
                 // Let's check if there is a Credential event slightly OLDER (higher index) or SAME time that likely triggered this.
-                const parentCandidate = events.slice(i + 1, i + 10).find(prev =>
+                const parentCandidate = sortedEvents.slice(i + 1, i + 10).find(prev =>
                     prev.deviceId === e.deviceId &&
                     ['PLATE', 'FACE', 'TAG', 'PIN'].includes(prev.accessType || '') &&
                     prev.plateDetected !== 'DOOR_OPEN' &&
@@ -226,14 +226,14 @@ export default function AccessDashboard() {
             } else {
                 // This is a Credential Event (Main).
                 // Search for its children (Door Open / Close) that occurred slightly AFTER (newer = lower index).
-                const relatedOpen = events.slice(Math.max(0, i - 10), i).find(next =>
+                const relatedOpen = sortedEvents.slice(Math.max(0, i - 10), i).find(next =>
                     next.deviceId === e.deviceId &&
                     (next.plateDetected === 'DOOR_OPEN' || (next.details && next.details.includes('Door Open'))) &&
                     (new Date(next.timestamp).getTime() - new Date(e.timestamp).getTime() > 0) && // Must be after
                     (new Date(next.timestamp).getTime() - new Date(e.timestamp).getTime() < 30000) // Within 30s
                 );
 
-                const relatedClose = events.slice(Math.max(0, i - 10), i).find(next =>
+                const relatedClose = sortedEvents.slice(Math.max(0, i - 10), i).find(next =>
                     next.deviceId === e.deviceId &&
                     (next.plateDetected === 'DOOR_CLOSE' || (next.details && next.details.includes('Door Close'))) &&
                     (new Date(next.timestamp).getTime() - new Date(e.timestamp).getTime() > 0) &&
@@ -386,7 +386,7 @@ export default function AccessDashboard() {
                             : "hover:bg-white/5 border-l-transparent hover:border-l-indigo-500"
                 )}>
                     <div className="flex items-center gap-3">
-                        {/* LEFT: LOGO/ICON OR FACE IMAGES */}
+                        {/* LEFT: ICON/IMAGE (ALL TYPES) */}
                         <div className={cn("rounded-lg shrink-0 flex items-center justify-center p-0.5", "bg-neutral-900 border border-white/10 shadow-sm overflow-hidden", "w-14 h-11 relative")}>
                             {(isCall) ? (
                                 <div className="relative w-full h-full">
@@ -412,27 +412,25 @@ export default function AccessDashboard() {
                                         </div>
                                     )}
                                 </div>
-                            ) : event.accessType === 'FACE' && fullImageUrl ? (
-                                <>
+                            ) : event.accessType === 'FACE' ? (
+                                (fullImageUrl || meta.FaceImage || event.user?.cara) ? (
                                     <Image
-                                        src={fullImageUrl}
-                                        alt="Escena"
+                                        src={fullImageUrl || getImageUrl(meta.FaceImage || event.user?.cara)}
+                                        alt="Face"
                                         fill
                                         sizes="56px"
-                                        className="object-cover"
+                                        className="object-cover scale-110"
                                     />
-                                    {(faceCropUrl || event.user?.cara) && (
-                                        <div className="absolute bottom-0 right-0 w-7 h-9 border border-white/30 bg-black rounded-tl-sm overflow-hidden z-10 shadow-lg">
-                                            <Image
-                                                src={faceCropUrl || getImageUrl(event.user?.cara)}
-                                                alt="Rostro"
-                                                fill
-                                                sizes="28px"
-                                                className="object-cover"
-                                            />
-                                        </div>
-                                    )}
-                                </>
+                                ) : (
+                                    <div className={cn("w-full h-full flex items-center justify-center", config.bgClass)}>
+                                        <UserIcon size={18} className={config.textClass} />
+                                    </div>
+                                )
+                            ) : event.accessType === 'TAG' && !event.plateDetected?.startsWith('DOOR') ? (
+                                // TAG/RFID - Show RFID Icon (don't try to load potentially invalid snapshots)
+                                <div className={cn("w-full h-full rounded flex items-center justify-center", "bg-amber-500/10")}>
+                                    <CreditCard size={18} className="text-amber-400" />
+                                </div>
                             ) : logoUrl ? (
                                 <div className="relative w-full h-full p-1 bg-white">
                                     <Image
@@ -455,11 +453,23 @@ export default function AccessDashboard() {
                             <div className="flex flex-col">
                                 <div className="flex items-center gap-2">
                                     {event.accessType === "PLATE" ? (
-                                        <div className="flex flex-col bg-white border border-neutral-800 rounded-sm overflow-hidden min-w-[80px] mt-0.5">
+                                        <div className={cn("flex flex-col border border-neutral-800 rounded-sm overflow-hidden min-w-[80px] mt-0.5",
+                                            event.plateDetected === "NO_LEIDA" ? "bg-red-600 border-red-500" : "bg-white")}>
                                             <div className="h-0.5 bg-blue-600 w-full" />
-                                            <p className="text-[12px] font-black text-black tracking-widest uppercase px-2 py-0.5 text-center font-mono leading-none">
-                                                {event.plateDetected === "NO_LEIDA" ? "S/P" : event.plateDetected}
+                                            <p className={cn("text-[12px] font-black tracking-widest uppercase px-2 py-0.5 text-center font-mono leading-none",
+                                                event.plateDetected === "NO_LEIDA" ? "text-white text-[9px]" : "text-black")}>
+                                                {event.plateDetected === "NO_LEIDA" ? "No Leída" : event.plateDetected}
                                             </p>
+                                        </div>
+                                    ) : event.accessType === "TAG" && !isCall && event.plateDetected !== 'DOOR_OPEN' && event.plateDetected !== 'DOOR_CLOSE' ? (
+                                        // TAG/RFID Event - Show Card Number prominently
+                                        <div className="flex items-center gap-2">
+                                            <div className="bg-amber-500/20 border border-amber-500/30 rounded-lg px-2.5 py-1 flex items-center gap-2">
+                                                <CreditCard size={14} className="text-amber-400" />
+                                                <span className="text-sm font-black text-amber-400 uppercase tracking-wider font-mono">
+                                                    {event.plateDetected || 'TARJETA'}
+                                                </span>
+                                            </div>
                                         </div>
                                     ) : (
                                         <p className={cn("text-sm font-black truncate tracking-tight uppercase", isCall ? "text-blue-400" : "text-white")}>
@@ -498,7 +508,14 @@ export default function AccessDashboard() {
                                         ) : (event.plateDetected === 'DOOR_OPEN' || event.plateDetected === 'DOOR_CLOSE') ? (
                                             event.device?.name || 'ACCIONAMIENTO MANUAL'
                                         ) : (event.accessType === 'FACE') ? (
-                                            faceSimilarity ? `${faceSimilarity}% SIMILITUD (CAMARA)` : (faceName ? 'IDENTIFICADO POR CAMARA' : 'ROSTRO NO IDENTIFICADO')
+                                            // FIX SIMILARITY STRING
+                                            (() => {
+                                                const simVal = meta['Similitud']?.match(/(\d+)/)?.[1];
+                                                return simVal ? `${simVal}% Similitud` : (faceName ? 'IDENTIFICADO POR CAMARA' : 'ROSTRO NO IDENTIFICADO');
+                                            })()
+                                        ) : (event.accessType === 'TAG') ? (
+                                            // Show device/reader name for TAG events
+                                            event.device?.name || 'LECTOR RFID'
                                         ) : (
                                             `SIMILITUD: ${meta.Similitud || 'VERIFICADO'}`
                                         )}
@@ -509,6 +526,12 @@ export default function AccessDashboard() {
                                 )}
                             </div>
                             {event.user?.name && event.accessType === "PLATE" && (
+                                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-0.5">
+                                    {event.user.name}
+                                </p>
+                            )}
+                            {/* Show user name for TAG events if linked */}
+                            {event.user?.name && event.accessType === "TAG" && (
                                 <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-0.5">
                                     {event.user.name}
                                 </p>
@@ -563,11 +586,12 @@ export default function AccessDashboard() {
     const captureEvents = filteredEvents.filter(e => e.imagePath || e.snapshotPath || e.user?.cara);
 
     return (
-        <div className="h-full p-6 overflow-hidden animate-in fade-in duration-700">
-            <div className="grid grid-cols-3 gap-6 h-full">
+        <div className="h-full p-6 overflow-hidden animate-in fade-in duration-700 flex flex-col gap-6">
+
+            <div className="grid grid-cols-3 gap-6 flex-1 min-h-0">
 
                 {/* COLUMN 1: ENTRADAS */}
-                <div className="flex flex-col h-full bg-neutral-900/40 border border-white/5 rounded-xl overflow-hidden shadow-2xl">
+                <div className="flex flex-col h-full bg-neutral-900/40 border border-white/5 rounded-xl overflow-hidden shadow-2xl min-h-0">
                     <div className="p-5 border-b border-indigo-500/20 bg-indigo-500/5">
                         <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-3">
@@ -629,13 +653,13 @@ export default function AccessDashboard() {
                             </div>
                         </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto divide-y divide-white/5 custom-scrollbar">
+                    <div className="flex-1 overflow-y-auto divide-y divide-white/5 custom-scrollbar min-h-0">
                         {entryEvents.map(event => <EventItem key={event.id} event={event} />)}
                     </div>
                 </div>
 
                 {/* COLUMN 2: CAPTURAS */}
-                <div className="flex flex-col h-full bg-neutral-900/60 border border-indigo-500/20 rounded-xl overflow-hidden shadow-xl scale-[1.02] z-10">
+                <div className="flex flex-col h-full bg-neutral-900/60 border border-indigo-500/20 rounded-xl overflow-hidden shadow-xl scale-[1.02] z-10 min-h-0">
                     <div className="p-5 border-b border-white/10 bg-white/5 flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <div className="p-2 bg-indigo-500/20 rounded-lg"><Camera className="text-indigo-400" size={18} /></div>
@@ -668,7 +692,7 @@ export default function AccessDashboard() {
                         </div>
                         <Badge className="bg-indigo-500/20 text-indigo-400 border-indigo-500/30 font-black">{captureEvents.length}</Badge>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-black/40">
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-black/40 min-h-0">
                         {captureEvents.map(event => {
                             // Parse details
                             const detailsMap: any = {};
@@ -750,29 +774,30 @@ export default function AccessDashboard() {
                                             </div>
                                         </div>
 
-                                        {/* FACE CROP OVERLAY (Above Decision Button) */}
+                                        {/* FACE CROP OVERLAY (Moved to Bottom Left based on user feedback) */}
                                         {isFace && (faceCropUrl || event.user?.cara) && (
-                                            <div className="absolute bottom-12 right-3 z-10 w-14 h-14 rounded-xl overflow-hidden border-2 border-white/50 shadow-2xl bg-black animate-in zoom-in slide-in-from-bottom-4 duration-500">
+                                            <div className="absolute bottom-3 left-3 z-20 w-16 h-16 rounded-xl overflow-hidden border-2 border-white/50 shadow-2xl bg-black animate-in zoom-in slide-in-from-left-4 duration-500">
                                                 <Image
                                                     src={faceCropUrl || getImageUrl(event.user?.cara) || ""}
                                                     alt="Face"
                                                     fill
                                                     className="object-cover"
                                                 />
-                                                {similarity && <div className="absolute bottom-0 inset-x-0 bg-black/70 text-[8px] text-white text-center font-bold py-0.5 tracking-tighter">{similarity}%</div>}
+                                                {/* Mini similarity badge inside crop */}
+                                                {similarity && <div className="absolute bottom-0 inset-x-0 bg-black/80 text-[8px] text-emerald-400 text-center font-black py-0.5 tracking-tighter">{similarity}%</div>}
                                             </div>
                                         )}
 
                                         {/* Identity / Plate Overlay */}
                                         {/* Center Overlay: Resident Name & Time Status */}
                                         {(event.user?.name || (detailsMap['Name'] && detailsMap['Name'] !== 'unknown') || cameraName) && (
-                                            <div className="absolute inset-0 flex flex-col items-center justify-center z-20 pointer-events-none p-4 text-center">
+                                            <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none p-4 text-center">
                                                 <h3 className="text-2xl font-black text-white uppercase tracking-tighter drop-shadow-[0_4px_4px_rgba(0,0,0,1)] bg-black/40 px-4 py-1 rounded-full backdrop-blur-[2px]">
                                                     {event.user?.name || cameraName || detailsMap['Name']}
                                                 </h3>
                                                 {isFace && similarity && (
-                                                    <div className="mt-1 bg-black/60 px-2 py-0.5 rounded text-emerald-400 font-black text-[9px] uppercase tracking-widest shadow-lg backdrop-blur-md">
-                                                        {similarity}% COINCIDENCIA
+                                                    <div className="mt-1 bg-black/60 px-3 py-1 rounded-full border border-emerald-500/20 text-emerald-400 font-black text-[10px] uppercase tracking-widest shadow-lg backdrop-blur-md">
+                                                        {similarity}% SIMILITUD
                                                     </div>
                                                 )}
 
@@ -829,10 +854,12 @@ export default function AccessDashboard() {
                                                 )
                                             ) : (
                                                 // PLATE IDENTITY STYLE (Always Show for LPR)
-                                                <div className="flex flex-col bg-white border-2 border-neutral-800 rounded-sm overflow-hidden shadow-2xl min-w-[100px]">
+                                                <div className={cn("flex flex-col border-2 border-neutral-800 rounded-sm overflow-hidden shadow-2xl min-w-[100px]",
+                                                    event.plateDetected === "NO_LEIDA" ? "bg-red-600 border-red-500" : "bg-white")}>
                                                     <div className="h-1 bg-blue-600 w-full" />
-                                                    <p className="text-[16px] font-black text-black tracking-[0.2em] uppercase px-3 py-0.5 text-center font-mono">
-                                                        {event.plateDetected === "NO_LEIDA" ? "S/P" : event.plateDetected}
+                                                    <p className={cn("text-[16px] font-black tracking-[0.2em] uppercase px-3 py-0.5 text-center font-mono",
+                                                        event.plateDetected === "NO_LEIDA" ? "text-white text-[10px]" : "text-black")}>
+                                                        {event.plateDetected === "NO_LEIDA" ? "No Leída" : event.plateDetected}
                                                     </p>
                                                 </div>
                                             )}
@@ -889,7 +916,7 @@ export default function AccessDashboard() {
                 </div>
 
                 {/* COLUMN 3: SALIDAS */}
-                <div className="flex flex-col h-full bg-neutral-900/40 border border-white/5 rounded-xl overflow-hidden shadow-2xl">
+                <div className="flex flex-col h-full bg-neutral-900/40 border border-white/5 rounded-xl overflow-hidden shadow-2xl min-h-0">
                     <div className="p-5 border-b border-orange-500/20 bg-orange-500/5">
                         <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-3">
@@ -902,7 +929,7 @@ export default function AccessDashboard() {
                             <Badge className="bg-orange-600 text-white font-black text-[10px]">{exitEvents.length}</Badge>
                         </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto divide-y divide-white/5 custom-scrollbar">
+                    <div className="flex-1 overflow-y-auto divide-y divide-white/5 custom-scrollbar min-h-0">
                         {exitEvents.map(event => <EventItem key={event.id} event={event} />)}
                     </div>
                 </div>

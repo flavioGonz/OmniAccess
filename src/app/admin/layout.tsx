@@ -60,6 +60,31 @@ function SidebarItem({ icon, label, href, active, collapsed }: SidebarItemProps)
     );
 }
 
+import { getSetting } from "@/app/actions/settings";
+
+function MinIORetentionBadge() {
+    const [days, setDays] = useState<string | null>(null);
+
+    React.useEffect(() => {
+        getSetting("S3_LIFECYCLE_DAYS").then(s => setDays(s?.value || "30"));
+    }, []);
+
+    if (!days) return null;
+
+    return (
+        <div className="px-4 pb-2 mt-auto">
+            <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-2.5 flex flex-col items-center gap-0.5">
+                <p className="text-[8px] text-orange-400 font-bold uppercase tracking-widest text-center leading-tight opacity-80">
+                    Retención MinIO
+                </p>
+                <p className="text-xs text-orange-300 font-black">
+                    {days} Días
+                </p>
+            </div>
+        </div>
+    );
+}
+
 export default function AdminLayout({
     children,
 }: {
@@ -122,22 +147,12 @@ export default function AdminLayout({
 
                     <SidebarItem icon={<Calendar size={18} />} label="Calendario" href="/admin/calendar" active={pathname === "/admin/calendar"} collapsed={collapsed} />
                     <SidebarItem icon={<Settings size={18} />} label="Configuración" href="/admin/settings" active={pathname === "/admin/settings"} collapsed={collapsed} />
+                    <SidebarItem icon={<ShieldCheck size={18} />} label="Auditoría Hardware" href="/admin/audit" active={pathname === "/admin/audit"} collapsed={collapsed} />
                     <SidebarItem icon={<Activity size={18} />} label="Debug Webhooks" href="/admin/debug" active={pathname === "/admin/debug"} collapsed={collapsed} />
                 </nav>
 
                 {/* MinIO Retention Badge */}
-                {!collapsed && (
-                    <div className="px-4 pb-2 mt-auto">
-                        <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-2.5 flex flex-col items-center gap-0.5">
-                            <p className="text-[8px] text-orange-400 font-bold uppercase tracking-widest text-center leading-tight opacity-80">
-                                Retención MinIO
-                            </p>
-                            <p className="text-xs text-orange-300 font-black">
-                                30 Días
-                            </p>
-                        </div>
-                    </div>
-                )}
+                {!collapsed && <MinIORetentionBadge />}
 
                 <div className="p-3 border-t border-neutral-800 space-y-2">
                     {!collapsed && <HelpMenu />}

@@ -1,15 +1,44 @@
 // Centralized driver models configuration
 export const DRIVER_MODELS = {
     HIKVISION: [
-    
+
         { value: "iDS-2CD7A26G0/P-IZHS", label: "iDS-2CD7A26G0/P-IZHS", category: "LPR", photo: "https://chipcom.com.gt/_next/image?url=https%3A%2F%2Fftp3.syscom.mx%2Fusuarios%2Ffotos%2FBancoFotografiasSyscom%2FHIKVISION%2FIDS2CD7A26G0IZHS(C)%2FIDS2CD7A26G0IZHS(C)-p.PNG&w=256&q=75" },
-    
-        { value: "iDS-2CD7A26G0-IZHS", label: "iDS-2CD7A26G0-IZHS", category: "Face", photo: "" },
+
+        { value: "iDS-2CD7A26G0-IZHS", label: "iDS-2CD7A26G0-IZHS", category: "Face", photo: "https://chipcom.com.gt/_next/image?url=https%3A%2F%2Fftp3.syscom.mx%2Fusuarios%2Ffotos%2FBancoFotografiasSyscom%2FHIKVISION%2FIDS2CD7A26G0IZHS(C)%2FIDS2CD7A26G0IZHS(C)-p.PNG&w=256&q=75" },
     ],
-    AKUVOX: [    
-        { value: "E18", label: "E18", category: "Terminal Face", photo: "https://www.akuvox.com/uploads/images/Products-Door-PhoneE18.png" },
-    
-        { value: "R27k", label: "R27k", category: "Terminal Acceso", photo: "https://www.akuvox.com/uploads/images/%E8%8F%9C%E5%8D%95%E5%9B%BE-new.png" },
+    AKUVOX: [
+        // A Series - Face Terminals
+        { value: "A01", label: "A01", category: "Face Terminal", photo: "https://www.itshopmaldives.com/web/image/product.template/6687/image_256" },
+        { value: "A02", label: "A02", category: "Face Terminal", photo: "https://www.svideo.com.uy/imgs/productos/productos31_12502.webp" },
+        { value: "A03", label: "A03", category: "Face Terminal", photo: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSNn0E8ldd1dbSoUlW89ptSKgr4I9_4XRpqVg&s" },
+        { value: "A05", label: "A05", category: "Face Terminal", photo: "https://www.yli.ro/media/catalog/product/cache/2/image/256x/9df78eab33525d08d6e5fb8d27136e95/a/k/akuvox-a05s-transparent_1.png" },
+        { value: "A094", label: "A094 Access Terminal", category: "Face Terminal", photo: "https://www.qos.com.uy/wp-content/uploads/2024/08/2023011116260332.png" },
+        { value: "A095", label: "A095 Access Terminal", category: "Face Terminal", photo: "https://www.akuvox.com/uploads/images/A095%20%E8%8F%9C%E5%8D%95%E5%9B%BE.png" },
+
+        // R Series - Door Intercoms
+        { value: "R20", label: "R20 Series Door Intercom", category: "Door Intercom", photo: "https://cdn11.bigcommerce.com/s-x9mmx0fz42/products/124/images/513/Akuvox_R20_Canada__12402.1640006410.386.513.gif?c=1" },
+        { value: "R20K", label: "R20K Keypad Intercom", category: "Door Intercom", photo: "https://www.akuvox.com/uploads/images/R25K-%E5%88%97%E8%A1%A8.png" },
+        { value: "R25", label: "R25 Series Door Intercom", category: "Door Intercom", photo: "https://www.akuvox.com/uploads/images/b4e4773b69735afd097b42fe96681020.png" },
+        { value: "R27", label: "R27 Door Intercom", category: "Door Intercom", photo: "https://www.akuvox.com/uploads/images/%E8%8F%9C%E5%8D%95%E5%9B%BE-new.png" },
+        { value: "R28V2", label: "R28 V2 Door Intercom", category: "Door Intercom", photo: "" },
+        { value: "R29", label: "R29 Smart Intercom", category: "Door Intercom", photo: "https://www.akuvox.com/Upload/products/202007/31/20200731095548552.png" },
+
+        // X Series - Premium Intercoms
+        { value: "X910", label: "X910 Door Intercom", category: "Premium Intercom", photo: "" },
+        { value: "X912", label: "X912 Door Intercom", category: "Premium Intercom", photo: "" },
+        { value: "X915V2", label: "X915 V2 Door Intercom", category: "Premium Intercom", photo: "https://www.akuvox.com/Upload/products/202309/14/20230914160512365.png" },
+        { value: "X916", label: "X916 Smart Door Intercom", category: "Premium Intercom", photo: "https://www.akuvox.com/Upload/products/202302/27/20230227113947580.png" },
+
+        // S Series - Smart Intercoms
+        { value: "S532", label: "S532 Smart Intercom", category: "Smart Intercom", photo: "" },
+        { value: "S535", label: "S535 Smart Intercom", category: "Smart Intercom", photo: "" },
+        { value: "S539", label: "S539 Smart Intercom", category: "Smart Intercom", photo: "" },
+
+        // E Series - Indoor Stations
+        { value: "E12", label: "E12 Indoor Station", category: "Indoor Station", photo: "" },
+        { value: "E13", label: "E13 Indoor Station", category: "Indoor Station", photo: "" },
+        { value: "E16V2", label: "E16 V2 Indoor Station", category: "Indoor Station", photo: "" },
+        { value: "E18", label: "E18 Indoor Station", category: "Indoor Station", photo: "https://www.akuvox.com/uploads/images/Products-Door-PhoneE18.png" },
     ],
     DAHUA: [
         { value: "ITC215-PW6M", label: "ITC215-PW6M", category: "LPR Camera", photo: "" },

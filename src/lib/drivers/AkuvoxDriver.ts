@@ -86,8 +86,55 @@ export class AkuvoxDriver implements IDeviceDriver {
         return `http://${device.ip}`;
     }
 
+    async getSystemInfo(device: Device): Promise<any> {
+        try {
+            const response = await this.request("POST", "/api/system/get", {
+                "target": "system",
+                "action": "get",
+                "data": {}
+            }, device);
+            return response.data;
+        } catch (error: any) {
+            console.error(`[Akuvox] Error fetching system info from ${device.ip}:`, error.message);
+            throw error;
+        }
+    }
+
+    public isAndroidModel(model: string | null): boolean {
+        if (!model) return false;
+        const androidModels = ["R29", "X915", "X916", "E16", "E18", "A05", "A095"];
+        return androidModels.some(m => model.toUpperCase().includes(m));
+    }
+
+    public getLiveStreamURL(device: Device): string {
+        // We avoid forcing 8080 unless explicitly needed, defaulting to standard 80
+        const path = this.isAndroidModel(device.deviceModel) ? "/live.mjpg" : "/fcgi/video.cgi";
+        return `http://${device.ip}${path}`;
+    }
+
+    public getSnapshotURL(device: Device): string {
+        return `http://${device.ip}/api/camera/snapshot`;
+    }
+
+    async getDoorStatus(device: Device): Promise<any> {
+        try {
+            // Akuvox devices often don't have a direct "door status" API.
+            // This might be part of system info or require a specific event listener.
+            // For now, returning a placeholder or fetching general status.
+            // If a specific API exists, it should be implemented here.
+            console.warn(`[Akuvox] getDoorStatus not fully implemented for Akuvox devices. Returning placeholder.`);
+            return { doorOpen: false, lastEvent: null };
+        } catch (error: any) {
+            console.error(`[Akuvox] Error fetching door status from ${device.ip}:`, error.message);
+            throw error;
+        }
+    }
+
     async getDeviceStats(device: Device) {
         try {
+            // First try to get unified system info
+            const sysInfo = await this.getSystemInfo(device);
+            const doorStatus = await this.getDoorStatus(device);
             // Usamos /api/user/get para obtener el total de identidades
             const [users, cards] = await Promise.all([
                 this.request("POST", "/api/user/get",
@@ -149,44 +196,79 @@ export class AkuvoxDriver implements IDeviceDriver {
 
         try {
             // 1. Create User with basic info + credentials
+            // Fields like LiftFloorNum and WebRelay are required for Linux AC models
             const userPayload: any = {
                 "ID": akuvoxId,
+                "UserID": akuvoxId, // Required for many models
                 "Name": user.name,
                 "UserCode": akuvoxId,
                 "Type": "0",          // 0 = General User
                 "Group": "Default",   // Default Group
                 "Role": "-1",         // Standard Role
-                "ScheduleRelay": "1001-1;1001-2;" // Access to Relay 1 and 2, Always (1001)
+                "ScheduleRelay": "1001-1;", // Mandatory format for Linux AC
+                "Schedule": "1:1001", // Legacy/Backup format
+                "LiftFloorNum": "0",  // Mandatory for Linux AC
+                "WebRelay": "0",      // Mandatory for Linux AC
+                "DoorNum": "1"        // Fallback for some models
             };
 
             if (tags.length > 0) userPayload["CardCode"] = tags.join(',');
             if (pin) userPayload["PrivatePIN"] = pin;
 
-            console.log(`[Akuvox] Sending User Payload (ID: ${akuvoxId}):`, JSON.stringify(userPayload));
+            // Strategy for Linux AC (A05, etc.): They sometimes expect a Base64 image field inside the user item
+            if (user.cara) {
+                try {
+                    let imageBuffer: Buffer | null = null;
+                    if (user.cara.startsWith("/")) {
+                        const localPath = path.join(process.cwd(), "public", user.cara);
+                        if (fs.existsSync(localPath)) imageBuffer = fs.readFileSync(localPath);
+                    } else if (user.cara.startsWith("http")) {
+                        const resp = await axios.get(user.cara, { responseType: 'arraybuffer', timeout: 5000 });
+                        imageBuffer = Buffer.from(resp.data);
+                    }
 
-            await this.request("POST", "/api/user/add", {
-                "target": "user",
-                "action": "add",
-                "data": {
-                    "item": [userPayload]
+                    if (imageBuffer) {
+                        const base64 = imageBuffer.toString('base64');
+                        userPayload["Image"] = base64; // Linux AC specific field
+                        userPayload["FaceImage"] = base64; // Alternative field name
+                        console.log(`[Akuvox] Embedded face image in user payload for Linux AC compatibility`);
+                    }
+                } catch (e) {
+                    console.warn(`[Akuvox] Could not embed face in user payload: ${e.message}`);
                 }
-            }, device);
+            }
+
+            console.log(`[Akuvox] Sending User Payload (ID: ${akuvoxId}):`, JSON.stringify({ ...userPayload, Image: userPayload.Image ? '(Base64...)' : null }));
+
+            try {
+                await this.request("POST", "/api/user/add", {
+                    "target": "user",
+                    "action": "add",
+                    "data": { "item": [userPayload] }
+                }, device);
+                console.log(`[Akuvox] User ${user.name} added successfully`);
+            } catch (addError: any) {
+                console.log(`[Akuvox] user/add failed, trying user/set fallback for ${user.name}...`);
+                await this.request("POST", "/api/user/set", {
+                    "target": "user",
+                    "action": "set",
+                    "data": { "item": [userPayload] }
+                }, device);
+                console.log(`[Akuvox] User ${user.name} updated successfully via set`);
+            }
 
         } catch (error: any) {
             console.error(`[Akuvox] Error adding user core data:`, error.message);
             throw new Error(`Error al crear usuario en el dispositivo: ${error.message}`);
         }
 
-        // 2. Add Face (if exists)
+        // 2. Add/Set Face (Atomic secondary strategy for Android/General)
         if (user.cara) {
             try {
                 let imageBuffer: Buffer | null = null;
-
                 if (user.cara.startsWith("/")) {
                     const localPath = path.join(process.cwd(), "public", user.cara);
-                    if (fs.existsSync(localPath)) {
-                        imageBuffer = fs.readFileSync(localPath);
-                    }
+                    if (fs.existsSync(localPath)) imageBuffer = fs.readFileSync(localPath);
                 } else if (user.cara.startsWith("http")) {
                     const response = await axios.get(user.cara, { responseType: 'arraybuffer', timeout: 10000 });
                     imageBuffer = Buffer.from(response.data);
@@ -194,18 +276,23 @@ export class AkuvoxDriver implements IDeviceDriver {
 
                 if (imageBuffer) {
                     const base64 = imageBuffer.toString('base64');
-                    await this.request("POST", "/api/face/add", {
-                        "target": "face",
-                        "action": "add",
-                        "data": {
-                            "ID": akuvoxId,
-                            "Image": base64
-                        }
-                    }, device);
-                    console.log(`[Akuvox] Face image synced for ${user.name}`);
+                    // Try /api/face/add then /api/face/set
+                    try {
+                        await this.request("POST", "/api/face/add", {
+                            "target": "face", "action": "add",
+                            "data": { "ID": akuvoxId, "Image": base64, "UserID": akuvoxId }
+                        }, device);
+                    } catch (e) {
+                        console.log(`[Akuvox] /face/add failed, trying /face/set...`);
+                        await this.request("POST", "/api/face/add", { // Note: Action inside payload is what matters
+                            "target": "face", "action": "set",
+                            "data": { "ID": akuvoxId, "Image": base64, "UserID": akuvoxId }
+                        }, device);
+                    }
+                    console.log(`[Akuvox] Face image synced via face module for ${user.name}`);
                 }
             } catch (error: any) {
-                console.warn(`[Akuvox] Warning: User created but Face Sync failed: ${error.message}`);
+                console.warn(`[Akuvox] Warning: Face Sync via module failed: ${error.message}`);
             }
         }
     }
@@ -246,30 +333,46 @@ export class AkuvoxDriver implements IDeviceDriver {
 
     async triggerRelay(device: Device): Promise<void> {
         try {
-            // Updated Open Door commands based on user requirements
-            // Using specific relay-only credentials: api / Api*2011
+            // Updated Open Door commands based on official API documentation
+            // Using specific relay-only credentials fallback if provided: api / Api*2011
             const relayUser = "api";
             const relayPass = "Api*2011";
             const doorNum = "1"; // Default to Relay A
 
-            // Method 1: Standard (No High Security)
-            const path1 = `/fcgi/do?action=OpenDoor&UserName=${relayUser}&Password=${relayPass}&DoorNum=${doorNum}`;
+            console.log(`[Akuvox] Sending Trigger Relay command to ${device.ip} (Relay ${doorNum})...`);
 
-            // Method 2: High Security (Basic Auth in URL)
-            const highSecurityUrl = `http://${relayUser}:${relayPass}@${device.ip}/fcgi/OpenDoor?action=OpenDoor&DoorNum=${doorNum}`;
-
-            console.log(`[Akuvox] Sending OpenDoor command to ${device.ip} (Relay ${doorNum})...`);
-
+            // Strategy 1: Unified JSON API (Android/Linux)
             try {
-                // Try standard first
+                const response = await this.request("POST", "/api/relay/trig", {
+                    "target": "relay",
+                    "action": "trig",
+                    "data": {
+                        "mode": 0, // Auto Close
+                        "num": Number(doorNum),
+                        "level": 0, // NO-COM
+                        "delay": 5
+                    }
+                }, device);
+
+                if (response?.retcode === 0) {
+                    console.log(`[Akuvox] Unified Trigger Success`);
+                    return;
+                }
+            } catch (e: any) {
+                console.warn(`[Akuvox] Unified Trigger failed:`, e.message);
+            }
+
+            // Strategy 2: Standard CGI (Legacy)
+            const path1 = `/fcgi/do?action=OpenDoor&UserName=${relayUser}&Password=${relayPass}&DoorNum=${doorNum}`;
+            try {
                 const response = await this.request("GET", path1, null, device);
-                console.log(`[Akuvox] OpenDoor response:`, response);
+                console.log(`[Akuvox] CGI OpenDoor response:`, response);
+                return;
             } catch (error: any) {
                 console.warn(`[Akuvox] Standard OpenDoor failed, trying High Security URL...`);
-                // If it fails (e.g. 401), we might need the other format. 
-                // Since this.request handles device credentials, but these are DIFFERENT relay credentials,
-                // we'll use a direct fetch or modify request.
-                const response = await fetch(highSecurityUrl).then(r => r.text());
+                // Method 2: High Security (Basic Auth in URL)
+                const highSecurityUrl = `http://${relayUser}:${relayPass}@${device.ip}/fcgi/OpenDoor?action=OpenDoor&DoorNum=${doorNum}`;
+                const response = await axios.get(highSecurityUrl, { timeout: 5000 }).then(r => r.data);
                 console.log(`[Akuvox] High Security OpenDoor response:`, response);
             }
 
@@ -344,10 +447,11 @@ export class AkuvoxDriver implements IDeviceDriver {
                     faceInternalIds.has(uID) ||
                     faceUserIds.has(uUserID) ||
                     uFaceNum > 0 ||
-                    (u.FaceUrl && u.FaceUrl.length > 5);
+                    (u.FaceUrl && u.FaceUrl.length > 5) ||
+                    (u.FaceId && String(u.FaceId) !== "0"); // New check for FaceId field
 
-                const faceUrl = hasFace
-                    ? `/api/proxy/device-image?deviceId=${device.id}&userId=${u.ID}&altId=${u.UserID || ''}&path=${encodeURIComponent(u.FaceUrl || '')}`
+                const faceUrl = (hasFace || u.FaceUrl)
+                    ? `/api/proxy/device-image?deviceId=${device.id}&userId=${u.ID}&altId=${u.UserID || ''}&path=${encodeURIComponent(u.FaceUrl || u.FaceImage || '')}`
                     : "";
 
                 return {
@@ -369,7 +473,7 @@ export class AkuvoxDriver implements IDeviceDriver {
         }
     }
 
-    async getFaceImage(device: Device, userId: string, altId?: string, specificPath?: string): Promise<Buffer | null> {
+    async getFaceImage(device: Device, userId?: string | null, altId?: string, specificPath?: string): Promise<Buffer | null> {
         try {
             // 0. Try specific path if provided (e.g. from FaceUrl field)
             if (specificPath && specificPath.length > 2 && specificPath !== "undefined" && specificPath !== "null") {
@@ -397,8 +501,8 @@ export class AkuvoxDriver implements IDeviceDriver {
             }
 
             // Combinamos todos los IDs posibles para probar
-            const idsToTry = [userId];
-            if (altId && altId !== userId) idsToTry.push(altId);
+            const idsToTry = [userId].filter(id => id !== null && id !== undefined);
+            if (altId && !idsToTry.includes(altId)) idsToTry.push(altId);
 
             // Parámetros de URL comunes en diferentes firmwares
             const paramNames = ["id", "FaceId", "UserID"];
@@ -589,5 +693,96 @@ export class AkuvoxDriver implements IDeviceDriver {
 
         console.error(`[Akuvox] All delete strategies failed for ${faceId}/${userId}`);
         return false;
+    }
+
+    async getDoorlog(device: Device, num: number = 50, offset: number = 0): Promise<any[]> {
+        const logApis = ["doorlog", "searchlog", "accesslog"];
+
+        for (const api of logApis) {
+            const payload = {
+                "target": api,
+                "action": "get",
+                "data": {
+                    "offset": offset,
+                    "num": num
+                }
+            };
+
+            try {
+                // console.log(`[Akuvox] Fetching ${api} from ${device.ip}...`);
+                const response = await this.request("POST", `/api/${api}/get`, payload, device);
+
+                if (response && response.retcode === 0 && response.data?.item) {
+                    // console.log(`[Akuvox] ✓ Successfully fetched ${response.data.item.length} items from ${api}`);
+                    return response.data.item.map((item: any) => {
+                        // Normalize Time/Date for UI compatibility
+                        if (item.Time && (!item.Date || !item.TimeOnly)) {
+                            const [d, t] = item.Time.split(' ');
+                            return { ...item, Date: d, Time: t || d };
+                        }
+                        return item;
+                    });
+                }
+
+                // Fallback: Some versions might use GET
+                if (!response || response.retcode !== 0) {
+                    const getResponse = await this.request("GET", `/api/${api}/get?num=${num}&offset=${offset}`, null, device);
+                    if (getResponse && getResponse.retcode === 0 && getResponse.data?.item) {
+                        return getResponse.data.item.map((item: any) => {
+                            if (item.Time && (!item.Date || !item.TimeOnly)) {
+                                const [d, t] = item.Time.split(' ');
+                                return { ...item, Date: d, Time: t || d };
+                            }
+                            return item;
+                        });
+                    }
+                }
+            } catch (error: any) {
+                console.warn(`[Akuvox] Failed to fetch from ${api}:`, error.message);
+                // Continue to next API
+            }
+        }
+
+        return [];
+    }
+
+    async getCalllog(device: Device, num: number = 50, offset: number = 0): Promise<any[]> {
+        const payload = {
+            "target": "calllog",
+            "action": "get",
+            "data": {
+                "offset": offset,
+                "num": num
+            }
+        };
+
+        try {
+            // console.log(`[Akuvox] Fetching calllog from ${device.ip}...`);
+            const response = await this.request("POST", "/api/calllog/get", payload, device);
+
+            if (response && response.retcode === 0 && response.data?.item) {
+                return response.data.item.map((item: any) => {
+                    if (item.Time && (!item.Date || !item.TimeOnly)) {
+                        const [d, t] = item.Time.split(' ');
+                        return { ...item, Date: d, Time: t || d };
+                    }
+                    return item;
+                });
+            }
+
+            // Fallback: Some versions might use GET
+            if (!response || response.retcode !== 0) {
+                console.log(`[Akuvox] POST calllog failed or empty, trying GET fallback...`);
+                const getResponse = await this.request("GET", `/api/calllog/get?num=${num}&offset=${offset}`, null, device);
+                if (getResponse && getResponse.retcode === 0) {
+                    return getResponse.data?.item || [];
+                }
+            }
+
+            return [];
+        } catch (error) {
+            console.error("[Akuvox] Error fetching calllog:", error);
+            return [];
+        }
     }
 }

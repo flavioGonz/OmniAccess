@@ -34,64 +34,64 @@ export function AkuvoxActionUrlDialog({ device, open, onOpenChange }: AkuvoxActi
 
     const RECOMMENDATIONS = [
         {
-            event: "Face Success",
+            event: "Valid Face",
             desc: "Se dispara cuando un rostro es reconocido correctamente.",
-            url: `${baseUrl}?event=face_valid&mac=$mac&user=$name&time=$time`,
-            variable: "$name"
+            url: `${baseUrl}?event=face_valid&mac=$mac&user=$user_name&userid=$userid&FaceUrl=$FaceUrl&PicUrl=$pic_url&time=$time`,
+            variable: "$user_name, $userid, $FaceUrl, $pic_url"
         },
         {
-            event: "Face Failed",
+            event: "Invalid Face",
             desc: "Se dispara al fallar el reconocimiento facial.",
-            url: `${baseUrl}?event=face_invalid&mac=$mac&time=$time`,
-            variable: "N/A"
+            url: `${baseUrl}?event=face_invalid&mac=$mac&FaceUrl=$FaceUrl&PicUrl=$pic_url&time=$time`,
+            variable: "$FaceUrl, $pic_url"
         },
         {
-            event: "Card Success",
+            event: "Valid Card",
             desc: "Se dispara al pasar una tarjeta RFID válida.",
-            url: `${baseUrl}?event=card_valid&mac=$mac&card=$card_sn&time=$time`,
-            variable: "$card_sn"
+            url: `${baseUrl}?event=card_valid&mac=$mac&card=$card_sn&userid=$userid&user=$user_name&time=$time`,
+            variable: "$card_sn, $userid"
         },
         {
-            event: "Card Failed",
+            event: "Invalid Card",
             desc: "Se dispara al pasar una tarjeta RFID no registrada.",
             url: `${baseUrl}?event=card_invalid&mac=$mac&card=$card_sn&time=$time`,
             variable: "$card_sn"
         },
         {
-            event: "Code Success",
+            event: "Valid PIN",
             desc: "Se dispara al ingresar un código PIN válido.",
-            url: `${baseUrl}?event=code_valid&mac=$mac&code=$code&time=$time`,
-            variable: "$code"
+            url: `${baseUrl}?event=code_valid&mac=$mac&code=$code&userid=$userid&time=$time`,
+            variable: "$code, $userid"
         },
         {
-            event: "Code Failed",
-            desc: "Se dispara al ingresar un código PIN incorrecto.",
-            url: `${baseUrl}?event=code_invalid&mac=$mac&code=$code&time=$time`,
-            variable: "$code"
+            event: "QR Code",
+            desc: "Se dispara al escanear un código QR válido (A02/R29/X91x).",
+            url: `${baseUrl}?event=qr_valid&mac=$mac&qrcode=$qrcode&time=$time`,
+            variable: "$qrcode"
         },
         {
-            event: "Relay Triggered",
-            desc: "Feedback de apertura de puerta (Relé activado).",
-            url: `${baseUrl}?event=door_open&mac=$mac&id=$relay_id&time=$time`,
+            event: "Relay Output",
+            desc: "Feedback de apertura (Relé activado). Útil para estado en tiempo real.",
+            url: `${baseUrl}?event=relay_open&mac=$mac&relay=$relay_id&time=$time`,
             variable: "$relay_id"
         },
         {
-            event: "Relay Closed",
-            desc: "Feedback de cierre de puerta (Relé desactivado).",
-            url: `${baseUrl}?event=door_close&mac=$mac&id=$relay_id&time=$time`,
-            variable: "$relay_id"
+            event: "Sensor Input",
+            desc: "Monitoreo de sensores magnéticos o botones persistentes.",
+            url: `${baseUrl}?event=input_open&mac=$mac&input=$input_id&time=$time`,
+            variable: "$input_id"
         },
         {
-            event: "Tamper Alarm",
-            desc: "Alerta de sabotaje (equipo removido de la pared).",
-            url: `${baseUrl}?event=tamper&mac=$mac&time=$time`,
-            variable: "$alarmstatus"
-        },
-        {
-            event: "Incoming Call",
-            desc: "Se dispara al iniciar una llamada desde el frente.",
-            url: `${baseUrl}?event=calling&mac=$mac&to=$remote&time=$time`,
+            event: "Call Events",
+            desc: "Reporta cuando alguien presiona el botón de llamada.",
+            url: `${baseUrl}?event=call_start&mac=$mac&remote=$remote&time=$time`,
             variable: "$remote"
+        },
+        {
+            event: "System Boot",
+            desc: "Reporta cuando el equipo se reinicia o completa su carga.",
+            url: `${baseUrl}?event=boot&mac=$mac&model=$model&firmware=$firmware&time=$time`,
+            variable: "$model, $firmware"
         }
     ];
 

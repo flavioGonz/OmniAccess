@@ -11,24 +11,35 @@ import {
 } from "@aws-sdk/client-s3";
 import fs from "fs/promises";
 import path from "path";
+import axios from "axios";
 
 // ... existing code ...
 
 export async function getSetting(key: string) {
-    const setting = await prisma.setting.findUnique({
-        where: { key },
-    });
-    return setting;
+    try {
+        const setting = await prisma.setting.findUnique({
+            where: { key },
+        });
+        return setting;
+    } catch (error) {
+        console.error(`Error getting setting ${key}:`, error);
+        return null;
+    }
 }
 
 export async function updateSetting(key: string, value: string) {
-    const setting = await prisma.setting.upsert({
-        where: { key },
-        update: { value },
-        create: { key, value },
-    });
-    revalidatePath("/admin/configuracion");
-    return setting;
+    try {
+        const setting = await prisma.setting.upsert({
+            where: { key },
+            update: { value },
+            create: { key, value },
+        });
+        revalidatePath("/admin/configuracion");
+        return setting;
+    } catch (error) {
+        console.error(`Error updating setting ${key}:`, error);
+        throw error; // Re-throw for update actions so UI shows error
+    }
 }
 
 export async function purgeAccessEvents() {
@@ -67,11 +78,16 @@ export async function purgeAccessEvents() {
 }
 
 async function getS3InternalClient() {
-    const [endpoint, accessKey, secretKey] = await Promise.all([
-        prisma.setting.findUnique({ where: { key: "S3_ENDPOINT" } }),
-        prisma.setting.findUnique({ where: { key: "S3_ACCESS_KEY" } }),
-        prisma.setting.findUnique({ where: { key: "S3_SECRET_KEY" } }),
-    ]);
+    let endpoint, accessKey, secretKey;
+    try {
+        [endpoint, accessKey, secretKey] = await Promise.all([
+            prisma.setting.findUnique({ where: { key: "S3_ENDPOINT" } }),
+            prisma.setting.findUnique({ where: { key: "S3_ACCESS_KEY" } }),
+            prisma.setting.findUnique({ where: { key: "S3_SECRET_KEY" } }),
+        ]);
+    } catch (e) {
+        console.warn("Failed to fetch S3 settings from DB, falling back to env/defaults", e);
+    }
 
     return new S3Client({
         endpoint: endpoint?.value || process.env.S3_ENDPOINT || "http://192.168.99.108:9000",
@@ -298,6 +314,42 @@ export async function saveHikvisionBrands(brands: Record<string, string>) {
         return { success: true };
     } catch (error: any) {
         console.error("Failed to save brands:", error);
+        return { success: false, message: error.message };
+    }
+}
+
+export async function testWahaConnection(url: string, apiKey?: string) {
+    try {
+        const headers: any = {};
+        if (apiKey) headers['X-Api-Key'] = apiKey;
+
+        const response = await axios.get(`${url}/api/sessions`, {
+            headers,
+            timeout: 5000
+        });
+
+        return {
+            success: true,
+            sessions: response.data,
+            message: "Conexión exitosa con WAHA"
+        };
+    } catch (error: any) {
+        console.error("WAHA Test Connection Failed:", error);
+        return {
+            success: false,
+            message: `Error de conexión: ${error.response?.data?.message || error.message}`
+        };
+    }
+}
+
+export async function getWahaSessions(url: string, apiKey?: string) {
+    try {
+        const headers: any = {};
+        if (apiKey) headers['X-Api-Key'] = apiKey;
+
+        const response = await axios.get(`${url}/api/sessions`, { headers });
+        return { success: true, data: response.data };
+    } catch (error: any) {
         return { success: false, message: error.message };
     }
 }

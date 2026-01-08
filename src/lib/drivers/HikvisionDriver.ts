@@ -432,4 +432,102 @@ export class HikvisionDriver implements IDeviceDriver {
             throw error;
         }
     }
+
+    async getFacesFromCamera(device: Device): Promise<any[]> {
+        console.log(`[Hikvision Face] Starting face fetch for ${device.ip}`);
+        const allFaces: any[] = [];
+        let position = 0;
+        const maxResults = 30;
+        let method = "FDSearch"; // Start with Face Lib
+
+        // Try to detect /ISAPI/AccessControl/UserInfo/Search capabilities first roughly by trying page 0
+        try {
+            await this.request("POST", "/ISAPI/AccessControl/UserInfo/Search?format=json", {
+                UserInfoSearchCond: { searchID: "1", searchResultPosition: 0, maxResults: 1 }
+            }, device);
+            method = "UserInfo"; // Preference for UserInfo if it works (Terminals)
+            console.log("[Hikvision Face] Detected Access Control Terminal (UserInfo)");
+        } catch (e) {
+            console.log("[Hikvision Face] AccessControl/UserInfo check failed, using FDSearch");
+        }
+
+        let keepFetching = true;
+
+        while (keepFetching) {
+            try {
+                let matches: any[] = [];
+                let totalMatches = 0;
+
+                if (method === "UserInfo") {
+                    // Access Control Terminal (MinMoe)
+                    const url = `/ISAPI/AccessControl/UserInfo/Search?format=json`;
+                    const payload = {
+                        UserInfoSearchCond: {
+                            searchID: "1",
+                            searchResultPosition: position,
+                            maxResults: maxResults
+                        }
+                    };
+                    const data = await this.request("POST", url, payload, device);
+
+                    if (data.UserInfoSearch) {
+                        const info = data.UserInfoSearch;
+                        totalMatches = info.totalMatches || 0;
+                        if (info.UserInfo && Array.isArray(info.UserInfo)) matches = info.UserInfo;
+                    }
+
+                    // Map Access Control UserInfo to Generic Face Object
+                    matches = matches.map(m => ({
+                        ...m,
+                        FPID: m.employeeNo,
+                        name: m.name,
+                        // FaceURL might not be in UserInfo search. Usually requires /ISAPI/Intelligent/FDLib/FaceDataRecord?
+                        // Or /ISAPI/AccessControl/UserInfo/Detail?
+                        // For now we list users.
+                        faceURL: m.faceURL || "" // Might be empty
+                    }));
+
+                } else {
+                    // Face Library (NVR/IPC) behavior
+                    const url = `/ISAPI/Intelligent/FDLib/FDSearch?format=json`;
+                    const payload = {
+                        searchResultPosition: position,
+                        maxResults: maxResults
+                    };
+                    const data = await this.request("POST", url, payload, device);
+
+                    if (data.MatchList) {
+                        // JSON structure variations
+                        if (Array.isArray(data.MatchList)) matches = data.MatchList;
+                        else if (data.MatchList.matchList && Array.isArray(data.MatchList.matchList)) matches = data.MatchList.matchList;
+                    } else if (data.matchList) {
+                        matches = data.matchList;
+                    }
+                    totalMatches = data.totalMatches || 0;
+                }
+
+                if (matches.length > 0) {
+                    allFaces.push(...matches);
+                    position += matches.length;
+                    console.log(`[Hikvision Face] Fetched ${matches.length} items (${method}). Total: ${allFaces.length}`);
+
+                    if (matches.length < maxResults) keepFetching = false;
+                    // Strict Total check
+                    if (totalMatches > 0 && position >= totalMatches) keepFetching = false;
+                } else {
+                    console.log(`[Hikvision Face] No more matches found.`);
+                    keepFetching = false;
+                }
+
+            } catch (error: any) {
+                console.error(`[Hikvision Face] Error fetching (${method}): ${error.message}`);
+                // If it fails on page X, maybe safer to stop to avoid infinite loop
+                keepFetching = false;
+            }
+
+            if (position > 5000) keepFetching = false; // Safety
+        }
+
+        return allFaces;
+    }
 }

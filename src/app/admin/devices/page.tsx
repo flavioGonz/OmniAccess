@@ -55,6 +55,7 @@ import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { DeviceMemoryDialog } from "@/components/DeviceMemoryDialog";
 import { DevicePlateListDialog } from "@/components/DevicePlateListDialog";
 import { AkuvoxActionUrlDialog } from "@/components/AkuvoxActionUrlDialog";
+import { DRIVER_MODELS } from "@/lib/driver-models";
 
 import {
     DropdownMenu,
@@ -74,8 +75,8 @@ import {
 import { cn } from "@/lib/utils";
 
 const BRAND_CONFIG: Record<string, { label: string, color: string, bg: string, logoUrl: string }> = {
-    HIKVISION: { label: "Hikvision", color: "#E4002B", bg: "bg-red-500/10", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/4/4b/Hikvision_logo.svg" },
-    AKUVOX: { label: "Akuvox", color: "#005BA4", bg: "bg-blue-500/10", logoUrl: "https://shop.akuvox.it/skins/akuvox/customer/images/logo.png" },
+    HIKVISION: { label: "Hikvision", color: "#E4002B", bg: "bg-red-500/10", logoUrl: "https://www.hikvision.com/content/dam/hikvision/products/S000000001/S000000002/S000000003/S000000023/OFR000025/M000000001/image/1.png" },
+    AKUVOX: { label: "Akuvox", color: "#005BA4", bg: "bg-blue-500/10", logoUrl: "/uploads/brands/1766750081921_akuvox.png" },
     INTELBRAS: { label: "Intelbras", color: "#009639", bg: "bg-emerald-500/10", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/f/ff/Intelbras_logo.svg" },
     DAHUA: { label: "Dahua", color: "#ED1C24", bg: "bg-red-500/10", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/b/b3/Dahua_Technology_logo.svg" },
     ZKTECO: { label: "ZKTeco", color: "#0191D2", bg: "bg-sky-500/10", logoUrl: "https://www.zkteco.com/upload/201908/5d4d3c3f3f0f7.png" },
@@ -183,22 +184,19 @@ export default function DevicesPage() {
             setDevices(devData);
             setGroups(groupData as any[]);
 
-            // Load stats for face terminals in parallel
-            const faceTerminals = devData.filter(dev => dev.deviceType === 'FACE_TERMINAL');
-            const statsResults = await Promise.all(
-                faceTerminals.map(async (dev) => ({
-                    id: dev.id,
-                    stats: await getDeviceStats(dev.id)
-                }))
-            );
-
-            const newStats = { ...deviceStats };
-            statsResults.forEach(res => {
-                newStats[res.id] = res.stats;
-            });
-            setDeviceStats(newStats);
+            // Stats are no longer loaded automatically to prevent lag on entry
+            // They will be loaded on demand or if the user clicks 'Refresh'
         } finally {
             setLoading(false);
+        }
+    }
+
+    async function handleRefreshStats(deviceId: string) {
+        try {
+            const stats = await getDeviceStats(deviceId);
+            setDeviceStats(prev => ({ ...prev, [deviceId]: stats }));
+        } catch (error) {
+            console.error("Failed to refresh stats:", error);
         }
     }
 
@@ -297,21 +295,21 @@ export default function DevicesPage() {
                         />
                     </div>
                     <DeviceFormDialog groups={groups} onSuccess={loadData}>
-                        <Button className="bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white shadow-xl shadow-indigo-900/30 font-black h-14 px-10 rounded-2xl transition-all hover:scale-105 active:scale-95 uppercase tracking-tighter text-sm shrink-0">
-                            <Plus className="mr-3 h-6 w-6" /> Vincular
+                        <Button className="bg-gradient-to-r from-indigo-700 to-blue-700 text-white shadow-md shadow-indigo-950/20 font-black h-12 px-8 rounded-lg transition-all hover:brightness-110 active:scale-95 uppercase tracking-tighter text-xs shrink-0">
+                            <Plus className="mr-3 h-5 w-5" /> Vincular Dispositivo
                         </Button>
                     </DeviceFormDialog>
                 </div>
             </header>
 
-            <div className="border border-neutral-800 rounded-3xl overflow-hidden bg-[#0c0c0c] shadow-2xl">
+            <div className="border border-neutral-800 rounded-xl overflow-hidden bg-[#0c0c0c] shadow-lg">
                 <Table>
-                    <TableHeader className="bg-neutral-900/80">
+                    <TableHeader className="bg-[#0f0f0f]">
                         <TableRow className="border-neutral-800 hover:bg-transparent">
                             <TableHead className="text-neutral-400 font-black tracking-widest py-5 px-8 uppercase text-[10px]">Nodo de Acceso</TableHead>
                             <TableHead className="text-neutral-400 font-black tracking-widest uppercase text-[10px]">Protocolo / Red</TableHead>
-                            <TableHead className="text-neutral-400 font-black tracking-widest uppercase text-[10px]">Lógica / Flujo</TableHead>
                             <TableHead className="text-neutral-400 font-black tracking-widest text-center uppercase text-[10px]">Enlace</TableHead>
+                            <TableHead className="text-neutral-400 font-black tracking-widest text-center uppercase text-[10px]">Estado</TableHead>
                             <TableHead className="text-right text-neutral-400 font-black tracking-widest pr-8 uppercase text-[10px]">Control & Acciones</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -337,13 +335,20 @@ export default function DevicesPage() {
 
                             return (
                                 <TableRow key={dev.id} className="border-neutral-800 hover:bg-white/5 transition-all group">
-                                    <TableCell className="py-6 pl-8">
+                                    <TableCell className="py-4 pl-8">
                                         <div className="flex items-center gap-5">
                                             {/* Vendor Logo & Model Image Group */}
                                             <div className="relative group/device">
-                                                <div className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center p-2 shadow-sm border border-neutral-200/10 overflow-hidden">
+                                                <div className="w-14 h-14 rounded-lg bg-white flex items-center justify-center p-2 border border-neutral-200/5 overflow-hidden">
                                                     <img
-                                                        src={dev.modelPhoto || DEVICE_MODELS[dev.brand]?.[dev.deviceType] || DEVICE_MODELS[dev.brand]?.DEFAULT || brand.logoUrl || "/placeholder-device.png"}
+                                                        src={
+                                                            dev.modelPhoto ||
+                                                            DRIVER_MODELS[dev.brand as keyof typeof DRIVER_MODELS]?.find((m: any) => m.value === dev.deviceModel)?.photo ||
+                                                            DEVICE_MODELS[dev.brand]?.[dev.deviceType] ||
+                                                            DEVICE_MODELS[dev.brand]?.DEFAULT ||
+                                                            brand.logoUrl ||
+                                                            "/placeholder-device.png"
+                                                        }
                                                         alt={brand.label}
                                                         className="w-full h-full object-contain"
                                                         onError={(e) => {
@@ -363,50 +368,63 @@ export default function DevicesPage() {
 
                                             <div className="space-y-1">
                                                 <div className="space-y-1">
-                                                    <p className="font-black text-white text-lg tracking-tight leading-none">{dev.name}</p>
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="font-black text-white text-lg tracking-tight leading-none">{dev.name}</p>
+                                                    </div>
 
                                                     <div className="flex items-center gap-3 pt-1">
                                                         <div className={cn(
-                                                            "px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all duration-500 border text-[9px] font-black uppercase tracking-wider",
+                                                            "px-2.5 py-1 rounded-md flex items-center gap-1.5 transition-all duration-500 border text-[9px] font-black uppercase tracking-wider",
                                                             dev.doorStatus === 'OPEN'
                                                                 ? "bg-red-500 border-red-400 text-white animate-pulse"
                                                                 : "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
                                                         )}>
                                                             {dev.doorStatus === 'OPEN' ? (
                                                                 <>
-                                                                    <Unlock size={10} strokeWidth={3} /> BARRERA ARRIBA
+                                                                    <Unlock size={10} strokeWidth={3} /> PUERTA: ABIERTA
                                                                 </>
                                                             ) : (
                                                                 <>
-                                                                    <Lock size={10} strokeWidth={3} /> BARRERA BAJA
+                                                                    <Lock size={10} strokeWidth={3} /> PUERTA: CERRADA
                                                                 </>
                                                             )}
                                                         </div>
 
+                                                        {/* Quick Action: Open next to status */}
+                                                        <TooltipProvider>
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <Button
+                                                                        onClick={() => handleTriggerRelay(dev.id)}
+                                                                        disabled={isOpening}
+                                                                        size="icon"
+                                                                        className={cn(
+                                                                            "h-8 w-8 rounded-lg transition-all border relative overflow-hidden",
+                                                                            isOpening
+                                                                                ? "bg-emerald-500 border-emerald-400 text-white"
+                                                                                : "bg-neutral-950 text-neutral-400 hover:text-emerald-400 hover:bg-emerald-500/10 border-neutral-800 hover:border-emerald-500/30"
+                                                                        )}
+                                                                    >
+                                                                        {isOpening ? <Unlock className="animate-bounce" size={14} /> : <Zap size={14} />}
+                                                                    </Button>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent><p>Accionar Relé</p></TooltipContent>
+                                                            </Tooltip>
+                                                        </TooltipProvider>
+
                                                         {isOpening && (
-                                                            <div className="flex items-center gap-2 bg-blue-600 text-white text-[9px] px-2.5 py-1 rounded-lg font-black uppercase tracking-wider animate-pulse">
-                                                                <RefreshCw size={10} className="animate-spin" /> ABRIENDO...
+                                                            <div className="flex items-center gap-2 text-blue-400 text-[9px] font-black uppercase tracking-wider animate-pulse">
+                                                                <RefreshCw size={10} className="animate-spin" /> PROCESANDO...
                                                             </div>
                                                         )}
 
                                                         {dev.lastEvent && (
-                                                            <div className="flex flex-col gap-1.5 animate-in fade-in slide-in-from-left-2 duration-500">
+                                                            <div className="flex flex-col gap-1.5 animate-in fade-in slide-in-from-left-2 duration-500 pl-2 border-l border-white/5">
                                                                 <div className="flex items-center gap-2">
                                                                     <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping" />
-                                                                    <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest bg-blue-500/10 px-2 py-1 rounded-lg border border-blue-500/20">
-                                                                        CAPTURA: {dev.lastEvent.user?.name || dev.lastEvent.plateDetected || "SISTEMA"}
+                                                                    <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest bg-blue-500/10 px-2 py-1 rounded-md border border-blue-500/20">
+                                                                        {dev.lastEvent.user?.name || dev.lastEvent.plateDetected || "SISTEMA"}
                                                                     </span>
-                                                                </div>
-                                                                <div className="text-[8px] text-neutral-500 font-mono font-bold pl-3.5 flex items-center gap-1.5 tracking-tighter">
-                                                                    <Activity size={10} className="text-neutral-700" />
-                                                                    {new Date(dev.lastEvent.timestamp).toLocaleString('es-AR', {
-                                                                        day: '2-digit',
-                                                                        month: '2-digit',
-                                                                        year: 'numeric',
-                                                                        hour: '2-digit',
-                                                                        minute: '2-digit',
-                                                                        second: '2-digit'
-                                                                    })}
                                                                 </div>
                                                             </div>
                                                         )}
@@ -432,47 +450,6 @@ export default function DevicesPage() {
                                             )}
                                         </div>
                                     </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-6">
-                                            <div className={cn(
-                                                "inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black border uppercase tracking-widest shadow-inner",
-                                                dev.deviceType === 'FACE_TERMINAL'
-                                                    ? "bg-indigo-500/5 text-indigo-400 border-indigo-500/10"
-                                                    : dev.direction === 'ENTRY'
-                                                        ? "bg-emerald-500/5 text-emerald-400 border-emerald-500/10"
-                                                        : "bg-blue-500/5 text-blue-400 border-blue-500/10"
-                                            )}>
-                                                {dev.deviceType === 'FACE_TERMINAL' ? (
-                                                    <>
-                                                        <Globe size={14} strokeWidth={2.5} />
-                                                        {dev.location || "GENERAL"}
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        {dev.direction === 'ENTRY' ? <ArrowRightCircle size={14} strokeWidth={2.5} /> : <ArrowLeftCircle size={14} strokeWidth={2.5} />}
-                                                        {dev.direction === 'ENTRY' ? "ENTRADA" : "SALIDA"}
-                                                    </>
-                                                )}
-                                            </div>
-
-                                            {dev.deviceType === 'FACE_TERMINAL' && (
-                                                <div className="flex items-center gap-3 border-l border-white/5 pl-6">
-                                                    <div className="flex flex-col items-center bg-purple-500/5 border border-purple-500/10 rounded-xl px-3 py-1.5 min-w-[50px]">
-                                                        <span className="text-[8px] text-purple-500/60 font-black uppercase tracking-widest leading-none mb-1">Faces</span>
-                                                        <span className="text-xs font-mono font-black text-purple-400">
-                                                            {deviceStats[dev.id]?.faces ?? "0"}
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex flex-col items-center bg-amber-500/5 border border-amber-500/10 rounded-xl px-3 py-1.5 min-w-[50px]">
-                                                        <span className="text-[8px] text-amber-500/60 font-black uppercase tracking-widest leading-none mb-1">Tags</span>
-                                                        <span className="text-xs font-mono font-black text-amber-400">
-                                                            {deviceStats[dev.id]?.tags ?? "0"}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </TableCell>
                                     <TableCell className="text-center">
                                         <div className="flex items-center justify-center gap-4">
                                             {/* PULL Connection (Server -> Device) */}
@@ -493,12 +470,11 @@ export default function DevicesPage() {
                                                                     )}
                                                                 />
                                                             </div>
-                                                            <span className="text-[7px] font-black uppercase tracking-widest text-neutral-600 group-hover/pull:text-neutral-400 transition-colors">Servidor</span>
                                                         </div>
                                                     </TooltipTrigger>
                                                     <TooltipContent>
                                                         <p className="font-bold">Sincronización PULL (Servidor)</p>
-                                                        <p className="text-xs text-neutral-400">El servidor se conecta al dispositivo para leer datos.</p>
+                                                        <p className="text-xs text-neutral-400 text-center">Última: {dev.lastOnlinePull ? new Date(dev.lastOnlinePull).toLocaleTimeString() : 'Nunca'}</p>
                                                     </TooltipContent>
                                                 </Tooltip>
                                             </TooltipProvider>
@@ -521,20 +497,94 @@ export default function DevicesPage() {
                                                                     )}
                                                                 />
                                                             </div>
-                                                            <span className="text-[7px] font-black uppercase tracking-widest text-neutral-600 group-hover/push:text-neutral-400 transition-colors">Dispositivo</span>
                                                         </div>
                                                     </TooltipTrigger>
                                                     <TooltipContent>
                                                         <p className="font-bold">Sincronización PUSH (Dispositivo)</p>
-                                                        <p className="text-xs text-neutral-400">El dispositivo envía eventos al servidor (Webhooks).</p>
+                                                        <p className="text-xs text-neutral-400 text-center">Última: {dev.lastOnlinePush ? new Date(dev.lastOnlinePush).toLocaleTimeString() : 'Nunca'}</p>
                                                     </TooltipContent>
                                                 </Tooltip>
                                             </TooltipProvider>
                                         </div>
                                     </TableCell>
+                                    <TableCell className="text-center">
+                                        {(() => {
+                                            const now = new Date().getTime();
+                                            const lastPull = dev.lastOnlinePull ? new Date(dev.lastOnlinePull).getTime() : 0;
+                                            const lastPush = dev.lastOnlinePush ? new Date(dev.lastOnlinePush).getTime() : 0;
+
+                                            // Diff calculation with math abs to handle slight clock skews
+                                            const diffPull = Math.abs(now - lastPull);
+                                            const diffPush = Math.abs(now - lastPush);
+
+                                            // Online if seen in last 10 minutes (increased for stability)
+                                            const isOnline = (lastPull > 0 && diffPull < 10 * 60 * 1000) ||
+                                                (lastPush > 0 && diffPush < 10 * 60 * 1000);
+
+                                            const lastSeenMsg = lastPull > lastPush
+                                                ? `Sincro: ${new Date(lastPull).toLocaleTimeString()}`
+                                                : lastPush > 0 ? `Evento: ${new Date(lastPush).toLocaleTimeString()}` : 'Sin datos';
+
+                                            return (
+                                                <TooltipProvider>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Badge
+                                                                variant="outline"
+                                                                className={cn(
+                                                                    "text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full border-2 cursor-help",
+                                                                    isOnline
+                                                                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                                                        : "bg-red-500/10 text-red-500 border-red-500/20"
+                                                                )}
+                                                            >
+                                                                <span className={cn("w-1.5 h-1.5 rounded-full mr-2", isOnline ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
+                                                                {isOnline ? "ONLINE" : "OFFLINE"}
+                                                            </Badge>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            <p className="font-bold uppercase text-[10px]">{lastSeenMsg}</p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </TooltipProvider>
+                                            );
+                                        })()}
+                                    </TableCell>
                                     <TableCell className="text-right pr-8">
-                                        <div className="flex justify-end items-center gap-2">
-                                            {/* Primary Actions: Quick Access */}
+                                        <div className="flex justify-end items-center gap-4">
+                                            {/* Face/Tags Stats Badge - ONLY FOR NON-HIKVISION FACE TERMINALS */}
+                                            {dev.deviceType === 'FACE_TERMINAL' && dev.brand !== 'HIKVISION' && (
+                                                <div className="flex items-center gap-4 bg-neutral-950/50 p-1.5 rounded-xl border border-white/5 shadow-inner">
+                                                    <div className="flex flex-col items-center bg-purple-500/5 border border-purple-500/10 rounded-lg px-2 py-1 min-w-[45px]">
+                                                        <span className="text-[7px] text-purple-500/60 font-black uppercase tracking-widest leading-none mb-1">Faces</span>
+                                                        <span className="text-[10px] font-mono font-black text-purple-400">
+                                                            {deviceStats[dev.id]?.faces ?? "--"}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex flex-col items-center bg-amber-500/5 border border-amber-500/10 rounded-lg px-2 py-1 min-w-[45px]">
+                                                        <span className="text-[7px] text-amber-500/60 font-black uppercase tracking-widest leading-none mb-1">Tags</span>
+                                                        <span className="text-[10px] font-mono font-black text-amber-400">
+                                                            {deviceStats[dev.id]?.tags ?? "--"}
+                                                        </span>
+                                                    </div>
+                                                    <TooltipProvider>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    onClick={() => handleRefreshStats(dev.id)}
+                                                                    className="h-7 w-7 rounded-md hover:bg-white/5 text-neutral-600 hover:text-white"
+                                                                >
+                                                                    <RefreshCw size={12} className={cn(loading ? "animate-spin" : "")} />
+                                                                </Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent><p className="text-[10px] uppercase font-black">Actualizar Estadísticas de Dispositivo</p></TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
+                                                </div>
+                                            )}
+
                                             <TooltipProvider>
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>
@@ -542,33 +592,14 @@ export default function DevicesPage() {
                                                             variant="ghost"
                                                             size="icon"
                                                             onClick={() => setViewingLive(dev)}
-                                                            className="h-8 w-8 rounded-lg bg-neutral-900/50 text-neutral-400 hover:text-indigo-400 hover:bg-indigo-500/10 border border-neutral-800 hover:border-indigo-500/30 transition-all"
+                                                            className="h-9 w-9 rounded-xl bg-neutral-900/50 text-neutral-400 hover:text-indigo-400 hover:bg-indigo-500/10 border border-neutral-800 hover:border-indigo-500/30 transition-all"
                                                         >
-                                                            <Eye size={16} />
+                                                            <Eye size={18} />
                                                         </Button>
                                                     </TooltipTrigger>
-                                                    <TooltipContent><p>Ver en Vivo</p></TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-
-                                            <TooltipProvider>
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <Button
-                                                            onClick={() => handleTriggerRelay(dev.id)}
-                                                            disabled={isOpening}
-                                                            size="icon"
-                                                            className={cn(
-                                                                "h-8 w-8 rounded-lg transition-all border relative overflow-hidden",
-                                                                isOpening
-                                                                    ? "bg-emerald-500 border-emerald-400 text-white"
-                                                                    : "bg-neutral-900/50 text-neutral-400 hover:text-emerald-400 hover:bg-emerald-500/10 border-neutral-800 hover:border-emerald-500/30"
-                                                            )}
-                                                        >
-                                                            {isOpening ? <Unlock className="animate-bounce" size={16} /> : <Zap size={16} />}
-                                                        </Button>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent><p>Abrir Puerta</p></TooltipContent>
+                                                    <TooltipContent>
+                                                        <p>Ver en Vivo</p>
+                                                    </TooltipContent>
                                                 </Tooltip>
                                             </TooltipProvider>
 
@@ -680,6 +711,7 @@ export default function DevicesPage() {
                         </div>
                         <div className="aspect-video bg-black flex items-center justify-center relative group">
                             <img
+                                key={viewingLive.id}
                                 src={`http://${window.location.hostname}:10000/api/live/${viewingLive.id}`}
                                 alt="Live View"
                                 className="max-w-full max-h-full object-contain"

@@ -152,7 +152,12 @@ export default function HistoryPage() {
         }
     }
 
-    // handleDownload removed, use ExportHistoryDialog instead
+    // Helper for image URLs
+    const getImageUrl = (path: string | null | undefined): string => {
+        if (!path) return "";
+        if (path.startsWith('http') || path.startsWith('/')) return path;
+        return `/api/files/${path}`;
+    };
 
     return (
         <div className="p-6 space-y-8 animate-in fade-in duration-700 h-full flex flex-col overflow-hidden">
@@ -320,7 +325,7 @@ export default function HistoryPage() {
                                                     <div className="flex items-center gap-4">
                                                         <div className="relative w-16 h-10 rounded-lg overflow-hidden border border-white/10 bg-black shrink-0 shadow-2xl group-hover:border-blue-500/30 transition-all group-hover:scale-105 duration-500 text-white">
                                                             {(evt.snapshotPath || evt.user?.cara) ? (
-                                                                <Image src={evt.snapshotPath || evt.user?.cara || ""} alt="Snapshot" fill sizes="64px" className="object-cover" />
+                                                                <Image src={getImageUrl(evt.snapshotPath) || getImageUrl(evt.user?.cara) || ""} alt="Snapshot" fill sizes="64px" className="object-cover" />
                                                             ) : (
                                                                 <div className="w-full h-full flex items-center justify-center bg-neutral-900">
                                                                     <Camera size={16} className="text-neutral-700" />
@@ -389,7 +394,7 @@ export default function HistoryPage() {
                                                         <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
                                                             {evt.user?.cara ? (
                                                                 <div className="relative w-full h-full rounded-full overflow-hidden">
-                                                                    <Image src={evt.user.cara} alt="U" fill sizes="32px" className="object-cover" />
+                                                                    <Image src={getImageUrl(evt.user.cara)} alt="U" fill sizes="32px" className="object-cover" />
                                                                 </div>
                                                             ) : (
                                                                 <UserIcon size={14} className="text-neutral-600" />
@@ -398,9 +403,9 @@ export default function HistoryPage() {
                                                         <div>
                                                             <p className={cn(
                                                                 "font-bold uppercase text-xs tracking-tight",
-                                                                evt.user?.name ? "text-indigo-400" : "text-neutral-500"
+                                                                (evt.user?.name || details.Rostro) ? "text-indigo-400" : "text-neutral-500"
                                                             )}>
-                                                                {evt.user?.name || (isCall && callDest ? `Destino: ${callDest}` : "Externo / Desconocido")}
+                                                                {evt.user?.name || details.Rostro || (isCall && callDest ? `Destino: ${callDest}` : "Externo / Desconocido")}
                                                             </p>
                                                             <p className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mt-0.5">
                                                                 {evt.user?.unit?.name || (evt.user?.name ? "Residente" : "Sin Unidad")}

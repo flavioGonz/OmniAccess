@@ -22,13 +22,18 @@ export async function getParkingSlots() {
     }
 }
 
-export async function saveParkingSlots(slots: any[]) {
+export async function saveParkingSlots(slotsJson: string) {
     try {
+        // Parse the JSON string to get the actual slots array
+        const slots = JSON.parse(slotsJson);
+
         // Delete all existing slots
         await prisma.parkingSlot.deleteMany({});
 
         // Create new slots with polygon format
         for (const slot of slots) {
+            const pointsJson = JSON.stringify(slot.points || []);
+
             await prisma.parkingSlot.create({
                 data: {
                     id: slot.id,
@@ -36,7 +41,7 @@ export async function saveParkingSlots(slots: any[]) {
                     isOccupied: slot.isOccupied || false,
                     unitId: slot.unitId || null,
                     // Store polygon points as JSON
-                    points: JSON.stringify(slot.points || []),
+                    points: pointsJson,
                     // Legacy fields for backward compatibility
                     x: slot.points?.[0]?.x || 0,
                     y: slot.points?.[0]?.y || 0,

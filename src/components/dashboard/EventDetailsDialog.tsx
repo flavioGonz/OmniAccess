@@ -60,11 +60,11 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
     const isGrant = event.decision === "GRANT";
 
     // Determine Type
-    const isLPR = event.accessType === 'PLATE' || (!event.accessType && event.plateDetected && event.plateDetected !== 'unknown' && event.plateDetected !== 'NO_LEIDA');
+    const isLPR = event.accessType === 'PLATE' || (!event.accessType && event.plateDetected && event.plateDetected !== 'unknown');
     const accessType = event.accessType || (isLPR ? 'PLATE' : 'OTHER');
 
-    const plateText = event.plateDetected?.toLowerCase() === 'unknown' || !event.plateDetected
-        ? "SIN MATRICULA"
+    const plateText = event.plateDetected?.toLowerCase() === 'unknown' || !event.plateDetected || event.plateDetected === 'NO_LEIDA'
+        ? "No Leída"
         : event.plateDetected;
 
     // Load data when modal opens
@@ -121,11 +121,27 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
     // Parse Similarity and Mode
     let cleanSim = meta.Similitud || '';
     let detectedMode = 'Estándar';
-    if (cleanSim.includes('(Modo:')) {
-        const m = cleanSim.match(/\(Modo:\s*(\w+)\)/);
-        if (m) {
-            cleanSim = cleanSim.replace(m[0], '').trim();
-            detectedMode = m[1] === 'WHITELIST' ? 'Lista Blanca' : m[1] === 'BLACKLIST' ? 'Lista Negra' : m[1];
+
+    // Extract percentage with potential whitespace
+    const simMatch = cleanSim.match(/(\d+)\s*%/);
+    if (simMatch) {
+        cleanSim = `${simMatch[1]}%`;
+    } else {
+        // Fallback: extract digits if present
+        const digitMatch = cleanSim.match(/(\d+)/);
+        if (digitMatch && parseInt(digitMatch[1]) > 50) {
+            cleanSim = `${digitMatch[1]}%`;
+        }
+    }
+
+    // Robust Mode Extraction (looking for "Modo:" or "Modo")
+    if (meta.Similitud && (meta.Similitud.includes('Modo') || meta.Similitud.includes('whitelist') || meta.Similitud.includes('blacklist'))) {
+        const lower = meta.Similitud.toLowerCase();
+        if (lower.includes('whitelist') || lower.includes('lista blanca')) detectedMode = 'Lista Blanca';
+        else if (lower.includes('blacklist') || lower.includes('lista negra')) detectedMode = 'Lista Negra';
+        else if (lower.includes('modo:')) {
+            const m = meta.Similitud.match(/Modo:?\s*(\w+)/i);
+            if (m) detectedMode = m[1];
         }
     }
 
@@ -196,9 +212,11 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
                                     {/* Name & List Info (Bottom Left) */}
                                     <div className="absolute bottom-8 left-8 z-30 max-w-[70%]">
                                         <div className="flex items-center gap-2 mb-2">
-                                            <div className="px-2 py-0.5 rounded bg-white/20 backdrop-blur-md border border-white/20 text-[10px] font-bold text-white uppercase tracking-widest">
-                                                Lista: {detectedMode}
-                                            </div>
+                                            {detectedMode !== 'Estándar' && (
+                                                <div className="px-2 py-0.5 rounded bg-white/20 backdrop-blur-md border border-white/20 text-[10px] font-bold text-white uppercase tracking-widest">
+                                                    Lista: {detectedMode}
+                                                </div>
+                                            )}
                                             {cleanSim && (
                                                 <div className="px-2 py-0.5 rounded bg-emerald-500/20 backdrop-blur-md border border-emerald-500/30 text-[10px] font-bold text-emerald-300 uppercase tracking-widest">
                                                     {cleanSim} Similitud
@@ -225,8 +243,8 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
                                         </div>
                                     </div>
 
-                                    {/* Face Crop (Bottom Right) */}
-                                    {(meta.FaceImage || event.user?.cara) && (
+                                    {/* Face Crop (Bottom Right) - Only show if different from main snapshot or if it's the user's profile photo */}
+                                    {(meta.FaceImage || event.user?.cara) && (getImageUrl(meta.FaceImage || event.user?.cara) !== eventImageUrl) && (
                                         <div className="absolute bottom-8 right-8 z-40 w-32 h-32 rounded-xl overflow-hidden border-2 border-white/50 shadow-2xl bg-black transition-transform hover:scale-110 origin-bottom-right group-hover:border-white">
                                             <img
                                                 src={getImageUrl(meta.FaceImage || event.user?.cara)}
@@ -339,13 +357,17 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
                                                 "px-4 py-1 rounded-lg shadow-2xl cursor-pointer transition-all hover:scale-105 group/plate flex flex-col justify-center border min-w-[100px]",
                                                 isLight ? "text-black border-black/10" : "text-white border-white/20"
                                             )}
-                                            style={{ backgroundColor: bgStyle }}
+                                            style={{ backgroundColor: plateText === 'No Leída' ? '#dc2626' : bgStyle }}
                                             onClick={(e) => { e.stopPropagation(); setShowPlateActionModal(true); }}
                                         >
-                                            <p className={cn("text-[8px] font-bold uppercase tracking-widest leading-none mb-0.5 opacity-70")}>
+                                            <p className={cn("text-[8px] font-bold uppercase tracking-widest leading-none mb-0.5 opacity-70",
+                                                plateText === 'No Leída' ? "text-white" : ""
+                                            )}>
                                                 MATRÍCULA
                                             </p>
-                                            <h3 className={cn("text-2xl font-black font-mono tracking-wider leading-none", plateText === 'SIN MATRICULA' && "text-red-500")}>
+                                            <h3 className={cn("text-2xl font-black font-mono tracking-wider leading-none",
+                                                plateText === 'No Leída' ? "text-white" : (isLight ? "text-black" : "text-white")
+                                            )}>
                                                 {plateText}
                                             </h3>
                                         </div>

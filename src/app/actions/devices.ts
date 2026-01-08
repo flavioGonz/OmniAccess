@@ -41,7 +41,7 @@ export async function createDevice(formData: FormData) {
     const modelPhoto = await saveFile(modelPhotoFile, "devices");
     const brandLogo = await saveFile(brandLogoFile, "brands");
 
-    await prisma.device.create({
+    const newDevice = await prisma.device.create({
         data: {
             name,
             ip,
@@ -55,11 +55,20 @@ export async function createDevice(formData: FormData) {
             mac,
             modelPhoto,
             brandLogo,
+            deviceModel: formData.get("deviceModel") as string,
             accessGroups: groupId && groupId !== "none" ? {
                 connect: { id: groupId }
             } : undefined
         },
     });
+
+    // Automatic sync on add
+    try {
+        const { syncHardwareLogs } = await import("@/app/actions/deviceMemory");
+        await syncHardwareLogs(newDevice.id);
+    } catch (err) {
+        console.error("Auto-sync failed on device creation:", err);
+    }
 
     revalidatePath("/admin/devices");
 }
@@ -83,6 +92,8 @@ export async function updateDevice(id: string, formData: FormData) {
     const modelPhoto = await saveFile(modelPhotoFile, "devices");
     const brandLogo = await saveFile(brandLogoFile, "brands");
 
+    const deviceModel = formData.get("deviceModel") as string;
+
     await prisma.device.update({
         where: { id },
         data: {
@@ -96,6 +107,7 @@ export async function updateDevice(id: string, formData: FormData) {
             password,
             authType,
             mac,
+            deviceModel,
             ...(modelPhoto && { modelPhoto }),
             ...(brandLogo && { brandLogo }),
         },

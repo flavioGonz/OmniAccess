@@ -259,3 +259,11 @@ model ParkingSlot {
   updatedAt   DateTime @updatedAt
 }
 
+
+model TopologyNode {
+  id        String   @id @unique
+  x         Float
+  y         Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

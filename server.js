@@ -1,3 +1,19 @@
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, '.env') });
+
+console.log("DEBUG ENV: Loading .env from", path.join(__dirname, '.env'));
+
+// Robust URL selection
+const fallbackUrl = "postgresql://postgres:eElbebe*2011@192.168.99.111:5432/lpr_db?schema=public";
+const dbUrl = process.env.DATABASE_URL || fallbackUrl;
+const isUsingFallback = !process.env.DATABASE_URL;
+
+// Mask password for logs
+const maskedUrl = dbUrl.replace(/:([^@]+)@/, ":****@");
+
+console.log(`DEBUG ENV: DATABASE_URL status: ${isUsingFallback ? "USING FALLBACK 🛡️" : "LOADED FROM .ENV ✅"}`);
+console.log(`DEBUG ENV: Target Database: ${maskedUrl}`);
+
 const { createServer } = require("https");
 const http = require("http");
 const { PrismaClient } = require("@prisma/client");
@@ -5,88 +21,639 @@ const { Server } = require("socket.io");
 const { XMLParser } = require("fast-xml-parser");
 const fs = require("fs");
 const fsPromises = require("fs/promises");
-const path = require("path");
 const Busboy = require("busboy");
 
 const axios = require("axios");
+const https = require("https");
 const crypto = require("crypto");
 const { uploadToS3 } = require("./lib-s3");
 const { getVehicleColorName, getVehicleBrandName } = require("./hikvision-codes");
+const { handleWahaWebhook } = require("./waha-handler");
 
-const prisma = new PrismaClient();
+// Configure axios defaults for device communication
+const agent = new https.Agent({
+    rejectUnauthorized: false
+});
+axios.defaults.httpsAgent = agent;
+axios.defaults.headers.common['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+axios.defaults.headers.common['Accept'] = '*/*';
+
+const prisma = new PrismaClient({
+    datasources: {
+        db: {
+            url: dbUrl,
+        },
+    },
+});
 const hostname = process.env.HOST || "0.0.0.0";
 const port = parseInt(process.env.WEBHOOK_PORT || "10000", 10);
+
+console.log(`\x1b[36m%s\x1b[0m`, `🚀 SERVIDOR UNIFICADO v10.5 ACTIVE`);
+console.log("DEBUG: Prisma initialized with URL length:", process.env.DATABASE_URL ? process.env.DATABASE_URL.length : "NULL");
+
+// Helper to validate image bytes
+const isValidImage = (buffer, contentType) => {
+    if (!buffer || buffer.length < 100) return false;
+    if (contentType && contentType.includes('image/')) return true;
+    const header = buffer.slice(0, 4);
+    if (header[0] === 0xFF && header[1] === 0xD8) return true;
+    if (header[0] === 0x89 && header[1] === 0x50) return true;
+    return false;
+};
 
 // Helper for Camera Snapshots (Basic/Digest)
 const fetchCameraSnapshot = async (device) => {
     let baseUrl = device.ip.startsWith('http') ? device.ip : `http://${device.ip}`;
     if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
 
-    // Determine Snapshot PATH based on brand
-    let path = "/fcgi/do?action=Snapshot"; // Default Akuvox
-    if (device.brand === 'HIKVISION') {
-        path = "/ISAPI/Streaming/channels/1/picture";
+    const isSPA = (device.name && device.name.toUpperCase().includes("SPA"));
+    const isTorre = (device.name && device.name.toUpperCase().includes("TORRE"));
+    const isAndroid = (device.brand === 'AKUVOX' && device.deviceModel && ["R29", "A05", "E16", "E18", "X915"].some(m => device.deviceModel.toUpperCase().includes(m)));
+
+    // Priority: SPA, Torre and Android models go to 8080 first
+    const ports = (device.brand === 'AKUVOX') ? ((isSPA || isTorre || isAndroid) ? ['8080', null] : [null, '8080']) : [null];
+
+    let basePaths = [];
+    if (device.brand === 'AKUVOX') {
+        basePaths = (isSPA || isTorre) ? [
+            "/picture.jpg",
+            "/picture.cgi",
+            "/jpeg.cgi",
+            "/video.cgi",
+            "/api/camera/snapshot",
+            "/fcgi/do?action=mjpeg"
+        ] : [
+            "/api/camera/snapshot",
+            "/video.cgi",
+            "/picture.cgi",
+            "/picture.jpg",
+            "/jpeg.cgi",
+            "/fcgi/video.cgi",
+            "/fcgi/do?action=mjpeg",
+            "/fcgi/do?action=Snapshot",
+            "/fcgi/video.cgi?action=snapshot",
+            "/live.mjpg",
+            "/video.mjpg",
+            "/fcgi?action=snapshot",
+            "/fcgi-bin/snapshot.fcgi",
+            "/snapshot.jpg",
+            "/jpg/image.jpg",
+            "/cgi-bin/snapshot.cgi"
+        ];
+    } else if (device.brand === 'HIKVISION') {
+        basePaths = ["/ISAPI/Streaming/channels/1/picture"];
     } else if (device.brand === 'DAHUA') {
-        path = "/cgi-bin/snapshot.cgi";
+        basePaths = ["/cgi-bin/snapshot.cgi"];
+    } else {
+        basePaths = ["/fcgi-bin/snapshot.fcgi", "/cgi-bin/snapshot.cgi", "/snapshot.jpg"];
     }
 
-    const url = `${baseUrl}${path}`;
+    const authHeaderBasic = "Basic " + Buffer.from(`${device.username}:${device.password}`).toString("base64");
+    console.log(`\n[Snap-v7] 🔍 ${device.name} (${device.ip})`);
+
+    for (const port of ports) {
+        let currentBaseUrl = baseUrl;
+        if (port) {
+            try {
+                const urlObj = new URL(baseUrl);
+                urlObj.port = port;
+                currentBaseUrl = urlObj.toString();
+                if (currentBaseUrl.endsWith('/')) currentBaseUrl = currentBaseUrl.slice(0, -1);
+            } catch (e) {
+                currentBaseUrl = `${baseUrl}:${port}`;
+            }
+        }
+
+        console.log(`[Snap] 🔌 Trying port: ${port || 'default'}`);
+
+        for (const path of basePaths) {
+            const urlToTry = currentBaseUrl + path;
+
+            // Strategy 1: NO-AUTH (per user's direct request)
+            try {
+                const response = await axios.get(urlToTry, {
+                    responseType: 'arraybuffer',
+                    timeout: 2500,
+                    validateStatus: s => s === 200
+                });
+                if (isValidImage(response.data, response.headers['content-type'])) {
+                    console.log(`[Snap] ✓ SUCCESS! ${path} (Port: ${port || 'default'}) [No-Auth]`);
+                    return response.data;
+                }
+            } catch (e) {
+                // If 401, we handle below
+            }
+
+            // Strategy 2: DIGEST/BASIC (Calculated based on 401 response)
+            try {
+                const firstRes = await axios.get(urlToTry, { validateStatus: s => true, timeout: 3000 });
+
+                if (firstRes.status === 401) {
+                    const wwwAuth = firstRes.headers["www-authenticate"] || "";
+                    if (wwwAuth.toLowerCase().includes("digest")) {
+                        console.log(`[Snap] 🔐 401 Digest detected on ${path}. Negotiating...`);
+                        const digestResult = await tryFetchWithDigest(urlToTry, path, device);
+                        if (digestResult) {
+                            console.log(`[Snap] ✓ SUCCESS! ${path} via Digest`);
+                            return digestResult;
+                        }
+                    } else if (wwwAuth.toLowerCase().includes("basic")) {
+                        const resBasic = await axios.get(urlToTry, {
+                            headers: { 'Authorization': authHeaderBasic },
+                            responseType: 'arraybuffer',
+                            timeout: 4000
+                        });
+                        if (isValidImage(resBasic.data, resBasic.headers['content-type'])) {
+                            console.log(`[Snap] ✓ SUCCESS! ${path} [Basic]`);
+                            return resBasic.data;
+                        }
+                    }
+                }
+            } catch (error) {
+                if (error.code === 'ECONNREFUSED' && port) break;
+            }
+        }
+    }
+
+    console.warn(`[Snap] ✗ FAILED - No valid image found for ${device.name}`);
+    return null;
+};
+
+// Helper for Digest fetch
+const tryFetchWithDigest = async (url, path, device, method = "GET") => {
+    try {
+        // First call to get nonce (with no auth)
+        const firstRes = await axios({
+            method: method,
+            url: url,
+            validateStatus: () => true,
+            timeout: 15000,
+            headers: { 'Connection': 'close' },
+            httpsAgent: agent
+        }).catch(e => e.response);
+
+        if (!firstRes || firstRes.status !== 401) return null;
+
+        const wwwAuth = firstRes.headers["www-authenticate"] || firstRes.headers["www-authenticate".toLowerCase()];
+        if (!wwwAuth || !wwwAuth.toLowerCase().includes("digest")) {
+            // Fallback: If it's a 401 but no Digest, maybe it wants simple Basic?
+            const basicHeader = "Basic " + Buffer.from(`${device.username}:${device.password}`).toString("base64");
+            const basicRetry = await axios({
+                method: method,
+                url: url,
+                headers: { 'Authorization': basicHeader, 'Connection': 'close' },
+                responseType: 'arraybuffer',
+                timeout: 20000,
+                httpsAgent: agent,
+                validateStatus: (s) => s === 200
+            }).catch(() => null);
+            if (basicRetry && isValidImage(basicRetry.data)) return basicRetry.data;
+            return null;
+        }
+
+        const getVal = (key) => {
+            const match = wwwAuth.match(new RegExp(`${key}="?([^",]+)"?`, 'i'));
+            return match ? match[1] : null;
+        };
+
+        const realm = getVal("realm") || "HTTPAPI";
+        const nonce = getVal("nonce");
+        const qop = getVal("qop");
+        const opaque = getVal("opaque");
+        const algorithmFromDevice = getVal("algorithm") || "MD5";
+
+        if (!nonce) return null;
+
+        const ha1 = crypto.createHash("md5").update(`${device.username}:${realm}:${device.password}`).digest("hex");
+        const ha2 = crypto.createHash("md5").update(`${method}:${path}`).digest("hex");
+        const nc = "00000001";
+        const cnonce = crypto.randomBytes(8).toString("hex");
+
+        let responseStr;
+        if (qop === 'auth' || qop === 'auth-int') {
+            responseStr = crypto.createHash("md5").update(`${ha1}:${nonce}:${nc}:${cnonce}:${qop}:${ha2}`).digest("hex");
+        } else {
+            responseStr = crypto.createHash("md5").update(`${ha1}:${nonce}:${ha2}`).digest("hex");
+        }
+
+        let authParts = [
+            `Digest username="${device.username}"`,
+            `realm="${realm}"`,
+            `nonce="${nonce}"`,
+            `uri="${path}"`,
+            `response="${responseStr}"`
+        ];
+        if (opaque) authParts.push(`opaque="${opaque}"`);
+        if (qop) {
+            authParts.push(`qop=${qop}`, `nc=${nc}`, `cnonce="${cnonce}"`);
+        }
+        if (algorithmFromDevice) authParts.push(`algorithm=${algorithmFromDevice}`);
+
+        const retryResponse = await axios({
+            method: method,
+            url: url,
+            headers: { 'Authorization': authParts.join(', '), 'Connection': 'close' },
+            responseType: 'arraybuffer',
+            timeout: 30000,
+            httpsAgent: agent,
+            validateStatus: (status) => true
+        });
+
+        if (retryResponse.status === 200 && isValidImage(retryResponse.data, retryResponse.headers['content-type'])) {
+            return retryResponse.data;
+        }
+    } catch (e) {
+        console.error(`[Digest Error] ${device.ip}: ${e.message}`);
+    }
+    return null;
+};
+
+/**
+ * Proxy direct MJPEG stream from device to response
+ */
+const proxyVideoStream = async (device, res, req) => {
+    let baseUrl = device.ip.startsWith('http') ? device.ip : `http://${device.ip}`;
+    if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+
+    const isSPA = (device.name && device.name.toUpperCase().includes("SPA"));
+    const isTorre = (device.name && device.name.toUpperCase().includes("TORRE"));
+    const isAndroid = (device.deviceModel && ["R29", "A05", "E16", "E18", "X915"].some(m => device.deviceModel.toUpperCase().includes(m)));
+    const ports = (device.brand === 'AKUVOX') ? ((isSPA || isTorre || isAndroid) ? ['8080', null] : [null, '8080']) : [null];
+
+    const endpoints = [
+        "/video.cgi",
+        "/fcgi/video.cgi",
+        "/fcgi/do?action=mjpeg",
+        "/live.mjpg",
+        "/video.mjpg",
+        "/cgi-bin/mjpg/video.cgi?subtype=1"
+    ];
+
     const authHeaderBasic = "Basic " + Buffer.from(`${device.username}:${device.password}`).toString("base64");
 
-    try {
-        // Strategy 1: Try Basic
-        const response = await axios.get(url, {
-            headers: { 'Authorization': authHeaderBasic },
-            responseType: 'arraybuffer',
-            timeout: 5000
-        });
-        return response.data;
-    } catch (error) {
-        // Strategy 2: Try Digest if 401
-        if (error.response?.status === 401) {
-            const wwwAuth = error.response.headers["www-authenticate"];
-            if (wwwAuth && wwwAuth.includes("Digest")) {
-                console.log("[Snap] Attempting Digest Auth...");
+    let activeSource = null;
+    let isClosed = false;
+
+    // Monitor client disconnection to stop everything immediately
+    const cleanup = () => {
+        if (isClosed) return;
+        isClosed = true;
+        console.log(`[Proxy] Client disconnected. Closing stream for ${device.name}.`);
+        if (activeSource) {
+            if (typeof activeSource.destroy === 'function') activeSource.destroy();
+            // Force socket destruction to ensure camera stops sending
+            if (activeSource.socket && typeof activeSource.socket.destroy === 'function') {
+                activeSource.socket.destroy();
+            }
+        }
+    };
+
+    res.on('close', cleanup);
+    res.on('finish', cleanup);
+    if (req) req.on('close', cleanup);
+
+    for (const port of ports) {
+        if (isClosed) break;
+        let currentBaseUrl = baseUrl;
+        if (port) {
+            try {
+                const urlObj = new URL(baseUrl);
+                urlObj.port = port;
+                currentBaseUrl = urlObj.toString();
+                if (currentBaseUrl.endsWith('/')) currentBaseUrl = currentBaseUrl.slice(0, -1);
+            } catch (e) { currentBaseUrl = `${baseUrl}:${port}`; }
+        }
+
+        for (const path of endpoints) {
+            if (isClosed) break;
+            const streamUrl = currentBaseUrl + path;
+            console.log(`[Proxy] Trying MJPEG Source: ${streamUrl}`);
+
+            try {
+                let sourceRes;
                 try {
-                    const getVal = (key) => {
-                        const match = wwwAuth.match(new RegExp(`${key}="?([^",]+)"?`));
-                        return match ? match[1] : null;
-                    };
+                    sourceRes = await axios.get(streamUrl, {
+                        responseType: 'stream',
+                        timeout: 3000,
+                        validateStatus: (status) => status === 200,
+                        headers: { 'Connection': 'close' }
+                    });
+                } catch (e) {
+                    if (isClosed) break;
+                    if (e.response?.status === 401) {
+                        const wwwAuth = e.response.headers["www-authenticate"] || "";
+                        if (wwwAuth.toLowerCase().includes("digest")) {
+                            console.log(`[Proxy] 🔐 401 Digest detected on ${path}, negotiating challenge...`);
+                            sourceRes = await tryStreamWithDigest(streamUrl, path, device);
+                        } else {
+                            console.log(`[Proxy] Trying BASIC-AUTH: ${streamUrl}`);
+                            sourceRes = await axios.get(streamUrl, {
+                                headers: { 'Authorization': authHeaderBasic, 'Connection': 'close' },
+                                responseType: 'stream',
+                                timeout: 5000,
+                                validateStatus: (status) => status === 200
+                            });
+                        }
+                    } else { throw e; }
+                }
 
-                    const realm = getVal("realm");
-                    const nonce = getVal("nonce");
-                    const qop = getVal("qop");
-                    const opaque = getVal("opaque");
-                    const algorithm = getVal("algorithm") || "MD5";
+                if (sourceRes && sourceRes.data) {
+                    activeSource = sourceRes.data;
+                    const contentType = (sourceRes.headers['content-type'] || '').toLowerCase();
 
-                    const ha1 = crypto.createHash("md5").update(`${device.username}:${realm}:${device.password}`).digest("hex");
-                    const ha2 = crypto.createHash("md5").update(`GET:${path}`).digest("hex");
-                    const nc = "00000001";
-                    const cnonce = crypto.randomBytes(8).toString("hex");
-
-                    let responseStr;
-                    if (qop) {
-                        responseStr = crypto.createHash("md5").update(`${ha1}:${nonce}:${nc}:${cnonce}:${qop}:${ha2}`).digest("hex");
-                    } else {
-                        responseStr = crypto.createHash("md5").update(`${ha1}:${nonce}:${ha2}`).digest("hex");
+                    if (!contentType.includes('multipart/')) {
+                        console.log(`[Proxy] ⚠️ ${path} is not a multipart stream (${contentType}). Skipping...`);
+                        activeSource.destroy();
+                        activeSource = null;
+                        continue;
                     }
 
-                    const authString = `Digest username="${device.username}", realm="${realm}", nonce="${nonce}", uri="${path}", qop="${qop || ''}", nc=${nc}, cnonce="${cnonce}", response="${responseStr}", opaque="${opaque || ''}", algorithm="${algorithm}"`;
+                    if (isClosed) {
+                        activeSource.destroy();
+                        return true;
+                    }
 
-                    const retryResponse = await axios.get(url, {
-                        headers: { Authorization: authString },
-                        responseType: 'arraybuffer',
-                        timeout: 5000
+                    console.log(`[Proxy] ✓ Stream STABLE (${contentType}) at ${path}. Piping...`);
+                    res.writeHead(200, {
+                        'Content-Type': contentType,
+                        'Cache-Control': 'no-cache',
+                        'Connection': 'close',
+                        'Pragma': 'no-cache'
                     });
-                    return retryResponse.data;
-                } catch (e) {
-                    console.error("[Snap] Digest failed:", e.message);
+
+                    activeSource.pipe(res);
+                    return true;
+                }
+            } catch (error) {
+                if (isClosed) break;
+                if (error.response?.status !== 404) {
+                    console.log(`[Proxy] ✗ ${path} -> ${error.response?.status || error.code}`);
                 }
             }
         }
-        console.warn(`[Snap] Final error from ${device.brand}: ${error.message}`);
+    }
+    return false;
+};
+
+/**
+ * Special helper for Digest Streaming
+ */
+const tryStreamWithDigest = async (url, path, device) => {
+    try {
+        const firstRes = await axios.get(url, { validateStatus: () => true, timeout: 5000, headers: { 'Connection': 'close' } }).catch(e => e.response);
+        const wwwAuth = firstRes.headers["www-authenticate"] || firstRes.headers["www-authenticate".toLowerCase()];
+        if (!wwwAuth || !wwwAuth.toLowerCase().includes("digest")) return null;
+
+        console.log(`[Digest-Stream] Challenge from ${device.ip}: ${wwwAuth}`);
+
+        const getVal = (key) => {
+            const match = wwwAuth.match(new RegExp(`${key}="?([^",]+)"?`, 'i'));
+            return match ? match[1] : null;
+        };
+
+        const realm = getVal("realm") || "HTTPAPI";
+        const nonce = getVal("nonce");
+        const qop = getVal("qop");
+        const opaque = getVal("opaque");
+        const algorithmFromDevice = getVal("algorithm");
+        const algorithm = algorithmFromDevice || "MD5";
+
+        if (!nonce) return null;
+
+        const ha1 = crypto.createHash("md5").update(`${device.username}:${realm}:${device.password}`).digest("hex");
+        const ha2 = crypto.createHash("md5").update(`GET:${path}`).digest("hex");
+        const nc = "00000001";
+        const cnonce = crypto.randomBytes(8).toString("hex");
+
+        let responseStr;
+        if (qop === 'auth' || qop === 'auth-int') {
+            responseStr = crypto.createHash("md5").update(`${ha1}:${nonce}:${nc}:${cnonce}:${qop}:${ha2}`).digest("hex");
+        } else {
+            responseStr = crypto.createHash("md5").update(`${ha1}:${nonce}:${ha2}`).digest("hex");
+        }
+
+        let authParts = [
+            `Digest username="${device.username}"`,
+            `realm="${realm}"`,
+            `nonce="${nonce}"`,
+            `uri="${path}"`,
+            `response="${responseStr}"`
+        ];
+
+        if (algorithmFromDevice) authParts.push(`algorithm=${algorithmFromDevice}`);
+        if (opaque) authParts.push(`opaque="${opaque}"`);
+        if (qop) {
+            authParts.push(`qop=${qop}`);
+            authParts.push(`nc=${nc}`);
+            authParts.push(`cnonce="${cnonce}"`);
+        }
+
+        const authHeader = authParts.join(', ');
+        console.log(`[Digest-Stream] -> Sending Header to ${device.ip}`);
+
+        return await axios.get(url, {
+            headers: {
+                'Authorization': authHeader,
+                'Connection': 'close'
+            },
+            responseType: 'stream',
+            timeout: 15000
+        });
+    } catch (e) {
+        console.error(`[Digest Stream Error] ${e.message}`);
         return null;
     }
+};
+
+// Helper to construct Akuvox Face URL according to "Rule of Gold"
+const getAkuvoxFaceFilename = (date, time) => {
+    // Rule: YYYY-MM-DD_H-m-s.jpg (stripping leading zeros from time)
+    const cleanTime = time.split(':').map(t => parseInt(t, 10)).join('-');
+    return `${date}_${cleanTime}.jpg`;
+};
+
+/**
+ * Fetch face/event image from Akuvox device
+ * Akuvox doesn't support snapshot capture - we must use doorlog API or user profile
+ * @param device - The device configuration
+ * @param options - Optional: userId, eventType, path (from webhook)
+ */
+const fetchAkuvoxFaceImage = async (device, options = {}) => {
+    let baseUrl = device.ip.startsWith('http') ? device.ip : `http://${device.ip}`;
+    if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+
+    const authHeaderBasic = "Basic " + Buffer.from(`${device.username}:${device.password}`).toString("base64");
+
+    // Sanitize options to avoid matching against un-replaced device macros ($user_name, etc)
+    if (options.name && options.name.startsWith('$')) options.name = null;
+    if (options.userId && options.userId.startsWith('$')) options.userId = null;
+    if (options.card && options.card.startsWith('$')) options.card = null;
+
+    // console.log(`[Akuvox] Attempting to fetch face image from ${device.name} (ID: ${options.userId || 'any'}, Name: ${options.name || 'any'})`);
+
+    const isValidImage = (buffer) => {
+        if (!buffer || buffer.length < 100) return false;
+        const header = buffer.slice(0, 4);
+        if (header[0] === 0xFF && header[1] === 0xD8 && header[2] === 0xFF) return true;
+        if (header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4E && header[3] === 0x47) return true;
+        return false;
+    };
+
+    const makeRequest = async (url, isJson = false, method = "GET", postBody = null) => {
+        const path = new URL(url).pathname + new URL(url).search;
+        try {
+            const config = {
+                method: method,
+                url: url,
+                headers: { 'Authorization': authHeaderBasic },
+                responseType: isJson ? 'json' : 'arraybuffer',
+                timeout: 25000 // ULTRA-TIMEOUT for slow Torres
+            };
+            if (postBody) {
+                config.data = postBody;
+                config.headers['Content-Type'] = 'application/json';
+            }
+            const response = await axios(config);
+            return response.data;
+        } catch (e) {
+            if (e.response?.status === 401) {
+                const wwwAuth = e.response.headers["www-authenticate"];
+                if (wwwAuth && wwwAuth.includes("Digest")) {
+                    try {
+                        const getVal = (key) => {
+                            const match = wwwAuth.match(new RegExp(`${key}="?([^",]+)"?`));
+                            return match ? match[1] : null;
+                        };
+                        const realm = getVal("realm");
+                        const nonce = getVal("nonce");
+                        const qop = getVal("qop");
+                        const opaque = getVal("opaque");
+                        const ha1 = crypto.createHash("md5").update(`${device.username}:${realm}:${device.password}`).digest("hex");
+                        const ha2 = crypto.createHash("md5").update(`${method}:${path}`).digest("hex");
+                        const nc = "00000001";
+                        const cnonce = crypto.randomBytes(8).toString("hex");
+                        let responseStr = qop
+                            ? crypto.createHash("md5").update(`${ha1}:${nonce}:${nc}:${cnonce}:${qop}:${ha2}`).digest("hex")
+                            : crypto.createHash("md5").update(`${ha1}:${nonce}:${ha2}`).digest("hex");
+
+                        const authStr = `Digest username="${device.username}", realm="${realm}", nonce="${nonce}", uri="${path}", qop="${qop || ''}", nc=${nc}, cnonce="${cnonce}", response="${responseStr}", opaque="${opaque || ''}", algorithm="MD5"`;
+
+                        const retryConfig = {
+                            method: method,
+                            url: url,
+                            headers: { 'Authorization': authStr },
+                            responseType: isJson ? 'json' : 'arraybuffer',
+                            timeout: 25000
+                        };
+                        if (postBody) {
+                            retryConfig.data = postBody;
+                            retryConfig.headers['Content-Type'] = 'application/json';
+                        }
+                        const retryResponse = await axios(retryConfig);
+                        return retryResponse.data;
+                    } catch (digestError) {
+                        console.error(`[Akuvox] Digest Auth Failed for ${url}:`, digestError.message);
+                    }
+                }
+            }
+            console.warn(`[Akuvox] Request failed to ${url}: ${e.message}`);
+            return null;
+        }
+    };
+
+    // Strategy 0: Direct path from webhook
+    if (options.path && options.path.length > 5 && options.path !== "undefined" && options.path !== "--") {
+        console.log(`[Akuvox] Strategy 0: Trying direct path from webhook: ${options.path}`);
+        const fullUrl = options.path.startsWith('http') ? options.path : `${baseUrl}${options.path.startsWith('/') ? '' : '/'}${options.path}`;
+        const buffer = await makeRequest(fullUrl, false);
+        if (isValidImage(buffer)) {
+            console.log(`[Akuvox] ✓ Success: Image retrieved from direct path.`);
+            return buffer;
+        }
+        console.warn(`[Akuvox] Strategy 0 failed: Path provided but no valid image found at ${fullUrl}`);
+    }
+
+    // Strategy 1: Log Polling (doorlog, searchlog)
+    const logApis = ["doorlog", "searchlog", "accesslog"];
+    const apiPorts = [null, "8080"];
+
+    for (let retry = 0; retry < 6; retry++) {
+        // console.log(`[Akuvox] Log Polling Attempt ${retry + 1}/6...`);
+
+        for (const port of apiPorts) {
+            let currentBaseUrl = baseUrl;
+            if (port) {
+                try {
+                    const urlObj = new URL(baseUrl);
+                    urlObj.port = port;
+                    currentBaseUrl = urlObj.toString();
+                    if (currentBaseUrl.endsWith('/')) currentBaseUrl = currentBaseUrl.slice(0, -1);
+                } catch (e) { currentBaseUrl = `${baseUrl}:${port}`; }
+            }
+
+            for (const api of logApis) {
+                try {
+                    // Try both POST (Unified API) and GET (Legacy API)
+                    let logData = await makeRequest(`${currentBaseUrl}/api/${api}/get`, true, "POST", {
+                        "target": api, "action": "get", "data": { "num": 10 }
+                    });
+
+                    if (!logData || logData.retcode !== 0) {
+                        logData = await makeRequest(`${currentBaseUrl}/api/${api}/get?num=10`, true);
+                    }
+
+                    if (logData?.retcode === 0 && logData.data?.item?.length > 0) {
+                        console.log(`[Akuvox] ${api} poll (Port: ${port || '80'}) returned ${logData.data.item.length} items.`);
+
+                        for (const entry of logData.data.item) {
+                            const imageUrl = entry.PicUrl || entry.FaceUrl || entry.SnapUrl || entry.ImageUrl || entry.Pic;
+                            if (imageUrl && !imageUrl.startsWith('$')) {
+                                const entryUser = entry.UserID || entry.ID || entry.UserId;
+                                const entryCard = entry.Card || entry.CardSn || entry.CardCode;
+                                const entryName = entry.Name || entry.UserName;
+
+                                const matchUser = options.userId && (String(entryUser) === String(options.userId));
+                                const matchCard = options.card && (String(entryCard) === String(options.card));
+                                const matchName = options.name && (String(entryName).toLowerCase() === String(options.name).toLowerCase());
+                                const matchType = options.type && (String(entry.Type).toLowerCase() === String(options.type).toLowerCase()); // For call events
+
+                                const isMatch = matchUser || matchCard || matchName || matchType;
+                                const isLastResort = retry >= 4 && entryName !== "Unknown" && entryName !== "Desconocido";
+
+                                if (isMatch || isLastResort) {
+                                    const fullImageUrl = imageUrl.startsWith('http') ? imageUrl : `${currentBaseUrl}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
+                                    console.log(`[Akuvox] Attempting download from: ${fullImageUrl} (Reason: ${isMatch ? 'Match' : 'Last Resort'})`);
+
+                                    const buffer = await makeRequest(fullImageUrl, false);
+                                    if (isValidImage(buffer)) {
+                                        console.log(`[Akuvox] ✓ SUCCESS: Retrieved image from ${api}`);
+                                        return buffer;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (e) { /* silent fail for specific api/port combo */ }
+            }
+        }
+
+        const waitTime = retry < 2 ? 1000 : 2000;
+        await new Promise(r => setTimeout(r, waitTime));
+    }
+
+    // Strategy 3: User Profile
+    if (options.userId) {
+        const userData = await makeRequest(`${baseUrl}/api/user/get?UserID=${options.userId}`, true);
+        const faceUrl = userData?.data?.item?.[0]?.FaceUrl;
+        if (faceUrl) {
+            const buffer = await makeRequest(faceUrl.startsWith('http') ? faceUrl : `${baseUrl}${faceUrl.startsWith('/') ? '' : '/'}${faceUrl}`, false);
+            if (isValidImage(buffer)) return buffer;
+        }
+    }
+
+    // Strategy 4: Direct Snapshot / MJPEG fallback
+    console.log(`[Akuvox] Strategy 4: Intentando captura directa...`);
+    return await fetchCameraSnapshot(device);
 };
 
 const debounceCache = new Map();
@@ -330,16 +897,16 @@ const handleWebhook = async (req, res, logPrefix) => {
                 }
 
                 try {
-                    // Upload Full (Using 'lpr' bucket to ensure compatibility with existing file viewer)
+                    // Upload Full (Using 'face' bucket for all face recognition events)
                     const fnameFull = `hik_face_full_${Date.now()}_${personName.replace(/\s+/g, '_')}.jpg`;
-                    fullImagePath = await uploadToS3(fullImg.buffer, fnameFull, fullImg.mimeType, "lpr");
-                    console.log(`${logPrefix} [S3] Full image uploaded: ${fullImagePath}`);
+                    fullImagePath = await uploadToS3(fullImg.buffer, fnameFull, fullImg.mimeType, "face");
+                    console.log(`${logPrefix} [S3] Full image uploaded to face bucket: ${fullImagePath}`);
 
                     // Upload Face Crop (if exists)
                     if (faceImg) {
                         const fnameFace = `hik_face_crop_${Date.now()}_${personName.replace(/\s+/g, '_')}.jpg`;
-                        faceImagePath = await uploadToS3(faceImg.buffer, fnameFace, faceImg.mimeType, "lpr");
-                        console.log(`${logPrefix} [S3] Face crop uploaded: ${faceImagePath}`);
+                        faceImagePath = await uploadToS3(faceImg.buffer, fnameFace, faceImg.mimeType, "face");
+                        console.log(`${logPrefix} [S3] Face crop uploaded to face bucket: ${faceImagePath}`);
                     }
                 } catch (imgError) {
                     console.error(`${logPrefix} [S3] Upload FAILED: ${imgError.message}`);
@@ -398,6 +965,12 @@ const handleWebhook = async (req, res, logPrefix) => {
                     user,
                     direction: event.direction
                 });
+                // Emit webhook event for topology animation
+                global.io.emit("webhook-event", {
+                    type: "FACE",
+                    device: device?.name || "Unknown",
+                    timestamp: new Date().toISOString()
+                });
             }
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -442,7 +1015,10 @@ const handleWebhook = async (req, res, logPrefix) => {
             xmlContent.toLowerCase().includes('heartbeat') ||
             xmlContent.toLowerCase().includes('stun');
 
-        if (!plateNumber) {
+        // Check for ANPR Data presence to determine if it's a vehicle event despite missing plate
+        const hasAnprData = xmlData.ANPR || eventAlert.ANPR || xmlData.EventNotificationAlert?.ANPR || eventAlert.vehicleInfo;
+
+        if (!plateNumber && !hasAnprData) {
             if (isHeartbeat) {
                 // UPDATE: Track push connection for heartbeats too
                 const cleanIncomingMac = macAddress ? macAddress.replace(/[:-\s]/g, "").toUpperCase() : null;
@@ -625,7 +1201,7 @@ const handleWebhook = async (req, res, logPrefix) => {
             console.log(`${logPrefix} ⚠️ [NO-CAMERA-DECISION] Event will be marked as UNKNOWN - manual review required`);
         }
 
-        const cleanPlate = plateNumber.toString().toUpperCase().replace(/[^A-Z0-9]/g, "");
+        const cleanPlate = (plateNumber || "").toString().toUpperCase().replace(/[^A-Z0-9]/g, "");
         const isUnknown = cleanPlate === "UNKNOWN" || cleanPlate === "";
         const finalPlate = isUnknown ? "NO_LEIDA" : cleanPlate;
 
@@ -791,6 +1367,13 @@ const handleWebhook = async (req, res, logPrefix) => {
                 user: credential ? credential.user : null,
                 direction: event.direction // Ensure direction is explicitly sent
             });
+            // Emit webhook event for topology animation
+            global.io.emit("webhook-event", {
+                type: "LPR",
+                device: device?.name || "Unknown",
+                plate: cleanPlate,
+                timestamp: new Date().toISOString()
+            });
         }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -818,14 +1401,24 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
 
         // Normalización de eventos según recomendación en docs/akuvox/AKUVOX_CALLBACKS.md
         // Soporta eventos directos (event=door_open) o anidados (event=relay&status=open)
-        if (eventType === 'relay') {
-            eventType = params.status === 'open' ? 'door_open' : 'door_close';
+        if (eventType === 'relay' || eventType === 'relay_open' || eventType === 'relay_close') {
+            const isOpening = eventType === 'relay_open' || (eventType === 'relay' && params.status === 'open');
+            eventType = isOpening ? 'door_open' : 'door_close';
         } else if (eventType === 'card') {
             eventType = params.type === 'invalid' ? 'card_invalid' : 'card_valid';
         } else if (eventType === 'face') {
             eventType = params.type === 'invalid' ? 'face_invalid' : 'face_valid';
         } else if (eventType === 'code') {
             eventType = params.type === 'invalid' ? 'code_invalid' : 'code_valid';
+        } else if (eventType === 'qr' || eventType === 'qr_valid' || eventType === 'qr_invalid') {
+            const isInvalid = eventType === 'qr_invalid' || params.type === 'invalid' || params.unlocktype === 'Null';
+            eventType = isInvalid ? 'qr_invalid' : 'qr_valid';
+        } else if (eventType === 'call_start') {
+            eventType = 'calling';
+        } else if (eventType === 'call_end' || eventType === 'hangup') {
+            eventType = 'call_end';
+        } else if (eventType === 'boot' || eventType === 'setup_completed') {
+            eventType = 'boot';
         }
 
         // Eventos de sistema (si vienen por el parámetro event directamente)
@@ -897,6 +1490,19 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
                         where: { id: device.id },
                         data: { doorStatus: 'OPEN' }
                     });
+
+                    // ATOMIC CAPTURE ON REMOTE OPEN
+                    console.log(`${logPrefix} [AUTO-SNAP] Triggering Akuvox face image fetch for DOOR_OPEN event...`);
+                    const snapBuffer = await fetchAkuvoxFaceImage(device, { name: params.user || params.name });
+                    if (snapBuffer) {
+                        try {
+                            const filename = `aku_open_${device.id}_${Date.now()}.jpg`;
+                            snapPath = await uploadToS3(snapBuffer, filename, "image/jpeg", "face");
+                            details += " (Evidencia capturada)";
+                        } catch (e) {
+                            console.error("Error uploading open snapshot to S3:", e.message);
+                        }
+                    }
                 } catch (e) { console.error("Error updating door status:", e); }
             }
 
@@ -941,8 +1547,8 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
             details = `Tarjeta RFID Válida: ${cardNumber}`;
 
             if (device) {
-                console.log(`${logPrefix} [AUTO-SNAP] Triggering snapshot for card from ${device.name}`);
-                const snapBuffer = await fetchCameraSnapshot(device);
+                console.log(`${logPrefix} [AUTO-SNAP] Triggering Akuvox face image fetch for card event...`);
+                const snapBuffer = await fetchAkuvoxFaceImage(device, { userId: params.userid, card: cardNumber, name: params.user || params.name });
                 if (snapBuffer) {
                     try {
                         const filename = `aku_card_${device.id}_${Date.now()}.jpg`;
@@ -968,21 +1574,40 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
             const rawValue = params.user || params.name || (isSuccess ? "Unknown" : "Desconocido");
             credentialValue = rawValue.startsWith('$') ? "No Identificado" : rawValue;
 
+            // Default access decision (will be overridden by MODE_FACE logic if user found)
             accessDecision = isSuccess ? "GRANT" : "DENY";
-            details = isSuccess ? `Rostro: ${credentialValue}` : `Rostro: Desconocido`;
+            details = isSuccess ? `Rostro: ${credentialValue}, Similitud: ${params.similarity || '100'}%` : `Rostro: Desconocido, Similitud: 0%`;
 
             // ATOMIC CAPTURE ON FACE EVENT
             if (device) {
-                console.log(`${logPrefix} [AUTO-SNAP] Triggering snapshot for face event from ${device.name}`);
-                const snapBuffer = await fetchCameraSnapshot(device);
+                console.log(`${logPrefix} [AUTO-SNAP] Triggering Akuvox face image fetch for face event...`);
+                console.log(`${logPrefix} [AUTO-SNAP] Params: FaceUrl=${params.FaceUrl}, PicUrl=${params.PicUrl}, userid=${params.userid}`);
+
+                // Priority: FaceUrl from hook (if provided), then userId lookup
+                const snapBuffer = await fetchAkuvoxFaceImage(device, {
+                    userId: params.userid,
+                    name: params.user || params.name,
+                    path: params.FaceUrl || params.PicUrl,
+                    card: params.card
+                });
                 if (snapBuffer) {
                     try {
                         const filename = `aku_face_${device.id}_${Date.now()}.jpg`;
                         snapPath = await uploadToS3(snapBuffer, filename, "image/jpeg", "face");
-                        details += " (Evidencia capturada en S3)";
+
+                        // Enrich details for the UI modal (EventDetailsDialog expects FaceImage: <path>)
+                        if (details.includes('Rostro:')) {
+                            details += `, FaceImage: ${snapPath}`;
+                        } else {
+                            details += ` - FaceImage: ${snapPath}`;
+                        }
+
+                        console.log(`${logPrefix} [AUTO-SNAP] ✓ Face image uploaded to S3: ${snapPath}`);
                     } catch (e) {
                         console.error("Error uploading face snapshot to S3:", e.message);
                     }
+                } else {
+                    console.warn(`${logPrefix} [AUTO-SNAP] ✗ Failed to fetch face image from device`);
                 }
             }
 
@@ -993,8 +1618,8 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
             details = `Código PIN Válido: ${params.code}`;
 
             if (device) {
-                console.log(`${logPrefix} [AUTO-SNAP] Triggering snapshot for pin from ${device.name}`);
-                const snapBuffer = await fetchCameraSnapshot(device);
+                console.log(`${logPrefix} [AUTO-SNAP] Triggering Akuvox face image fetch for pin event...`);
+                const snapBuffer = await fetchAkuvoxFaceImage(device, { userId: params.userid, name: params.user || params.name });
                 if (snapBuffer) {
                     try {
                         const filename = `aku_pin_${device.id}_${Date.now()}.jpg`;
@@ -1026,8 +1651,9 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
 
             // ATOMIC CAPTURE ON CALL
             if (device) {
-                console.log(`${logPrefix} [AUTO-SNAP] Triggering snapshot for call from ${device.name}`);
-                const snapBuffer = await fetchCameraSnapshot(device);
+                console.log(`${logPrefix} [AUTO-SNAP] Triggering Akuvox face image fetch for call event...`);
+                // For calls, we only have doorlog strategy since there's no userId yet
+                const snapBuffer = await fetchAkuvoxFaceImage(device, { name: params.user || params.name, type: 'intercom' });
                 if (snapBuffer) {
                     try {
                         const filename = `aku_call_${device.id}_${Date.now()}.jpg`;
@@ -1043,14 +1669,76 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
                 global.io.emit("device_call", { mac: macAddress, to: params.to, timestamp: new Date(), snapshot: snapPath });
             }
 
+        } else if (eventType === 'qr_valid') {
+            credentialType = 'TAG';
+            credentialValue = params.qrcode || "QR_CODE";
+            accessDecision = "GRANT";
+            details = `Código QR Válido: ${credentialValue}`;
+
+            if (device) {
+                const snapBuffer = await fetchAkuvoxFaceImage(device, { userId: params.userid, name: params.user || params.name });
+                if (snapBuffer) {
+                    try {
+                        const filename = `aku_qr_${device.id}_${Date.now()}.jpg`;
+                        snapPath = await uploadToS3(snapBuffer, filename, "image/jpeg", "face");
+                        details += " (Foto S3 capturada)";
+                    } catch (e) { }
+                }
+            }
+
+        } else if (eventType === 'qr_invalid') {
+            credentialType = 'TAG';
+            credentialValue = params.qrcode || "QR_INVALID";
+            accessDecision = "DENY";
+            details = `Código QR Inválido detectado`;
+
+        } else if (eventType === 'input_open' || eventType === 'input_close') {
+            const sensor = params.input || "Default";
+            details = `Sensor ${sensor}: ${eventType === 'input_open' ? 'ACTIVADO' : 'CERRADO'}`;
+            accessDecision = "GRANT";
+            credentialType = 'TAG';
+            credentialValue = `INPUT_${sensor}`;
+
+        } else if (eventType === 'call_end') {
+            details = `Llamada finalizada (Hang Up)`;
+            accessDecision = "GRANT";
+            credentialType = 'TAG';
+            credentialValue = 'CALL_END';
+
+        } else if (eventType === 'boot') {
+            details = `Dispositivo Reiniciado (Boot) - FW: ${params.firmware || 'N/A'}, Modelo: ${params.model || 'N/A'}`;
+            accessDecision = "GRANT";
+            credentialType = 'TAG';
+            credentialValue = 'SYSTEM_BOOT';
+
         } else {
             console.warn(`${logPrefix} Unknown Akuvox event: ${eventType}`);
             details = `Evento Desconocido: ${eventType}`;
             accessDecision = "DENY";
         }
 
-        // Try to find user by credential
-        if (credentialValue && credentialType) {
+        // Try to find user by credential or userid
+        if (params.userid) {
+            // First try by person external ID (numeric ID in Akuvox should match user.id in some setups, or be mapped)
+            // In our system, Akuvox ID = numeric translation of user.id
+            const potentialUser = await prisma.user.findFirst({
+                where: {
+                    OR: [
+                        { id: params.userid }, // Direct match if ID is numeric
+                        { id: { endsWith: params.userid.padStart(4, '0') } } // Fallback for padded IDs
+                    ]
+                }
+            });
+            if (potentialUser) {
+                user = potentialUser;
+                userId = user.id;
+                details += ` - User: ${user.name} (Match ID)`;
+                console.log(`${logPrefix} ✓ User found by ID: ${user.name} (${user.id})`);
+            }
+        }
+
+        if (!user && credentialValue && credentialType) {
+            console.log(`${logPrefix} 🔍 [DB-SEARCH] Searching for credential: "${credentialValue}" (type: ${credentialType})`);
             const credential = await prisma.credential.findFirst({
                 where: {
                     value: credentialValue,
@@ -1063,6 +1751,41 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
                 user = credential.user;
                 userId = user.id;
                 details += ` - User: ${user.name}`;
+                console.log(`${logPrefix} ✓ User found by ${credentialType} credential: ${user.name} (${user.id})`);
+
+                // --- Apply FACE Mode Logic (similar to LPR) ---
+                if (credentialType === 'FACE') {
+                    const modeSetting = await prisma.setting.findUnique({ where: { key: 'MODE_FACE' } });
+                    const mode = modeSetting?.value || 'WHITELIST';
+                    details += `, Modo: ${mode}`;
+
+                    if (mode === 'BLACKLIST') {
+                        accessDecision = "DENY";
+                        console.log(`${logPrefix} ⛔ [MODE-FACE] BLACKLIST Active - Face found in DB -> DENIED.`);
+                    } else if (mode === 'WHITELIST') {
+                        accessDecision = "GRANT";
+                        console.log(`${logPrefix} ✅ [MODE-FACE] WHITELIST Active - Face found in DB -> GRANTED.`);
+                    }
+                }
+            } else {
+                console.log(`${logPrefix} ✗ No user found for ${credentialType} credential: ${credentialValue}`);
+
+                // If FACE event and user NOT found in DB, check MODE to decide
+                if (credentialType === 'FACE' && eventType === 'face_valid') {
+                    const modeSetting = await prisma.setting.findUnique({ where: { key: 'MODE_FACE' } });
+                    const mode = modeSetting?.value || 'WHITELIST';
+                    details += `, Modo: ${mode}`;
+
+                    if (mode === 'BLACKLIST') {
+                        // In BLACKLIST mode, unknown faces should be GRANTED (not in blacklist)
+                        accessDecision = "GRANT";
+                        console.log(`${logPrefix} ✅ [MODE-FACE] BLACKLIST Active - Unknown face -> GRANTED (not blacklisted).`);
+                    } else {
+                        // In WHITELIST mode, unknown faces should be DENIED (not in whitelist)
+                        accessDecision = "DENY";
+                        console.log(`${logPrefix} ❌ [MODE-FACE] WHITELIST Active - Unknown face -> DENIED (not whitelisted).`);
+                    }
+                }
             }
         }
 
@@ -1092,6 +1815,13 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
                     user,
                     direction: event.direction // Ensure direction is explicitly sent
                 });
+                // Emit webhook event for topology animation
+                global.io.emit("webhook-event", {
+                    type: "AKUVOX",
+                    device: device?.name || "Unknown",
+                    eventType: eventType,
+                    timestamp: new Date().toISOString()
+                });
             }
 
             console.log(`${logPrefix} Akuvox Event Logged: ${event.id} - ${eventType} - ${accessDecision}`);
@@ -1112,10 +1842,11 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
 const requestHandler = async (req, res) => {
     const logPrefix = `[${new Date().toISOString()}]`;
     const remoteIp = req.socket.remoteAddress;
-    // --- LOG ALL REQUESTS (EXTREMELY LOUD FOR DEBUGGING) ---
-    console.log(`${logPrefix} 📥 [REQUEST] ${req.method} ${req.url} from ${remoteIp}`);
+    // --- LOG ALL REQUESTS (SILENCED V19 - Use only for DEEP debugging) ---
+    // console.log(`${logPrefix} 📥 [REQUEST] ${req.method} ${req.url} from ${remoteIp}`);
 
     // Emit initial debug to socket so we can see arrival even if it fails later
+    /*
     addDebugLog({
         id: `raw-${Date.now()}`,
         timestamp: new Date(),
@@ -1125,6 +1856,7 @@ const requestHandler = async (req, res) => {
         params: { remoteIp, headers: req.headers },
         credentialValue: "INCOMING POLLING"
     });
+    */
 
     // Health check
     if (req.url === '/health' || req.url === '/ping') {
@@ -1148,6 +1880,102 @@ const requestHandler = async (req, res) => {
     // --- ROUTING LOGIC (SOPORTE ULTRA-PERMISIVO) ---
     const url = req.url.toLowerCase();
 
+    // AKUVOX FACE IMAGE PROXY (From Doorlog)
+    if (url.includes('/api/proxy/face')) {
+        const query = new URL(req.url, `http://${req.headers.host}`).searchParams;
+        const deviceId = query.get('deviceId');
+        const date = query.get('date');
+        const time = query.get('time');
+
+        if (!deviceId || !date || !time) {
+            res.writeHead(400);
+            res.end("Missing parameters (deviceId, date, time)");
+            return;
+        }
+
+        const device = await prisma.device.findUnique({ where: { id: deviceId } });
+        if (!device) {
+            res.writeHead(404);
+            res.end("Device not found");
+            return;
+        }
+
+        // STRID SPECIFICATIONS IMPLEMENTATION (V13)
+        // Rule of Gold: Stripping leading zeros from time components
+        const hms = time.split(':');
+        const cleanTime = hms.map(t => parseInt(t, 10)).join('-'); // 08:05:07 -> 8-5-7
+        const leadZeroTime = hms.join('-');
+
+        const fileNameVariations = [
+            `${date}_${cleanTime}_0.jpg`,   // NEW: Working example suffix _0
+            `${date}_${cleanTime}.jpg`,     // Rule of Gold
+            `${date}_${leadZeroTime}_0.jpg`,
+            `${date}_${leadZeroTime}.jpg`
+        ];
+
+        const folders = ['DoorPicture', 'IntercomPicture'];
+        const protocols = ['https', 'http'];
+
+        const pureIp = device.ip.replace(/^https?:\/\//, '').split(':')[0];
+
+        for (const protocol of protocols) {
+            const currentBaseUrl = `${protocol}://${pureIp}`;
+
+            for (const folder of folders) {
+                for (const fileName of fileNameVariations) {
+                    const finalUrl = `${currentBaseUrl}/Image/${folder}/${fileName}`;
+                    const relativePath = `/Image/${folder}/${fileName}`;
+
+                    console.log(`${logPrefix} [Proxy-Face-V13] 🔍 Testing -> ${finalUrl}`);
+
+                    try {
+                        let imageRes;
+                        try {
+                            // Try WITHOUT forced Basic first (often fixes Digest issues or works with No-Auth)
+                            imageRes = await axios.get(finalUrl, {
+                                responseType: 'arraybuffer',
+                                timeout: 30000,
+                                headers: { 'Connection': 'close' },
+                                validateStatus: (status) => status === 200,
+                                maxRedirects: 10,
+                                httpsAgent: agent
+                            });
+                        } catch (e) {
+                            if (e.response?.status === 401) {
+                                console.log(`${logPrefix} [Proxy-Face] 🔐 Negotiating Auth for ${fileName}`);
+                                const buffer = await tryFetchWithDigest(finalUrl, relativePath, device);
+                                if (buffer) {
+                                    console.log(`${logPrefix} [Proxy-Face] ✅ Success via Auth!`);
+                                    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' });
+                                    res.end(buffer);
+                                    return;
+                                }
+                            }
+                            throw e;
+                        }
+
+                        if (imageRes && imageRes.status === 200 && isValidImage(imageRes.data, imageRes.headers['content-type'])) {
+                            console.log(`${logPrefix} [Proxy-Face] ✅ Found! (${folder}/${fileName})`);
+                            res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' });
+                            res.end(imageRes.data);
+                            return;
+                        }
+                    } catch (error) {
+                        const status = error.response?.status;
+                        if (status !== 404) {
+                            console.warn(`${logPrefix} [Proxy-Face] ✗ Error: ${error.code || status} at ${fileName}`);
+                        }
+                    }
+                }
+            }
+        }
+
+        console.error(`${logPrefix} [Proxy-Face] 🚫 Not found for ${device.name} using strict spec after trying Door & Intercom.`);
+        res.writeHead(404);
+        res.end("Image not found");
+        return;
+    }
+
     // LIVE PROXY (Para ver cámaras remotas en el navegador)
     if (url.includes('/api/live/')) {
         console.log(`${logPrefix} 🎯 Match: LIVE Proxy (Path: ${req.url})`);
@@ -1164,9 +1992,23 @@ const requestHandler = async (req, res) => {
             return;
         }
 
-        console.log(`${logPrefix} [LIVE] Proxying for ${device.name} (${device.ip})`);
+        const clientIp = req.socket.remoteAddress;
+        console.log(`${logPrefix} [LIVE] Proxying for ${device.name} (${device.ip}) - Client: ${clientIp}`);
 
-        // MJPEG/Snapshot Proxy loop
+        // UPDATE STATUS: Marking device as online because we are connecting to it
+        await prisma.device.update({
+            where: { id: device.id },
+            data: { lastOnlinePush: new Date() }
+        }).catch(() => { });
+
+        // STRATEGY 1: Direct MJPEG Pipe (Linux/Dahua Efficient Stream)
+        if (device.brand === 'AKUVOX' || device.brand === 'DAHUA') {
+            const success = await proxyVideoStream(device, res, req);
+            if (success) return;
+        }
+
+        // STRATEGY 2: Snapshot Polling Fallback (Works with Digest/Android/Slow devices)
+        console.log(`${logPrefix} [LIVE] Falling back to Snapshot Polling Strategy for ${device.name}`);
         res.writeHead(200, {
             'Content-Type': 'multipart/x-mixed-replace; boundary=--frame',
             'Cache-Control': 'no-cache',
@@ -1175,22 +2017,39 @@ const requestHandler = async (req, res) => {
         });
 
         const sendFrames = async () => {
-            while (!req.socket.destroyed) {
-                const buffer = await fetchCameraSnapshot(device);
-                if (buffer) {
-                    res.write(`--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${buffer.length}\r\n\r\n`);
-                    res.write(buffer);
-                    res.write('\r\n');
+            while (true) {
+                // EXTREME SAFETY CAUSE: Check if socket is still alive BEFORE each fetch
+                if (req.socket.destroyed || req.socket.writableEnded) {
+                    console.log(`${logPrefix} [LIVE] Client disconnected. Stopping stream for ${device.name}.`);
+                    break;
                 }
-                await new Promise(r => setTimeout(r, 200)); // ~5 fps
+
+                const buffer = await fetchCameraSnapshot(device);
+
+                // Re-check after long-running fetch
+                if (req.socket.destroyed || req.socket.writableEnded) break;
+
+                if (buffer) {
+                    try {
+                        res.write(`--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${buffer.length}\r\n\r\n`);
+                        res.write(buffer);
+                        res.write('\r\n');
+                    } catch (e) {
+                        console.log(`${logPrefix} [LIVE] Write failed (client closed).`);
+                        break;
+                    }
+                }
+                const pollInterval = (device.brand === 'AKUVOX') ? 300 : 500;
+                await new Promise(r => setTimeout(r, pollInterval));
             }
         };
         sendFrames();
         return;
     }
 
-    // HIKVISION (LPR)
-    if (url.includes('hikvision')) {
+    // HIKVISION (LPR) fallback or explicit path
+    // Many cameras send to root '/' if not configured with a path
+    if (url.includes('hikvision') || (url === '/' && req.method === 'POST')) {
         console.log(`${logPrefix} 🎯 Match: HIKVISION Driver (Path: ${req.url})`);
         await handleWebhook(req, res, logPrefix);
         return;
@@ -1200,6 +2059,13 @@ const requestHandler = async (req, res) => {
     if (url.includes('akuvox')) {
         console.log(`${logPrefix} 🎯 Match: AKUVOX Driver (Path: ${req.url})`);
         await handleAkuvoxWebhook(req, res, logPrefix);
+        return;
+    }
+
+    // WAHA (WhatsApp Chatbot)
+    if (url.includes('/api/waha/webhook')) {
+        console.log(`${logPrefix} 💬 Match: WAHA WhatsApp Webhook`);
+        await handleWahaWebhook(req, res, logPrefix);
         return;
     }
 
