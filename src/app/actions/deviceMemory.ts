@@ -17,29 +17,47 @@ export async function getDeviceFaces(deviceId: string) {
     } else if (device.brand === 'HIKVISION') {
         const driver = new HikvisionDriver();
 
-        if (device.deviceType === 'FACE_TERMINAL') {
-            const faces = await driver.getFacesFromCamera(device);
-            items = faces.map((f: any, index: number) => ({
-                ID: f.FPID || f.faceURL || `HIKFACE-${index}`,
-                UserID: f.name || "Desconocido",
-                Name: f.name || `Rostro ${index + 1}`,
-                CardCode: "",
-                HasFace: true,
-                HasTag: false,
-                IsPlate: false,
-                FaceUrl: f.faceURL
-            }));
-        } else {
+        // If it's explicitly an ANPR camera, try plates first
+        if (device.deviceType === 'LPR_CAMERA') {
             const plates = await driver.getPlates(device);
             items = plates.map((plateNumber: string, index: number) => ({
                 ID: plateNumber,
-                UserID: `HIK-${index}`,
+                UserID: `HIK-LPR-${index}`,
                 Name: `Placa ${plateNumber}`,
                 CardCode: plateNumber,
                 HasFace: false,
                 HasTag: true,
                 IsPlate: true
             }));
+        } else {
+            // Default to Face Search for everything else (Terminals, Face Cams, IPCs)
+            console.log(`[DeviceMemory] Attempting Face Search for Hikvision ${device.ip}`);
+            const faces = await driver.getFacesFromCamera(device);
+            items = faces.map((f: any, index: number) => ({
+                ID: f.employeeNo || f.FPID || f.faceURL || f.ID || `HIKFACE-${index}`,
+                UserID: f.employeeNo || f.FPID || f.ID || f.UserID || f.name || "Desconocido",
+                Name: f.name || f.Name || `Rostro ${index + 1}`,
+                CardCode: f.CardNo || f.cardNo || f.card || "",
+                HasFace: !!(f.faceURL || (f.faceLibType && f.faceLibType !== 'null') || f.FPID || f.faceId || f.faceData),
+                HasTag: !!(f.CardNo || f.cardNo),
+                IsPlate: false,
+                FaceUrl: f.faceURL || ""
+            }));
+
+            // Fallback to LPR search if NO faces found and it's not explicitly a terminal
+            if (items.length === 0 && device.deviceType !== 'FACE_TERMINAL') {
+                console.log(`[DeviceMemory] No faces found, falling back to LPR search for ${device.ip}`);
+                const plates = await driver.getPlates(device);
+                items = plates.map((plateNumber: string, index: number) => ({
+                    ID: plateNumber,
+                    UserID: `HIK-LPR-${index}`,
+                    Name: `Placa ${plateNumber}`,
+                    CardCode: plateNumber,
+                    HasFace: false,
+                    HasTag: true,
+                    IsPlate: true
+                }));
+            }
         }
     }
 
@@ -125,10 +143,17 @@ export async function syncUserToDevice(deviceId: string, userId: string) {
 
     if (device.brand === 'HIKVISION') {
         const driver = new HikvisionDriver();
-        const plate = user.credentials.find(c => c.type === 'PLATE');
-        if (plate) {
-            await driver.upsertCredential(plate, device);
+
+        if (device.deviceType === 'FACE_TERMINAL' || device.deviceType === 'ACCESS_CONTROL') {
+            await driver.syncUserWithFace(user, device);
             return true;
+        } else {
+            // LPR Path
+            const plate = user.credentials.find(c => c.type === 'PLATE');
+            if (plate) {
+                await driver.upsertCredential(plate, device);
+                return true;
+            }
         }
     }
     return false;
@@ -177,9 +202,9 @@ export async function syncIdentityAction(deviceId: string, item: any, unitId?: s
     }
 
     // Handle Face Image Download
-    if (item.HasFace && device.brand === 'AKUVOX') {
+    if (item.HasFace && (device.brand === 'AKUVOX' || device.brand === 'HIKVISION')) {
         try {
-            const driver = new AkuvoxDriver();
+            const driver = device.brand === 'AKUVOX' ? new AkuvoxDriver() : new HikvisionDriver();
             const imageBuffer = await driver.getFaceImage(device, item.ID);
 
             if (imageBuffer) {
@@ -243,10 +268,21 @@ export async function exportAllToDevice(deviceId: string) {
     if (device.brand === 'HIKVISION') {
         const driver = new HikvisionDriver();
         for (const user of users) {
-            const plates = user.credentials.filter(c => c.type === 'PLATE');
-            for (const plate of plates) {
-                await driver.upsertCredential(plate, device);
-                tags++; // Using tags counter for plates here
+            if (device.deviceType === 'FACE_TERMINAL') {
+                const hasFace = user.cara && user.cara.length > 0;
+                const hasTags = user.credentials.some(c => c.type === 'TAG');
+
+                if (hasFace || hasTags) {
+                    await driver.syncUserWithFace(user, device);
+                    if (hasFace) faces++;
+                    if (hasTags) tags += user.credentials.filter(c => c.type === 'TAG').length;
+                }
+            } else {
+                const plates = user.credentials.filter(c => c.type === 'PLATE');
+                for (const plate of plates) {
+                    await driver.upsertCredential(plate, device);
+                    tags++;
+                }
             }
             processed++;
         }
@@ -271,6 +307,9 @@ export async function getDeviceDoorlogs(deviceId: string, limit: number = 50, of
 
     if (device.brand === 'AKUVOX') {
         const driver = new AkuvoxDriver();
+        return await driver.getDoorlog(device, limit, offset);
+    } else if (device.brand === 'HIKVISION') {
+        const driver = new HikvisionDriver();
         return await driver.getDoorlog(device, limit, offset);
     }
 

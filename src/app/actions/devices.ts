@@ -342,44 +342,65 @@ export async function importPlateBatch(id: string, plates: string[]) {
         const device = await prisma.device.findUnique({ where: { id } });
         if (!device) return { success: false, message: "Dispositivo no encontrado" };
 
-        let importedUser = await prisma.user.findFirst({ where: { name: "MATRICULAS IMPORTADAS" } });
-        if (!importedUser) {
-            importedUser = await prisma.user.create({
-                data: { name: "MATRICULAS IMPORTADAS", phone: "N/A", dni: "IMPORT" }
-            });
-        }
-
         let importedCount = 0;
+
         for (const rawPlate of plates) {
-            // Normalización extrema para evitar duplicados por formato
+            // Normalización
             const plateNum = rawPlate.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
             if (!plateNum || plateNum.length < 3) continue;
 
+            // Buscamos si ya existe la credencial o el vehículo para asociarlo a un usuario existente
             const existingCred = await prisma.credential.findFirst({
                 where: { type: 'PLATE', value: plateNum }
             });
-
-            if (!existingCred) {
-                await prisma.credential.create({
-                    data: {
-                        type: 'PLATE',
-                        value: plateNum,
-                        userId: importedUser.id,
-                        notes: `Importado de ${device.name}`
-                    }
-                });
-                importedCount++;
-            }
 
             const existingVehicle = await prisma.vehicle.findUnique({
                 where: { plate: plateNum }
             });
 
-            if (!existingVehicle) {
+            let userId = existingCred?.userId || existingVehicle?.userId;
+
+            // Si no existe usuario asociado, creamos uno nuevo específico para esta matrícula
+            if (!userId) {
+                try {
+                    const newUser = await prisma.user.create({
+                        data: {
+                            name: `Usuario ${plateNum}`,
+                            dni: `IMP-${plateNum}`, // Generamos un ID único basado en la matrícula
+                            phone: "N/A",
+                            role: 'RESIDENT'
+                        }
+                    });
+                    userId = newUser.id;
+                    importedCount++;
+                } catch (userError) {
+                    console.error(`Error creando usuario para placa ${plateNum}`, userError);
+                    // Si falla por unique constraint (ej. DNI duplicado por alguna razón), 
+                    // intentamos buscar si ya existe un usuario con ese DNI para vincularlo (fallback)
+                    const fallbackUser = await prisma.user.findFirst({ where: { dni: `IMP-${plateNum}` } });
+                    if (fallbackUser) userId = fallbackUser.id;
+                    else continue; // Si falla fatalmente, saltamos
+                }
+            }
+
+            // Asegurar Credencial
+            if (!existingCred && userId) {
+                await prisma.credential.create({
+                    data: {
+                        type: 'PLATE',
+                        value: plateNum,
+                        userId: userId,
+                        notes: `Importado de ${device.name}`
+                    }
+                });
+            }
+
+            // Asegurar Ficha Vehicular
+            if (!existingVehicle && userId) {
                 await prisma.vehicle.create({
                     data: {
                         plate: plateNum,
-                        userId: importedUser.id,
+                        userId: userId,
                         brand: "LPR",
                         model: "IMPORTADO",
                         notes: `Sincro Hardware ${device.name}`
@@ -388,7 +409,7 @@ export async function importPlateBatch(id: string, plates: string[]) {
             }
         }
 
-        // Revalidar todas las rutas relacionadas para asegurar que el contador suba
+        // Revalidar todas las rutas relacionadas
         revalidatePath("/admin/vehicles");
         revalidatePath("/admin/credentials");
         revalidatePath("/admin/devices");
@@ -475,5 +496,92 @@ export async function getLprSyncMap() {
     } catch (error) {
         console.error("Global Sync Map error:", error);
         return {};
+    }
+}
+
+export async function importFaceBatch(id: string, faces: any[]) {
+    try {
+        const device = await prisma.device.findUnique({ where: { id } });
+        if (!device) return { success: false, message: "Dispositivo no encontrado" };
+
+        let importedCount = 0;
+        let failedCount = 0;
+
+        for (const face of faces) {
+            // face object is { UserID, Name, FaceUrl, ... }
+            const userId = face.UserID || face.ID; // Usually employeeNo or ID
+            const name = face.Name || `Usuario ${userId}`;
+
+            if (!userId) continue;
+
+            let user = await prisma.user.findFirst({
+                where: { dni: userId } // Matching logic: DNI = ID from device
+            });
+
+            // Fallback: Check by exact name match if ID didn't match and name is substantial
+            if (!user && name && name.length > 3) {
+                user = await prisma.user.findFirst({
+                    where: { name: { equals: name, mode: 'insensitive' } }
+                });
+            }
+
+            if (!user) {
+                try {
+                    user = await prisma.user.create({
+                        data: {
+                            name: name,
+                            dni: userId,
+                            phone: "N/A",
+                            role: 'RESIDENT',
+                            cara: face.FaceUrl || null // Use URL if available
+                        }
+                    });
+                    importedCount++;
+                } catch (userError) {
+                    console.error(`Error creating user for face ${name}`, userError);
+                    failedCount++;
+                    continue;
+                }
+            } else {
+                // Update face URL if missing
+                if (!user.cara && face.FaceUrl) {
+                    await prisma.user.update({
+                        where: { id: user.id },
+                        data: { cara: face.FaceUrl }
+                    });
+                }
+            }
+
+            // Ensure Credential Exists
+            if (user) {
+                // Check if FACE credential exists
+                const existingCred = await prisma.credential.findFirst({
+                    where: {
+                        userId: user.id,
+                        type: 'FACE'
+                    }
+                });
+
+                if (!existingCred) {
+                    await prisma.credential.create({
+                        data: {
+                            type: 'FACE',
+                            value: userId, // Store the ID as the credential value
+                            userId: user.id,
+                            notes: `Importado de ${device.name}`
+                        }
+                    });
+                }
+            }
+        }
+
+        revalidatePath("/admin/users");
+        revalidatePath("/admin/credentials");
+        revalidatePath("/admin/devices");
+
+        return { success: true, count: importedCount, failed: failedCount };
+    } catch (error: any) {
+        console.error("[ImportFaceBatch] Error:", error);
+        return { success: false, message: error.message };
     }
 }

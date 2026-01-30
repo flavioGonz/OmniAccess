@@ -28,6 +28,7 @@ import {
     TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
     Users,
     Trash2,
@@ -148,7 +149,7 @@ export function DeviceMemoryDialog({ device, open, onOpenChange }: DeviceMemoryD
     };
 
     const loadLogs = async () => {
-        if (device.brand !== 'AKUVOX') return;
+        if (device.brand !== 'AKUVOX' && device.brand !== 'HIKVISION') return;
         setLoadingLogs(true);
         try {
             const data = await getDeviceDoorlogs(device.id);
@@ -183,9 +184,9 @@ export function DeviceMemoryDialog({ device, open, onOpenChange }: DeviceMemoryD
             loadFaces();
             loadSystemUsers();
             getUnits().then(setUnits);
-            if (device.brand === 'AKUVOX') {
+            if (device.brand === 'AKUVOX' || device.brand === 'HIKVISION') {
                 loadLogs();
-                loadCallLogs();
+                if (device.brand === 'AKUVOX') loadCallLogs();
             }
         }
     }, [open]);
@@ -716,15 +717,15 @@ export function DeviceMemoryDialog({ device, open, onOpenChange }: DeviceMemoryD
                                 <TabsTrigger value="directory" className="text-[10px] font-black uppercase tracking-widest px-6 h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white">
                                     <Users size={14} className="mr-2" /> Directorio Local
                                 </TabsTrigger>
+                                {(device.brand === 'AKUVOX' || device.brand === 'HIKVISION') && (
+                                    <TabsTrigger value="doorlog" className="text-[10px] font-black uppercase tracking-widest px-6 h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white">
+                                        <History size={14} className="mr-2" /> Doorlog
+                                    </TabsTrigger>
+                                )}
                                 {device.brand === 'AKUVOX' && (
-                                    <>
-                                        <TabsTrigger value="doorlog" className="text-[10px] font-black uppercase tracking-widest px-6 h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white">
-                                            <History size={14} className="mr-2" /> Doorlog
-                                        </TabsTrigger>
-                                        <TabsTrigger value="calllog" className="text-[10px] font-black uppercase tracking-widest px-6 h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white">
-                                            <Phone size={14} className="mr-2" /> Call Log
-                                        </TabsTrigger>
-                                    </>
+                                    <TabsTrigger value="calllog" className="text-[10px] font-black uppercase tracking-widest px-6 h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white">
+                                        <Phone size={14} className="mr-2" /> Call Log
+                                    </TabsTrigger>
                                 )}
                             </TabsList>
                             <div className="text-[10px] font-bold text-neutral-500 uppercase flex items-center gap-2">

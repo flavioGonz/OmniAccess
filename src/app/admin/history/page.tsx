@@ -43,6 +43,8 @@ import { cn } from "@/lib/utils";
 import { getCarLogo } from "@/lib/car-logos";
 import { getVehicleBrandName } from "@/lib/hikvision-codes";
 import { ExportHistoryDialog } from "@/components/history/ExportHistoryDialog";
+import { io, Socket } from "socket.io-client";
+import { motion, AnimatePresence } from "framer-motion";
 
 const formatDuration = (ms: number) => {
     const minutes = Math.floor(ms / 60000);
@@ -54,6 +56,8 @@ const formatDuration = (ms: number) => {
     if (minutes > 0) return `${minutes}m`;
     return `< 1m`;
 };
+
+const MotionTableRow = motion(TableRow);
 
 type FullAccessEvent = AccessEvent & {
     user: (User & { unit: { name: string } | null, cara?: string | null }) | null;
@@ -80,6 +84,12 @@ export default function HistoryPage() {
     const [page, setPage] = useState(0);
     const [hasMore, setHasMore] = useState(true);
     const ITEMS_PER_PAGE = 50;
+
+    // Refs for Socket.io to avoid stale closures and redundant reconnections
+    const filtersRef = useRef({ searchTerm, filterDecision, filterType, filterDirection, startDate, endDate, page });
+    useEffect(() => {
+        filtersRef.current = { searchTerm, filterDecision, filterType, filterDirection, startDate, endDate, page };
+    }, [searchTerm, filterDecision, filterType, filterDirection, startDate, endDate, page]);
 
     // Debounce Search
     useEffect(() => {
@@ -155,6 +165,45 @@ export default function HistoryPage() {
             setLoading(false);
         }
     }
+
+    // Socket.io Integration
+    useEffect(() => {
+        const socketUrl = `http://${window.location.hostname}:10000`;
+        const socket = io(socketUrl, {
+            transports: ["websocket", "polling"],
+        });
+
+        socket.on("access_event", (event: FullAccessEvent) => {
+            const { searchTerm, filterDecision, filterType, filterDirection, startDate, endDate, page } = filtersRef.current;
+
+            // Apply current filters to decide if the event should be added
+            const matchesSearch = !searchTerm ||
+                (event.plateDetected?.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                (event.user?.name?.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                (event.device?.name?.toLowerCase().includes(searchTerm.toLowerCase()));
+
+            const matchesDecision = filterDecision === "ALL" || event.decision === filterDecision;
+            const matchesType = filterType === "ALL" || event.accessType === filterType;
+            const matchesDirection = filterDirection === "ALL" || event.direction === filterDirection;
+
+            const eventDate = new Date(event.timestamp);
+            const matchesStartDate = !startDate || eventDate >= new Date(startDate);
+            const matchesEndDate = !endDate || eventDate <= new Date(endDate);
+
+            if (matchesSearch && matchesDecision && matchesType && matchesDirection && matchesStartDate && matchesEndDate) {
+                setEvents(prev => {
+                    // Avoid duplicates
+                    if (prev.find(e => e.id === event.id)) return prev;
+                    return [event, ...prev].slice(0, ITEMS_PER_PAGE * (page + 1));
+                });
+                setTotalEvents(prev => prev + 1);
+            }
+        });
+
+        return () => {
+            socket.disconnect();
+        };
+    }, []);
 
     // Helper for image URLs
     const getImageUrl = (path: string | null | undefined): string => {
@@ -382,191 +431,214 @@ export default function HistoryPage() {
                                     const callDest = details['Llamada entrante a'];
 
                                     return (
-                                        <EventDetailsDialog key={evt.id} event={evt}>
-                                            <TableRow
+                                        <AnimatePresence mode="popLayout" key={evt.id}>
+                                            <MotionTableRow
+                                                layout
+                                                initial={{ opacity: 0, y: -20, backgroundColor: "rgba(255, 255, 255, 0.1)" }}
+                                                animate={{ opacity: 1, y: 0, backgroundColor: "transparent" }}
+                                                exit={{ opacity: 0, y: 20 }}
+                                                transition={{ duration: 0.5, ease: "easeOut" }}
                                                 ref={isLast ? lastElementRef : null}
                                                 className="border-white/5 hover:bg-white/[0.03] transition-all cursor-pointer group"
                                             >
                                                 {/* Identification Section */}
                                                 <TableCell className="py-3 px-3">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="relative w-12 h-8 rounded overflow-hidden border border-white/10 bg-black shrink-0 shadow-lg group-hover:border-blue-500/30 transition-all text-white">
-                                                            {(evt.snapshotPath || evt.user?.cara) ? (
-                                                                <Image src={getImageUrl(evt.snapshotPath) || getImageUrl(evt.user?.cara) || ""} alt="Snapshot" fill sizes="48px" className="object-cover" />
-                                                            ) : (
-                                                                <div className="w-full h-full flex items-center justify-center bg-neutral-900">
-                                                                    <Camera size={12} className="text-neutral-700" />
-                                                                </div>
-                                                            )}
-                                                        </div>
-
-                                                        <div className="flex flex-col gap-0.5">
-                                                            {evt.accessType === "PLATE" ? (
-                                                                <div className="flex flex-col bg-white border border-neutral-800 rounded-sm overflow-hidden min-w-[80px]">
-                                                                    <div className="h-0.5 bg-blue-600 w-full" />
-                                                                    <p className="text-[11px] font-black text-black tracking-widest uppercase px-1.5 py-0.5 text-center font-mono leading-none">
-                                                                        {evt.plateDetected || "-------"}
-                                                                    </p>
-                                                                </div>
-                                                            ) : (
-                                                                <p className={cn("font-mono text-xs font-black tracking-widest uppercase", isCall ? "text-blue-400" : "text-white")}>
-                                                                    {isCall ? "LLAMADA" : (evt.plateDetected || "-------")}
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </TableCell>
-
-                                                {/* Vehicle Details - Solo para eventos de tipo PLATE */}
-                                                <TableCell>
-                                                    {evt.accessType === "PLATE" ? (
+                                                    <EventDetailsDialog event={evt}>
                                                         <div className="flex items-center gap-2">
-                                                            <div className="w-8 h-8 bg-white rounded border border-white/10 p-1 flex items-center justify-center shrink-0">
-                                                                {logoUrl ? (
-                                                                    <div className="relative w-full h-full">
-                                                                        <Image src={logoUrl} alt="Logo" fill sizes="32px" className="object-contain" />
+                                                            <div className="relative w-12 h-8 rounded overflow-hidden border border-white/10 bg-black shrink-0 shadow-lg group-hover:border-blue-500/30 transition-all text-white">
+                                                                {(() => {
+                                                                    const src = getImageUrl(evt.snapshotPath) || (evt.accessType !== 'PLATE' ? getImageUrl(evt.user?.cara) : "");
+                                                                    if (src) {
+                                                                        return <Image src={src} alt="Snapshot" fill sizes="48px" className="object-cover" />;
+                                                                    }
+                                                                    return (
+                                                                        <div className="w-full h-full flex items-center justify-center bg-neutral-900">
+                                                                            <Camera size={12} className="text-neutral-700" />
+                                                                        </div>
+                                                                    );
+                                                                })()}
+                                                            </div>
+
+                                                            <div className="flex flex-col gap-0.5">
+                                                                {evt.accessType === "PLATE" ? (
+                                                                    <div className="flex flex-col bg-white border border-neutral-800 rounded-sm overflow-hidden min-w-[80px]">
+                                                                        <div className="h-0.5 bg-blue-600 w-full" />
+                                                                        <p className="text-[11px] font-black text-black tracking-widest uppercase px-1.5 py-0.5 text-center font-mono leading-none">
+                                                                            {evt.plateDetected || "-------"}
+                                                                        </p>
                                                                     </div>
                                                                 ) : (
-                                                                    isCall ? <Phone size={14} className="text-blue-400" /> : <Car size={14} className="text-neutral-300" />
+                                                                    <p className={cn("font-mono text-xs font-black tracking-widest uppercase", isCall ? "text-blue-400" : "text-white")}>
+                                                                        {isCall ? "LLAMADA" : (evt.plateDetected || "-------")}
+                                                                    </p>
                                                                 )}
                                                             </div>
-                                                            <div className="flex flex-col">
-                                                                <p className="font-black text-white text-[10px] uppercase tracking-tight">
-                                                                    {isCall ? "Intercom" : brandName}
-                                                                </p>
-                                                                <div className="flex items-center gap-1.5 mt-0.5">
-                                                                    {details.Color && (
-                                                                        <div
-                                                                            className="w-1.5 h-1.5 rounded-full border border-white/20"
-                                                                            style={{ backgroundColor: details.Color.toLowerCase() === 'blanco' ? '#fff' : details.Color.toLowerCase() === 'negro' ? '#000' : details.Color }}
-                                                                        />
-                                                                    )}
-                                                                    <span className="text-[9px] text-neutral-500 font-bold uppercase">
-                                                                        {(() => {
-                                                                            if (isCall) return "Comunicación";
-                                                                            let t = details.Tipo || 'Vehículo';
-                                                                            if (t.toUpperCase() === 'SUVMPV') t = 'SUV';
-                                                                            if (t.toUpperCase() === 'VEHICLE') t = 'AUTO';
-                                                                            if (t.toUpperCase() === 'PICKUPTRUCK') t = 'PICKUP';
-                                                                            return t;
-                                                                        })()}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
                                                         </div>
-                                                    ) : (
-                                                        <div className="flex items-center justify-center h-full">
-                                                            <span className="text-[9px] text-neutral-600 uppercase font-bold">—</span>
-                                                        </div>
-                                                    )}
+                                                    </EventDetailsDialog>
                                                 </TableCell>
 
-                                                {/* User Section - Mostrar foto del rostro identificado */}
+                                                {/* Vehicle Details */}
                                                 <TableCell>
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="w-7 h-7 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shrink-0 overflow-hidden">
-                                                            {evt.user?.cara ? (
-                                                                <div className="relative w-full h-full">
-                                                                    <Image src={getImageUrl(evt.user.cara)} alt="U" fill sizes="28px" className="object-cover" />
+                                                    <EventDetailsDialog event={evt}>
+                                                        {evt.accessType === "PLATE" ? (
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="w-8 h-8 bg-white rounded border border-white/10 p-1 flex items-center justify-center shrink-0">
+                                                                    {logoUrl ? (
+                                                                        <div className="relative w-full h-full">
+                                                                            <Image src={logoUrl} alt="Logo" fill sizes="32px" className="object-contain" />
+                                                                        </div>
+                                                                    ) : (
+                                                                        isCall ? <Phone size={14} className="text-blue-400" /> : <Car size={14} className="text-neutral-300" />
+                                                                    )}
                                                                 </div>
-                                                            ) : (
-                                                                <UserIcon size={12} className="text-neutral-600" />
-                                                            )}
+                                                                <div className="flex flex-col">
+                                                                    <p className="font-black text-white text-[10px] uppercase tracking-tight">
+                                                                        {isCall ? "Intercom" : brandName}
+                                                                    </p>
+                                                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                                                        {details.Color && (
+                                                                            <div
+                                                                                className="w-1.5 h-1.5 rounded-full border border-white/20"
+                                                                                style={{ backgroundColor: details.Color.toLowerCase() === 'blanco' ? '#fff' : details.Color.toLowerCase() === 'negro' ? '#000' : details.Color }}
+                                                                            />
+                                                                        )}
+                                                                        <span className="text-[9px] text-neutral-500 font-bold uppercase">
+                                                                            {(() => {
+                                                                                if (isCall) return "Comunicación";
+                                                                                let t = details.Tipo || 'Vehículo';
+                                                                                if (t.toUpperCase() === 'SUVMPV') t = 'SUV';
+                                                                                if (t.toUpperCase() === 'VEHICLE') t = 'AUTO';
+                                                                                if (t.toUpperCase() === 'PICKUPTRUCK') t = 'PICKUP';
+                                                                                return t;
+                                                                            })()}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex items-center justify-center h-full">
+                                                                <span className="text-[9px] text-neutral-600 uppercase font-bold">—</span>
+                                                            </div>
+                                                        )}
+                                                    </EventDetailsDialog>
+                                                </TableCell>
+
+                                                {/* User Section */}
+                                                <TableCell>
+                                                    <EventDetailsDialog event={evt}>
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-7 h-7 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shrink-0 overflow-hidden">
+                                                                {evt.user?.cara ? (
+                                                                    <div className="relative w-full h-full">
+                                                                        <Image src={getImageUrl(evt.user.cara)} alt="U" fill sizes="28px" className="object-cover" />
+                                                                    </div>
+                                                                ) : (
+                                                                    <UserIcon size={12} className="text-neutral-600" />
+                                                                )}
+                                                            </div>
+                                                            <div>
+                                                                <p className={cn(
+                                                                    "font-bold uppercase text-[10px] tracking-tight",
+                                                                    (evt.user?.name || details.Rostro) ? "text-indigo-400" : "text-neutral-500"
+                                                                )}>
+                                                                    {evt.user?.name || details.Rostro || (isCall && callDest ? `Dest: ${callDest}` : "Externo")}
+                                                                </p>
+                                                                <p className="text-[9px] text-neutral-500 font-black uppercase tracking-widest mt-0.5">
+                                                                    {evt.user?.unit?.name || (evt.user?.name ? "Residente" : "Sin Unidad")}
+                                                                </p>
+                                                            </div>
                                                         </div>
-                                                        <div>
-                                                            <p className={cn(
-                                                                "font-bold uppercase text-[10px] tracking-tight",
-                                                                (evt.user?.name || details.Rostro) ? "text-indigo-400" : "text-neutral-500"
-                                                            )}>
-                                                                {evt.user?.name || details.Rostro || (isCall && callDest ? `Dest: ${callDest}` : "Externo")}
-                                                            </p>
-                                                            <p className="text-[9px] text-neutral-500 font-black uppercase tracking-widest mt-0.5">
-                                                                {evt.user?.unit?.name || (evt.user?.name ? "Residente" : "Sin Unidad")}
-                                                            </p>
-                                                        </div>
-                                                    </div>
+                                                    </EventDetailsDialog>
                                                 </TableCell>
 
                                                 {/* Access Point */}
                                                 <TableCell>
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 bg-white/5 rounded-lg border border-white/10 p-1 flex items-center justify-center shrink-0 overflow-hidden">
-                                                            {evt.device?.brand === 'HIKVISION' ? (
-                                                                <Image src="/logos/hikvision.png" alt="H" width={24} height={24} className="object-contain" />
-                                                            ) : evt.device?.brand === 'AKUVOX' ? (
-                                                                <Image src="/logos/akuvox.png" alt="A" width={24} height={24} className="object-contain" />
-                                                            ) : (
-                                                                <MapPin size={14} className="text-neutral-600" />
-                                                            )}
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <p className="text-[10px] font-black text-neutral-300 uppercase tracking-tighter truncate max-w-[140px]">
-                                                                {evt.device?.name || "Nodo LPR"}
-                                                            </p>
-                                                            <div className={cn(
-                                                                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[8px] font-black border uppercase tracking-widest",
-                                                                evt.device?.direction === 'ENTRY'
-                                                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                                                                    : "bg-orange-500/10 text-orange-400 border-orange-500/20"
-                                                            )}>
-                                                                {evt.device?.direction === 'ENTRY' ? "ENTRADA" : "SALIDA"}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </TableCell>
-
-                                                {/* Stay Duration / Context */}
-                                                <TableCell>
-                                                    {(evt as any).stayDuration ? (
-                                                        <div className="flex flex-col gap-1">
-                                                            <div className={cn(
-                                                                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[8px] font-black border uppercase tracking-widest w-fit",
-                                                                (evt as any).previousDirection === 'ENTRY'
-                                                                    ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
-                                                                    : "bg-neutral-500/10 text-neutral-400 border-neutral-500/20"
-                                                            )}>
-                                                                {(evt as any).previousDirection === 'ENTRY' ? (
-                                                                    <><ArrowDownLeft size={10} /> ESTUVO DENTRO</>
+                                                    <EventDetailsDialog event={evt}>
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-8 h-8 bg-white/5 rounded-lg border border-white/10 p-1 flex items-center justify-center shrink-0 overflow-hidden">
+                                                                {evt.device?.brand === 'HIKVISION' ? (
+                                                                    <Image src="/logos/hikvision.png" alt="H" width={24} height={24} className="object-contain" />
+                                                                ) : evt.device?.brand === 'AKUVOX' ? (
+                                                                    <Image src="/logos/akuvox.png" alt="A" width={24} height={24} className="object-contain" />
                                                                 ) : (
-                                                                    <><ArrowUpRight size={10} /> ESTUVO FUERA</>
+                                                                    <MapPin size={14} className="text-neutral-600" />
                                                                 )}
                                                             </div>
-                                                            <span className="text-[10px] font-mono text-neutral-400 font-bold ml-1">
-                                                                {formatDuration((evt as any).stayDuration)}
-                                                            </span>
+                                                            <div className="space-y-1">
+                                                                <p className="text-[10px] font-black text-neutral-300 uppercase tracking-tighter truncate max-w-[140px]">
+                                                                    {evt.device?.name || "Nodo LPR"}
+                                                                </p>
+                                                                <div className={cn(
+                                                                    "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[8px] font-black border uppercase tracking-widest",
+                                                                    evt.direction === 'ENTRY'
+                                                                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                                                        : "bg-orange-500/10 text-orange-400 border-orange-500/20"
+                                                                )}>
+                                                                    {evt.direction === 'ENTRY' ? "ENTRADA" : "SALIDA"}
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                    ) : (
-                                                        <span className="text-[9px] text-neutral-700 font-black uppercase tracking-tighter">Primer Registro</span>
-                                                    )}
+                                                    </EventDetailsDialog>
                                                 </TableCell>
 
-                                                {/* Date & Time combined */}
+                                                {/* Stay Duration */}
                                                 <TableCell>
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[11px] font-black text-neutral-300 font-mono">
-                                                            {new Date(evt.timestamp).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' }).replace('.', '')}
-                                                        </span>
-                                                        <span className="text-[10px] font-bold text-neutral-500 font-mono">
-                                                            {new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                                                        </span>
-                                                    </div>
+                                                    <EventDetailsDialog event={evt}>
+                                                        {(evt as any).stayDuration ? (
+                                                            <div className="flex flex-col gap-1">
+                                                                <div className={cn(
+                                                                    "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[8px] font-black border uppercase tracking-widest w-fit",
+                                                                    (evt as any).previousDirection === 'ENTRY'
+                                                                        ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
+                                                                        : "bg-neutral-500/10 text-neutral-400 border-neutral-500/20"
+                                                                )}>
+                                                                    {(evt as any).previousDirection === 'ENTRY' ? (
+                                                                        <><ArrowDownLeft size={10} /> ESTUVO DENTRO</>
+                                                                    ) : (
+                                                                        <><ArrowUpRight size={10} /> ESTUVO FUERA</>
+                                                                    )}
+                                                                </div>
+                                                                <span className="text-[10px] font-mono text-neutral-400 font-bold ml-1">
+                                                                    {formatDuration((evt as any).stayDuration)}
+                                                                </span>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-[9px] text-neutral-700 font-black uppercase tracking-tighter">Primer Registro</span>
+                                                        )}
+                                                    </EventDetailsDialog>
+                                                </TableCell>
+
+                                                {/* Date & Time */}
+                                                <TableCell>
+                                                    <EventDetailsDialog event={evt}>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-[11px] font-black text-neutral-300 font-mono">
+                                                                {new Date(evt.timestamp).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' }).replace('.', '')}
+                                                            </span>
+                                                            <span className="text-[10px] font-bold text-neutral-500 font-mono">
+                                                                {new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                                            </span>
+                                                        </div>
+                                                    </EventDetailsDialog>
                                                 </TableCell>
 
                                                 {/* Result Status */}
                                                 <TableCell className="text-right pr-4">
-                                                    <div className="flex justify-end">
-                                                        <div className={cn(
-                                                            "w-24 py-1.5 rounded-lg font-black text-[10px] uppercase text-center tracking-tighter shadow-lg",
-                                                            evt.decision === "GRANT"
-                                                                ? "bg-emerald-600 text-white shadow-emerald-900/40 border border-emerald-500/30"
-                                                                : "bg-red-600 text-white shadow-red-900/40 border border-red-500/30"
-                                                        )}>
-                                                            {evt.decision === "GRANT" ? "PERMITIDO" : "DENEGADO"}
+                                                    <EventDetailsDialog event={evt}>
+                                                        <div className="flex justify-end">
+                                                            <div className={cn(
+                                                                "w-24 py-1.5 rounded-lg font-black text-[10px] uppercase text-center tracking-tighter shadow-lg",
+                                                                evt.decision === "GRANT"
+                                                                    ? "bg-emerald-600 text-white shadow-emerald-900/40 border border-emerald-500/30"
+                                                                    : "bg-red-600 text-white shadow-red-900/40 border border-red-500/30"
+                                                            )}>
+                                                                {evt.decision === "GRANT" ? "PERMITIDO" : "DENEGADO"}
+                                                            </div>
                                                         </div>
-                                                    </div>
+                                                    </EventDetailsDialog>
                                                 </TableCell>
-                                            </TableRow>
-                                        </EventDetailsDialog>
+                                            </MotionTableRow>
+                                        </AnimatePresence>
                                     );
                                 })
                             )}

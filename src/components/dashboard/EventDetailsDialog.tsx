@@ -146,7 +146,7 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
     }
 
     const logoUrl = isLPR ? getCarLogo(meta.Marca) : null;
-    const eventImageUrl = getImageUrl(event.imagePath || event.snapshotPath || event.user?.cara);
+    const eventImageUrl = getImageUrl(event.imagePath || event.snapshotPath || (event.accessType !== 'PLATE' ? event.user?.cara : null)) || "/placeholder-camera.jpg";
     const userImageUrl = event.user?.cara ? getImageUrl(event.user.cara) : null;
 
     const dateObj = new Date(event.timestamp);
@@ -209,41 +209,54 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
                             {/* FACE SPECIFIC OVERLAYS */}
                             {event.accessType === 'FACE' && (
                                 <>
-                                    {/* Name & List Info (Bottom Left) */}
-                                    <div className="absolute bottom-8 left-8 z-30 max-w-[70%]">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            {detectedMode !== 'Estándar' && (
-                                                <div className="px-2 py-0.5 rounded bg-white/20 backdrop-blur-md border border-white/20 text-[10px] font-bold text-white uppercase tracking-widest">
-                                                    Lista: {detectedMode}
-                                                </div>
-                                            )}
-                                            {cleanSim && (
-                                                <div className="px-2 py-0.5 rounded bg-emerald-500/20 backdrop-blur-md border border-emerald-500/30 text-[10px] font-bold text-emerald-300 uppercase tracking-widest">
-                                                    {cleanSim} Similitud
-                                                </div>
-                                            )}
-                                        </div>
-                                        <h1 className="text-4xl font-black text-white uppercase tracking-tight leading-none drop-shadow-xl">
-                                            {event.user?.name || meta.Rostro || "Desconocido"}
-                                        </h1>
-
-                                        {/* Direction Pill (Modern) */}
-                                        <div className="mt-4 inline-flex">
-                                            <div className={cn(
-                                                "flex items-center gap-2 px-4 py-2 rounded-full backdrop-blur-xl border shadow-lg transition-all",
-                                                event.direction === 'ENTRY'
-                                                    ? "bg-blue-600/40 border-blue-400/50 text-white hover:bg-blue-600/60"
-                                                    : "bg-orange-600/40 border-orange-400/50 text-white hover:bg-orange-600/60"
-                                            )}>
-                                                {event.direction === 'ENTRY' ? <LogIn size={16} strokeWidth={3} /> : <LogOut size={16} strokeWidth={3} />}
-                                                <span className="text-xs font-black uppercase tracking-widest">
-                                                    {event.direction === 'ENTRY' ? 'Entrada' : 'Salida'}
-                                                </span>
-                                            </div>
+                                    {/* Direction - Top Left */}
+                                    <div className="absolute top-6 left-6 z-30">
+                                        {/* Direction Badge - Rectangular, no rounded */}
+                                        <div className={cn(
+                                            "flex items-center gap-2 px-4 py-2 backdrop-blur-xl shadow-lg",
+                                            event.direction === 'ENTRY'
+                                                ? "bg-blue-600/80 text-white"
+                                                : "bg-orange-600/80 text-white"
+                                        )}>
+                                            {event.direction === 'ENTRY' ? <LogIn size={16} strokeWidth={3} /> : <LogOut size={16} strokeWidth={3} />}
+                                            <span className="text-xs font-black uppercase tracking-widest">
+                                                {event.direction === 'ENTRY' ? 'Entrada' : 'Salida'}
+                                            </span>
                                         </div>
                                     </div>
 
-                                    {/* Face Crop (Bottom Right) - Only show if different from main snapshot or if it's the user's profile photo */}
+                                    {/* Decision & DateTime - Center */}
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center z-20 pointer-events-none gap-4">
+                                        {/* Decision */}
+                                        <div className="flex items-center gap-3">
+                                            {isGrant ? <ShieldCheck size={48} strokeWidth={2.5} className="text-emerald-400 drop-shadow-[0_0_20px_rgba(52,211,153,0.5)]" /> : <AlertCircle size={48} strokeWidth={2.5} className="text-red-400 drop-shadow-[0_0_20px_rgba(248,113,113,0.5)]" />}
+                                            <span className={cn(
+                                                "text-5xl font-black uppercase tracking-tight drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]",
+                                                isGrant ? "text-emerald-400" : "text-red-400"
+                                            )}>
+                                                {isGrant ? "PERMITIDO" : "DENEGADO"}
+                                            </span>
+                                        </div>
+
+                                        {/* Date & Time */}
+                                        <div className="bg-black/70 px-4 py-2 backdrop-blur-md rounded">
+                                            <p className="text-sm font-mono text-white font-bold">{dateStr} • {timeStr}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Name & Mode Info (Bottom Left) */}
+                                    <div className="absolute bottom-8 left-8 z-30 max-w-[70%]">
+                                        <h1 className="text-4xl font-black text-white uppercase tracking-tight leading-none drop-shadow-xl mb-3">
+                                            {event.user?.name || meta.Rostro || "Desconocido"}
+                                        </h1>
+                                        {detectedMode !== 'Estándar' && (
+                                            <div className="inline-block px-3 py-1.5 rounded-lg bg-white/90 backdrop-blur-md border border-white/30 text-xs font-black text-black uppercase tracking-widest shadow-lg">
+                                                {detectedMode}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Face Crop (Bottom Right) - No similarity badge */}
                                     {(meta.FaceImage || event.user?.cara) && (getImageUrl(meta.FaceImage || event.user?.cara) !== eventImageUrl) && (
                                         <div className="absolute bottom-8 right-8 z-40 w-32 h-32 rounded-xl overflow-hidden border-2 border-white/50 shadow-2xl bg-black transition-transform hover:scale-110 origin-bottom-right group-hover:border-white">
                                             <img
@@ -257,37 +270,18 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
                             )}
 
 
-                            {/* TOP RIGHT: MODE BADGE (Only for Face) */}
-                            {(isLPR || event.accessType === 'FACE') && (
+                            {/* TOP RIGHT: MODE BADGE (Only for LPR, removed for FACE) */}
+                            {isLPR && (
                                 <div className="absolute top-6 right-6 z-30">
                                     <div className="px-3 py-1 rounded-full bg-black/50 backdrop-blur-md border border-white/10 text-white shadow-xl">
                                         <p className="text-[10px] font-bold uppercase tracking-widest">
-                                            {event.accessType === 'FACE' ? `Modo: ${detectedMode}` : 'LPR MONITOR'}
+                                            LPR MONITOR
                                         </p>
                                     </div>
                                 </div>
                             )}
 
-                            {/* STATUS BADGE & TIME (Moved to Above Face Face/Bottom Right) */}
-                            {!isLPR && (
-                                <div className={cn("absolute z-50 flex flex-col items-end gap-1", (meta.FaceImage || event.user?.cara) ? "bottom-44 right-8" : "bottom-8 right-8")}>
-                                    {/* Date/Time */}
-                                    <div className="bg-black/60 px-2 py-1 rounded backdrop-blur-sm border border-white/10 mb-1">
-                                        <p className="text-[10px] font-mono text-white font-bold">{dateStr} {timeStr}</p>
-                                    </div>
 
-                                    {/* Decision Badge */}
-                                    <div className={cn(
-                                        "px-4 py-1.5 rounded-full shadow-2xl backdrop-blur-xl border flex items-center gap-2",
-                                        isGrant ? "bg-emerald-500/90 border-emerald-500/40 text-white" : "bg-red-500/90 border-red-500/40 text-white"
-                                    )}>
-                                        {isGrant ? <ShieldCheck size={14} strokeWidth={2.5} /> : <AlertCircle size={14} strokeWidth={2.5} />}
-                                        <span className="text-xs font-black uppercase tracking-wider leading-none">
-                                            {isGrant ? "AUTORIZADO" : "DENEGADO"}
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
 
                             {/* LPR Direction Badge (Existing Style preserved if needed, or unify?) 
                                 Converting LPR to new simple pill style for consistency if LPR */

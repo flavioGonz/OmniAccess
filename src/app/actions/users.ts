@@ -272,3 +272,121 @@ export async function deleteAllUsers() {
         throw new Error("Failed to delete all users");
     }
 }
+
+export async function importUserBatch(users: any[]) {
+    let successCount = 0;
+    let failCount = 0;
+    const errors: string[] = [];
+
+    for (const u of users) {
+        try {
+            // Normalize DNI
+            if (!u.Name || !u.DNI) {
+                failCount++;
+                errors.push(`Fila inválida: Falta Nombre o DNI`);
+                continue;
+            }
+
+            // Find or Upsert Unit
+            let unitId = null;
+            if (u.Unidad) {
+                const unitName = u.Unidad.toString().trim();
+                const unit = await prisma.unit.findFirst({
+                    where: { name: { equals: unitName, mode: 'insensitive' } }
+                });
+                if (unit) unitId = unit.id;
+            }
+
+            // Upsert User
+            // Look for existing user by DNI
+            let user = await prisma.user.findFirst({
+                where: { dni: u.DNI.toString() }
+            });
+
+            const userData = {
+                name: u.Name,
+                dni: u.DNI.toString(),
+                email: u.Email || null,
+                phone: u.Phone ? u.Phone.toString() : null,
+                role: (['RESIDENT', 'VISITOR', 'STAFF', 'ADMIN', 'PROVIDER'].includes(u.Role) ? u.Role : 'RESIDENT') as UserRole,
+                unitId: unitId,
+                cara: u.FaceURL || null,
+            };
+
+            if (user) {
+                user = await prisma.user.update({
+                    where: { id: user.id },
+                    data: userData
+                });
+            } else {
+                user = await prisma.user.create({
+                    data: userData
+                });
+            }
+
+            // Handle Credentials
+
+            // 1. Tags
+            if (u.Tags) {
+                const tags = u.Tags.toString().split(',').map((t: string) => t.trim()).filter((t: string) => t);
+                for (const tag of tags) {
+                    const exists = await prisma.credential.findFirst({
+                        where: { type: 'TAG', value: tag, userId: user.id }
+                    });
+                    if (!exists) {
+                        const existsGlobal = await prisma.credential.findFirst({ where: { type: 'TAG', value: tag } });
+                        if (!existsGlobal) {
+                            await prisma.credential.create({
+                                data: { type: 'TAG', value: tag, userId: user.id, notes: 'Importado Excel' }
+                            });
+                        }
+                    }
+                }
+            }
+
+            // 2. Plates
+            if (u.Plates) {
+                const plates = u.Plates.toString().split(',').map((p: string) => p.trim().toUpperCase()).filter((p: string) => p);
+                for (const plate of plates) {
+                    // Ensure Vehicle
+                    const existsVehicle = await prisma.vehicle.findUnique({ where: { plate } });
+                    if (!existsVehicle) {
+                        await prisma.vehicle.create({
+                            data: { plate, userId: user.id, type: 'SEDAN', brand: "Importado" }
+                        });
+                    }
+
+                    // Ensure Credential
+                    const existsCred = await prisma.credential.findFirst({ where: { type: 'PLATE', value: plate } });
+                    if (!existsCred) {
+                        await prisma.credential.create({
+                            data: { type: 'PLATE', value: plate, userId: user.id, notes: 'Importado Excel' }
+                        });
+                    }
+                }
+            }
+
+            // 3. Face (if processed from upload as credential)
+            if (u.FaceURL || (u.HasFace === 'YES')) {
+                const existsFace = await prisma.credential.findFirst({
+                    where: { type: 'FACE', userId: user.id }
+                });
+                if (!existsFace) {
+                    await prisma.credential.create({
+                        data: { type: 'FACE', value: user.dni || user.id, userId: user.id, notes: 'Importado Excel (Auto)' }
+                    });
+                }
+            }
+
+            successCount++;
+
+        } catch (e: any) {
+            console.error(e);
+            failCount++;
+            errors.push(`Error en fila de ${u.Name || 'Desconocido'}: ${e.message}`);
+        }
+    }
+
+    revalidatePath("/admin/users");
+    return { success: true, count: successCount, failed: failCount, errors };
+}

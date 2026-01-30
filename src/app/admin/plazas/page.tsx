@@ -40,6 +40,10 @@ interface Unit {
     id: string;
     name: string;
     number: string;
+    users?: {
+        id: string;
+        name: string;
+    }[];
 }
 
 export default function PlazasPage() {

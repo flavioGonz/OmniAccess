@@ -7,7 +7,7 @@ import {
     Users, ChevronRight, Search, Video, ScanFace, MoreVertical, ArrowRight,
     Check, Layers, Phone, Hash, Monitor, ChevronLeft, Globe, UserCircle,
     Building, ExternalLink, Map as MapIcon, Navigation, LocateFixed, Mail,
-    Contact, Clock, Activity, MapPin as MapPinIcon, X, Car
+    Contact, Clock, Activity, MapPin as MapPinIcon, X, Car, IdCard
 } from "lucide-react";
 import dynamic from 'next/dynamic';
 
@@ -43,8 +43,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
+interface ExtendedUser extends User {
+    vehicles: { plate: string }[];
+    credentials?: any[];
+}
+
 interface ExtendedUnit extends Unit {
-    users: User[];
+    users: ExtendedUser[];
     children?: ExtendedUnit[];
 }
 
@@ -62,6 +67,8 @@ export default function UnitsPage() {
     const [showEditDialog, setShowEditDialog] = useState(false);
     const [activeEditTab, setActiveEditTab] = useState<'general' | 'contact' | 'location' | 'map' | 'units' | 'residents' | 'vehicles'>('general');
     const [editingSubUnit, setEditingSubUnit] = useState<ExtendedUnit | null>(null);
+    const [showBulkDialog, setShowBulkDialog] = useState(false);
+    const [bulkPattern, setBulkPattern] = useState("A-Z, 13");
 
     // Form State
     const [formData, setFormData] = useState({
@@ -76,7 +83,8 @@ export default function UnitsPage() {
         contactEmail: "",
         deviceCount: "2",
         deviceType: "BOTH",
-        coordinates: "-34.6037, -58.3816"
+        coordinates: "-34.6037, -58.3816",
+        parentId: ""
     });
 
     const [step, setStep] = useState(1);
@@ -109,11 +117,11 @@ export default function UnitsPage() {
         loadAvailableUsers();
     }, []);
 
-    const handleCreateNew = () => {
+    const handleCreateNew = (parentId?: string) => {
         setEditingUnit(null);
         setFormData({
             name: "",
-            type: "BARRIO",
+            type: parentId ? "CASA" : "BARRIO",
             floors: "",
             lot: "",
             houseNumber: "",
@@ -123,7 +131,8 @@ export default function UnitsPage() {
             contactEmail: "",
             deviceCount: "2",
             deviceType: "BOTH",
-            coordinates: "-34.6037, -58.3816"
+            coordinates: "-34.6037, -58.3816",
+            parentId: parentId || ""
         });
         setStep(1);
         setMode('wizard');
@@ -143,7 +152,8 @@ export default function UnitsPage() {
             contactEmail: unit.contactEmail || "",
             deviceCount: unit.deviceCount?.toString() || "2",
             deviceType: unit.deviceType || "BOTH",
-            coordinates: unit.coordinates || "-34.6037, -58.3816"
+            coordinates: unit.coordinates || "-34.6037, -58.3816",
+            parentId: unit.parentId || ""
         });
         setActiveEditTab('general');
         setShowEditDialog(true);
@@ -168,6 +178,18 @@ export default function UnitsPage() {
             loadUnits();
         } catch (e) {
             toast.error("Error al guardar");
+        }
+    };
+
+    const handleBulkCreate = async () => {
+        if (!editingUnit) return;
+        try {
+            await bulkCreateSubUnits(editingUnit.id, bulkPattern);
+            toast.success("Generación masiva completada");
+            setShowBulkDialog(false);
+            loadUnits();
+        } catch (e) {
+            toast.error("Error en la generación masiva");
         }
     };
 
@@ -454,7 +476,7 @@ export default function UnitsPage() {
                         </Button>
                     </div>
 
-                    <Button onClick={handleCreateNew} size="sm" className="h-10 px-6 rounded-xl bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-600/20 font-bold text-[10px] uppercase tracking-widest">
+                    <Button onClick={() => handleCreateNew()} size="sm" className="h-10 px-6 rounded-xl bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-600/20 font-bold text-[10px] uppercase tracking-widest">
                         <Plus className="mr-2" size={16} /> Nueva Propiedad
                     </Button>
                 </div>
@@ -467,11 +489,11 @@ export default function UnitsPage() {
                         <Table>
                             <TableHeader className="bg-black/40 border-b border-white/5 sticky top-0 z-10 backdrop-blur-sm">
                                 <TableRow className="hover:bg-transparent border-none">
-                                    <TableHead className="w-[300px] text-[9px] font-black uppercase tracking-widest text-neutral-500 py-6 pl-8">Unidad / Identificador</TableHead>
+                                    <TableHead className="text-[9px] font-black uppercase tracking-widest text-neutral-500 py-6 pl-8">Unidad / Identificador</TableHead>
                                     <TableHead className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Ubicación / Complejo</TableHead>
-                                    <TableHead className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Estado / Ocupación</TableHead>
-                                    <TableHead className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Responsable</TableHead>
-                                    <TableHead className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Contacto</TableHead>
+                                    <TableHead className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Estado</TableHead>
+                                    <TableHead className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Residentes / Matrículas</TableHead>
+                                    <TableHead className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Contacto Admin</TableHead>
                                     <TableHead className="w-[100px] text-[9px] font-black uppercase tracking-widest text-neutral-500 text-right pr-8">Acciones</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -531,11 +553,28 @@ export default function UnitsPage() {
                                             </div>
                                         </TableCell>
                                         <TableCell>
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center overflow-hidden ring-1 ring-white/10">
-                                                    {unit.contactName ? <UserCircle size={14} className="text-neutral-600" /> : <UserCircle size={14} className="text-neutral-800" />}
-                                                </div>
-                                                <p className="text-[10px] font-bold text-neutral-400 uppercase truncate max-w-[100px]">{unit.contactName || "S/D"}</p>
+                                            <div className="space-y-1.5">
+                                                {unit.users.length > 0 ? (
+                                                    <div className="flex flex-col gap-1">
+                                                        {unit.users.slice(0, 2).map((user, idx) => (
+                                                            <div key={user.id} className="flex items-center gap-2">
+                                                                <p className="text-[10px] font-bold text-neutral-300 uppercase truncate max-w-[120px]">{user.name}</p>
+                                                                {user.vehicles?.length > 0 && (
+                                                                    <div className="flex gap-1">
+                                                                        {user.vehicles.map((v, vidx) => (
+                                                                            <span key={vidx} className="text-[7px] font-mono font-bold text-blue-400 bg-blue-500/10 px-1 rounded">{v.plate}</span>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                        {unit.users.length > 2 && (
+                                                            <p className="text-[8px] text-neutral-600 font-black uppercase">y {unit.users.length - 2} más...</p>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-[10px] text-neutral-700 italic uppercase font-bold">{unit.contactName || "Sin residentes"}</p>
+                                                )}
                                             </div>
                                         </TableCell>
                                         <TableCell>
@@ -607,6 +646,25 @@ export default function UnitsPage() {
                                             )}
                                         </div>
                                     </div>
+                                    {(selectedUnit.type === 'BARRIO' || selectedUnit.type === 'EDIFICIO') && (
+                                        <div className="space-y-1">
+                                            <span className="text-[8px] font-black text-neutral-600 uppercase tracking-widest">Contenido</span>
+                                            <p className="text-[10px] font-bold text-blue-500 uppercase">{selectedUnit.children?.length || 0} Sub-unidades</p>
+                                        </div>
+                                    )}
+                                    {selectedUnit.users.some(u => u.vehicles?.length > 0) && (
+                                        <div className="space-y-1">
+                                            <span className="text-[8px] font-black text-neutral-600 uppercase tracking-widest">Matrículas Activas</span>
+                                            <div className="flex gap-1.5">
+                                                {selectedUnit.users.flatMap(u => u.vehicles || []).slice(0, 4).map((v, idx) => (
+                                                    <Badge key={idx} className="bg-neutral-800 text-blue-400 border-white/5 text-[8px] font-mono h-4 font-black">{v.plate}</Badge>
+                                                ))}
+                                                {selectedUnit.users.flatMap(u => u.vehicles || []).length > 4 && (
+                                                    <span className="text-[8px] text-neutral-600 font-black">+{selectedUnit.users.flatMap(u => u.vehicles || []).length - 4}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -628,22 +686,41 @@ export default function UnitsPage() {
                 </div>
             </main>
 
-            {/* Edit Dialog - Refined & Elegant */}
+            {/* Edit Dialog - Professional & Clean */}
             <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-                <DialogContent className="bg-neutral-950 border-white/5 text-white max-w-4xl p-0 overflow-hidden outline-none rounded-2xl shadow-2xl">
+                <DialogContent className="bg-neutral-950 border border-white/10 text-white max-w-6xl p-0 overflow-hidden outline-none rounded-lg shadow-2xl">
                     <DialogHeader className="sr-only">
                         <DialogTitle>Editar Propiedad</DialogTitle>
                     </DialogHeader>
-                    <div className="flex h-[550px]">
-                        {/* Sidebar */}
-                        <div className="w-56 bg-neutral-900/50 border-r border-white/5 p-6 flex flex-col gap-1.5">
-                            <div className="mb-6 px-2">
-                                <h3 className="text-xs font-bold text-white uppercase tracking-widest">Configuración</h3>
-                                <p className="text-[8px] text-blue-500 font-bold uppercase tracking-widest mt-0.5 truncate">{editingUnit?.name}</p>
+
+                    {/* Clean Professional Header */}
+                    <div className="border-b border-white/10 bg-neutral-900/50">
+                        <div className="px-6 py-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-lg bg-blue-600/10 border border-blue-500/20 flex items-center justify-center">
+                                    <Building2 className="text-blue-500" size={18} />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-bold text-white uppercase tracking-wide">Configuración de Unidad</h3>
+                                    <p className="text-[10px] text-neutral-500 font-medium">{editingUnit?.name || 'Nueva Unidad'}</p>
+                                </div>
                             </div>
+                            <button
+                                onClick={() => setShowEditDialog(false)}
+                                className="w-8 h-8 rounded-md bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/30 flex items-center justify-center transition-colors"
+                            >
+                                <X className="text-neutral-500 hover:text-red-400" size={16} />
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="flex h-[600px]">
+                        {/* Compact Sidebar */}
+                        <div className="w-48 bg-neutral-900/30 border-r border-white/10 p-4 flex flex-col gap-1">
                             {[
                                 { id: 'general', icon: Info, label: 'General' },
-                                { id: 'location', icon: Navigation, label: 'Ubicación' },
+                                { id: 'location', icon: MapPinIcon, label: 'Ubicación' },
+                                ...(editingUnit?.type === 'BARRIO' || editingUnit?.type === 'EDIFICIO' ? [{ id: 'units', icon: LayoutGrid, label: 'Unidades' }] : []),
                                 { id: 'residents', icon: Users, label: 'Residentes' },
                                 { id: 'vehicles', icon: Car, label: 'Vehículos' },
                             ].map((tab) => (
@@ -651,10 +728,10 @@ export default function UnitsPage() {
                                     key={tab.id}
                                     onClick={() => setActiveEditTab(tab.id as any)}
                                     className={cn(
-                                        "flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all text-[10px] font-bold uppercase tracking-widest",
+                                        "flex items-center gap-2.5 px-3 py-2 rounded-md transition-all text-[11px] font-semibold uppercase tracking-wide",
                                         activeEditTab === tab.id
                                             ? "bg-blue-600 text-white"
-                                            : "text-neutral-500 hover:text-neutral-300 hover:bg-white/5"
+                                            : "text-neutral-400 hover:text-white hover:bg-white/5"
                                     )}
                                 >
                                     <tab.icon size={14} />
@@ -663,111 +740,230 @@ export default function UnitsPage() {
                             ))}
                         </div>
 
-                        {/* Content */}
-                        <div className="flex-1 flex flex-col bg-black/20">
-                            <div className="flex-1 overflow-y-auto p-10 custom-scrollbar">
+                        {/* Content Area */}
+                        <div className={cn(
+                            "flex-1 flex flex-col",
+                            activeEditTab === 'location' ? "" : "bg-black/20"
+                        )}>
+                            <div className={cn(
+                                "flex-1",
+                                activeEditTab === 'location' ? "relative" : "overflow-y-auto p-6 custom-scrollbar"
+                            )}>
                                 {activeEditTab === 'general' && (
-                                    <div className="space-y-6 animate-in fade-in duration-300">
-                                        <div className="grid grid-cols-2 gap-6">
-                                            <div className="space-y-1.5 col-span-2">
-                                                <Label className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest">Nombre de la Unidad</Label>
-                                                <Input
-                                                    value={formData.name}
-                                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                                    className="bg-black/40 border-white/10 h-10 rounded-lg text-sm font-semibold uppercase"
-                                                />
+                                    <div className="space-y-5 animate-in fade-in duration-300">
+                                        <div className="mb-4">
+                                            <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-1">Información General</h4>
+                                            <p className="text-[10px] text-neutral-500">Datos básicos de identificación</p>
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-4">
+                                            <div className="col-span-3 space-y-1.5">
+                                                <Label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wide">Nombre de la Unidad</Label>
+                                                <div className="relative">
+                                                    <Building className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600" size={14} />
+                                                    <Input
+                                                        value={formData.name}
+                                                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                                        className="bg-black/40 border-white/10 hover:border-blue-500/30 focus:border-blue-500 h-9 rounded-md text-sm font-medium pl-9 transition-colors"
+                                                        placeholder="Ej: Barrio Los Álamos"
+                                                    />
+                                                </div>
                                             </div>
+
                                             <div className="space-y-1.5">
-                                                <Label className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest">Tipo</Label>
-                                                <Select value={formData.type} onValueChange={(v) => setFormData({ ...formData, type: v as any })}>
-                                                    <SelectTrigger className="bg-black/40 border-white/10 h-10 rounded-lg text-xs font-bold uppercase">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent className="bg-neutral-900 border-white/10 text-white">
-                                                        <SelectItem value="BARRIO" className="text-xs uppercase font-bold">Barrio / Loteo</SelectItem>
-                                                        <SelectItem value="EDIFICIO" className="text-xs uppercase font-bold">Edificio / Torre</SelectItem>
-                                                        <SelectItem value="CASA" className="text-xs uppercase font-bold">Vivienda</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
+                                                <Label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wide">Lote / Parcela</Label>
+                                                <div className="relative">
+                                                    <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600" size={14} />
+                                                    <Input
+                                                        value={formData.lot}
+                                                        onChange={(e) => setFormData({ ...formData, lot: e.target.value })}
+                                                        className="bg-black/40 border-white/10 hover:border-blue-500/30 focus:border-blue-500 h-9 rounded-md text-sm font-semibold pl-9 text-blue-400 transition-colors"
+                                                        placeholder="A-45"
+                                                    />
+                                                </div>
                                             </div>
+
                                             <div className="space-y-1.5">
-                                                <Label className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest">Lote / Parcela</Label>
-                                                <Input
-                                                    value={formData.lot}
-                                                    onChange={(e) => setFormData({ ...formData, lot: e.target.value })}
-                                                    className="bg-black/40 border-white/10 h-10 rounded-lg text-blue-400 font-bold"
-                                                />
+                                                <Label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wide">Nº Casa / Puerta</Label>
+                                                <div className="relative">
+                                                    <Home className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600" size={14} />
+                                                    <Input
+                                                        value={formData.houseNumber}
+                                                        onChange={(e) => setFormData({ ...formData, houseNumber: e.target.value })}
+                                                        className="bg-black/40 border-white/10 hover:border-blue-500/30 focus:border-blue-500 h-9 rounded-md text-sm font-medium pl-9 transition-colors"
+                                                        placeholder="154"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {formData.type === 'EDIFICIO' && (
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wide">Pisos</Label>
+                                                    <div className="relative">
+                                                        <Layers className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600" size={14} />
+                                                        <Input
+                                                            type="number"
+                                                            value={formData.floors}
+                                                            onChange={(e) => setFormData({ ...formData, floors: e.target.value })}
+                                                            className="bg-black/40 border-white/10 hover:border-blue-500/30 focus:border-blue-500 h-9 rounded-md text-sm font-medium pl-9 transition-colors"
+                                                            placeholder="10"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="pt-4 border-t border-white/5">
+                                            <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-3">Contacto</h4>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wide">Persona de Contacto</Label>
+                                                    <div className="relative">
+                                                        <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600" size={14} />
+                                                        <Input
+                                                            value={formData.contactName}
+                                                            onChange={(e) => setFormData({ ...formData, contactName: e.target.value })}
+                                                            className="bg-black/40 border-white/10 hover:border-blue-500/30 focus:border-blue-500 h-9 rounded-md text-sm pl-9 transition-colors"
+                                                            placeholder="Nombre completo"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wide">Teléfono</Label>
+                                                    <div className="relative">
+                                                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600" size={14} />
+                                                        <Input
+                                                            value={formData.adminPhone}
+                                                            onChange={(e) => setFormData({ ...formData, adminPhone: e.target.value })}
+                                                            className="bg-black/40 border-white/10 hover:border-blue-500/30 focus:border-blue-500 h-9 rounded-md text-sm pl-9 transition-colors"
+                                                            placeholder="+54 9 ..."
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="col-span-2 space-y-1.5">
+                                                    <Label className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wide">Email</Label>
+                                                    <div className="relative">
+                                                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600" size={14} />
+                                                        <Input
+                                                            value={formData.contactEmail}
+                                                            onChange={(e) => setFormData({ ...formData, contactEmail: e.target.value })}
+                                                            className="bg-black/40 border-white/10 hover:border-blue-500/30 focus:border-blue-500 h-9 rounded-md text-sm pl-9 transition-colors"
+                                                            placeholder="email@ejemplo.com"
+                                                        />
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
                                 )}
 
                                 {activeEditTab === 'location' && (
-                                    <div className="space-y-4 animate-in fade-in duration-300">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <Navigation className="text-blue-500" size={16} />
-                                            <h4 className="text-[10px] font-bold text-white uppercase tracking-widest">Ubicación en Mapa</h4>
+                                    <>
+                                        {/* Input flotante sobre el mapa - SIN bordes redondeados */}
+                                        <div className="absolute top-4 left-4 right-4 z-10">
+                                            <div className="relative">
+                                                <MapPinIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600" size={14} />
+                                                <Input
+                                                    value={formData.address}
+                                                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                                                    placeholder="Ej: Av. Principal 123, Ciudad, Provincia"
+                                                    className="bg-neutral-950/95 backdrop-blur-sm border-white/20 hover:border-blue-500/50 focus:border-blue-500 h-10 rounded-none text-sm pl-9 shadow-xl transition-colors"
+                                                />
+                                            </div>
                                         </div>
-                                        <div className="bg-black/40 border border-white/5 rounded-2xl overflow-hidden h-[300px]">
+
+                                        {/* Mapa ocupando TODO el espacio - de arriba abajo */}
+                                        <div className="absolute inset-0 w-full h-full">
                                             <LocationPicker
                                                 coords={formData.coordinates}
                                                 onChange={(val) => setFormData({ ...formData, coordinates: val })}
                                             />
                                         </div>
-                                        <div className="space-y-1.5">
-                                            <Label className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest">Dirección Física / Referencia</Label>
-                                            <Input
-                                                value={formData.address}
-                                                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                                                placeholder="Ej: Calle Principal 123"
-                                                className="bg-black/40 border-white/10 h-10 rounded-lg text-xs"
-                                            />
-                                        </div>
-                                    </div>
+                                    </>
                                 )}
 
                                 {activeEditTab === 'residents' && (
-                                    <div className="space-y-6 animate-in fade-in duration-300">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <h4 className="text-[10px] font-bold text-white uppercase tracking-widest">Residentes del Lote</h4>
-                                            <Badge className="bg-blue-600 text-white border-none text-[8px] font-black">{editingUnit?.users?.length || 0} Vinculados</Badge>
+                                    <div className="space-y-4 animate-in fade-in duration-300">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div>
+                                                <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-1">Residentes Vinculados</h4>
+                                                <p className="text-[10px] text-neutral-500">Habitantes de esta propiedad</p>
+                                            </div>
+                                            <Badge className="bg-blue-600/20 text-blue-400 border border-blue-500/30 text-[10px] font-bold px-2.5 py-0.5">
+                                                {editingUnit?.users?.length || 0} Personas
+                                            </Badge>
                                         </div>
-                                        <div className="grid grid-cols-1 gap-3">
+
+                                        <div className="grid grid-cols-1 gap-2">
                                             {editingUnit?.users?.map(user => (
-                                                <div key={user.id} className="bg-neutral-900/60 p-4 rounded-2xl flex items-center justify-between border border-white/5 group">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center relative overflow-hidden ring-1 ring-white/5">
-                                                            {user.cara ? <Image src={user.cara} alt="" fill className="object-cover" /> : <UserCircle size={18} className="text-neutral-700" />}
+                                                <div key={user.id} className="bg-neutral-900/40 hover:bg-neutral-900/60 p-3 rounded-md flex items-center justify-between border border-white/5 hover:border-blue-500/30 transition-colors group">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-9 h-9 rounded-md bg-white/5 flex items-center justify-center relative overflow-hidden border border-white/5">
+                                                            {user.cara ? <Image src={user.cara} alt="" fill className="object-cover" /> : <UserCircle size={18} className="text-neutral-600" />}
                                                         </div>
-                                                        <div>
-                                                            <p className="font-bold text-white uppercase text-xs tracking-tight">{user.name}</p>
-                                                            <p className="text-[9px] font-black text-neutral-600 uppercase tracking-widest">{user.role}</p>
+                                                        <div className="flex flex-col">
+                                                            <div className="flex items-center gap-2">
+                                                                <p className="font-semibold text-white text-xs">{user.name}</p>
+                                                                <div className="flex items-center gap-1">
+                                                                    {(user as any).credentials?.some((c: any) => c.type === 'FACE') && <ScanFace size={10} className="text-emerald-500" />}
+                                                                    {(user as any).credentials?.some((c: any) => c.type === 'PLATE') && <Car size={10} className="text-blue-500" />}
+                                                                    {(user as any).credentials?.some((c: any) => c.type === 'TAG') && <IdCard size={10} className="text-amber-500" />}
+                                                                    {(user as any).credentials?.some((c: any) => c.type === 'PIN') && <Hash size={10} className="text-purple-500" />}
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 mt-0.5">
+                                                                <span className="text-[9px] text-neutral-500 uppercase font-medium">{user.role}</span>
+                                                                {user.vehicles?.length > 0 && (
+                                                                    <div className="flex items-center gap-1 border-l border-white/10 pl-2">
+                                                                        {user.vehicles.map((v: any, vidx: number) => (
+                                                                            <span key={vidx} className="text-[9px] font-mono font-semibold text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">{v.plate}</span>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                    <Button
-                                                        onClick={async () => {
-                                                            await unassignUserFromUnit(user.id);
-                                                            toast.success(`Residente ${user.name} desvinculado`);
-                                                            loadUnits();
-                                                            loadAvailableUsers();
-                                                        }}
-                                                        variant="ghost" size="icon" className="h-8 w-8 text-neutral-700 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-                                                    >
-                                                        <X size={14} />
-                                                    </Button>
+                                                    <div className="flex items-center gap-1">
+                                                        <Button
+                                                            onClick={() => window.open(`/admin/users?q=${encodeURIComponent(user.name)}`, '_blank')}
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-7 w-7 text-neutral-600 hover:text-blue-400 hover:bg-blue-500/10 rounded-md transition-colors"
+                                                            title="Ver Perfil"
+                                                        >
+                                                            <ExternalLink size={13} />
+                                                        </Button>
+                                                        <Button
+                                                            onClick={async () => {
+                                                                await unassignUserFromUnit(user.id);
+                                                                toast.success(`${user.name} desvinculado`);
+                                                                loadUnits();
+                                                                loadAvailableUsers();
+                                                            }}
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-7 w-7 text-neutral-600 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                                                        >
+                                                            <X size={13} />
+                                                        </Button>
+                                                    </div>
                                                 </div>
                                             ))}
-                                            <Button
+
+                                            <button
                                                 onClick={() => setShowAssignDialog(true)}
-                                                variant="outline"
-                                                className="w-full mt-2 h-12 bg-white/[0.02] border-dashed border-white/10 rounded-2xl font-black text-[10px] uppercase tracking-widest text-blue-500 hover:bg-blue-500/5 hover:border-blue-500/30 transition-all"
+                                                className="w-full mt-2 h-10 bg-white/5 hover:bg-blue-500/10 border border-dashed border-white/10 hover:border-blue-500/30 rounded-md font-semibold text-[10px] uppercase tracking-wide text-blue-400 hover:text-blue-300 transition-colors flex items-center justify-center gap-2"
                                             >
-                                                <Plus size={16} className="mr-2" /> Vincular Nuevo Residente
-                                            </Button>
+                                                <Plus size={14} />
+                                                Vincular Nuevo Residente
+                                            </button>
 
                                             {(editingUnit?.users?.length || 0) === 0 && (
-                                                <div className="py-8 text-center bg-black/20 rounded-2xl border border-dashed border-white/5 opacity-50">
-                                                    <p className="text-[9px] font-bold text-neutral-700 uppercase tracking-widest">Sin habitantes registrados actualmente</p>
+                                                <div className="py-12 text-center bg-black/20 rounded-md border border-dashed border-white/5">
+                                                    <Users size={32} className="mx-auto text-neutral-800 mb-3" />
+                                                    <p className="text-[10px] font-semibold text-neutral-600 uppercase tracking-wide">Sin habitantes registrados</p>
                                                 </div>
                                             )}
                                         </div>
@@ -825,29 +1021,131 @@ export default function UnitsPage() {
                                         </div>
                                     </DialogContent>
                                 </Dialog>
-
-                                {activeEditTab === 'vehicles' && (
+                                {activeEditTab === 'units' && (
                                     <div className="space-y-6 animate-in fade-in duration-300">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <h4 className="text-[10px] font-bold text-white uppercase tracking-widest">Vehículos y Matrículas</h4>
-                                            <Badge className="bg-emerald-600 text-white border-none text-[8px] font-black">LPR Activo</Badge>
+                                        <div className="flex items-center justify-between mb-4">
+                                            <div className="flex items-center gap-2">
+                                                <LayoutGrid className="text-blue-500" size={16} />
+                                                <h4 className="text-[10px] font-bold text-white uppercase tracking-widest">Unidades del Complejo</h4>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <Button
+                                                    onClick={() => setShowBulkDialog(true)}
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-8 bg-black/40 border-white/10 rounded-lg font-bold text-[8px] uppercase tracking-widest text-emerald-500 hover:bg-emerald-500/5 hover:border-emerald-500/30"
+                                                >
+                                                    <Layers className="mr-2" size={12} /> Generación Masiva
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        if (!editingUnit) return;
+                                                        const pId = editingUnit.id;
+                                                        setShowEditDialog(false);
+                                                        handleCreateNew(pId);
+                                                    }}
+                                                    className="h-8 bg-blue-600 border-none rounded-lg font-bold text-[8px] uppercase tracking-widest text-white hover:bg-blue-500"
+                                                >
+                                                    <Plus className="mr-2" size={12} /> Nueva
+                                                </Button>
+                                            </div>
                                         </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            {editingUnit?.users?.flatMap(u => (u as any).credentials?.filter((c: any) => c.type === 'PLATE').map((c: any) => ({ ...c, userName: u.name }))).map((plate, idx) => (
-                                                <div key={idx} className="bg-black/40 p-4 rounded-2xl border border-white/5 flex items-center gap-4">
-                                                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500">
-                                                        <Car size={18} />
+
+                                        <div className="grid grid-cols-2 gap-3 max-h-[350px] overflow-y-auto custom-scrollbar pr-2">
+                                            {editingUnit?.children?.map((child) => (
+                                                <div key={child.id} className="bg-neutral-900/60 p-4 rounded-2xl flex items-center justify-between border border-white/5 hover:border-blue-500/30 transition-all group">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-neutral-600 group-hover:text-blue-400 group-hover:bg-blue-600/10 transition-all">
+                                                            <Home size={14} />
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-bold text-white uppercase text-xs tracking-tight">{child.name}</p>
+                                                            <div className="flex items-center gap-2">
+                                                                <p className="text-[8px] font-black text-neutral-600 uppercase tracking-widest leading-none">
+                                                                    {child.lot ? `Lote ${child.lot}` : ""} {child.houseNumber ? `N° ${child.houseNumber}` : ""}
+                                                                </p>
+                                                                {child.users?.some(u => u.vehicles?.length > 0) && (
+                                                                    <div className="flex items-center gap-1.5 border-l border-white/10 pl-2">
+                                                                        <Car size={10} className="text-blue-500" />
+                                                                        <div className="flex gap-1">
+                                                                            {child.users.flatMap(u => u.vehicles || []).slice(0, 2).map((v, idx) => (
+                                                                                <span key={idx} className="text-[7px] font-mono font-bold text-blue-400 bg-blue-500/10 px-1 rounded">{v.plate}</span>
+                                                                            ))}
+                                                                            {child.users.flatMap(u => u.vehicles || []).length > 2 && <span className="text-[7px] text-neutral-600 font-bold">...</span>}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <p className="text-lg font-black text-white tracking-widest uppercase">{plate.value}</p>
-                                                        <p className="text-[8px] font-bold text-neutral-600 uppercase tracking-widest">Propietario: {plate.userName}</p>
+                                                    <div className="flex items-center gap-1">
+                                                        <div className="flex -space-x-1.5 mr-2">
+                                                            {child.users?.slice(0, 3).map((u, i) => (
+                                                                <div key={i} className="w-5 h-5 rounded-full border border-black bg-neutral-800 flex items-center justify-center overflow-hidden ring-1 ring-white/10" title={u.name}>
+                                                                    {u.cara ? <Image src={u.cara} alt="" width={20} height={20} className="object-cover" /> : <UserCircle size={10} className="text-neutral-600" />}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                        <Badge className={cn("text-[7px] border-none font-black h-4 px-1.5 uppercase", child.users.length > 0 ? "bg-emerald-500/10 text-emerald-500" : "bg-neutral-800 text-neutral-500")}>
+                                                            {child.users.length > 0 ? 'Ocupada' : 'Libre'}
+                                                        </Badge>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-7 w-7 text-neutral-700 hover:text-white rounded-md"
+                                                            onClick={() => {
+                                                                setEditingUnit(child);
+                                                                setActiveEditTab('general');
+                                                            }}
+                                                        >
+                                                            <Pencil size={12} />
+                                                        </Button>
                                                     </div>
                                                 </div>
                                             ))}
+                                            {(editingUnit?.children?.length || 0) === 0 && (
+                                                <div className="col-span-2 py-12 text-center bg-black/20 rounded-2xl border border-dashed border-white/5 opacity-50">
+                                                    <LayoutGrid size={32} className="mx-auto text-neutral-800 mb-3" />
+                                                    <p className="text-[9px] font-bold text-neutral-700 uppercase tracking-widest">No hay sub-unidades definidas</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeEditTab === 'vehicles' && (
+                                    <div className="space-y-4 animate-in fade-in duration-300">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div>
+                                                <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-1">Vehículos Registrados</h4>
+                                                <p className="text-[10px] text-neutral-500">Matrículas con acceso LPR</p>
+                                            </div>
+                                            <Badge className="bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold px-2.5 py-0.5 flex items-center gap-1.5">
+                                                <Activity size={10} />
+                                                LPR Activo
+                                            </Badge>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            {editingUnit?.users?.flatMap(u => (u as any).credentials?.filter((c: any) => c.type === 'PLATE').map((c: any) => ({ ...c, userName: u.name }))).map((plate, idx) => (
+                                                <div key={idx} className="bg-black/40 hover:bg-black/60 p-3 rounded-md border border-white/10 hover:border-emerald-500/30 flex items-center gap-3 transition-colors">
+                                                    <div className="w-10 h-10 rounded-md bg-emerald-500/10 flex items-center justify-center text-emerald-400 border border-emerald-500/20">
+                                                        <Car size={18} />
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <p className="text-base font-black text-white tracking-wider uppercase font-mono">{plate.value}</p>
+                                                        <p className="text-[9px] font-medium text-neutral-500 uppercase">{plate.userName}</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+
                                             {(editingUnit?.users?.reduce((acc, u) => acc + (u as any).credentials?.filter((c: any) => c.type === 'PLATE').length || 0, 0) || 0) === 0 && (
-                                                <div className="col-span-2 py-12 text-center bg-black/20 rounded-2xl border border-dashed border-white/5">
+                                                <div className="col-span-2 py-12 text-center bg-black/20 rounded-md border border-dashed border-white/5">
                                                     <Car size={32} className="mx-auto text-neutral-800 mb-3" />
-                                                    <p className="text-[10px] font-bold text-neutral-700 uppercase tracking-widest">Sin matrículas registradas</p>
+                                                    <p className="text-[10px] font-semibold text-neutral-600 uppercase tracking-wide">Sin matrículas registradas</p>
+                                                    <p className="text-[9px] text-neutral-700 mt-1">Los vehículos se vinculan desde el perfil del usuario</p>
                                                 </div>
                                             )}
                                         </div>
@@ -855,15 +1153,53 @@ export default function UnitsPage() {
                                 )}
                             </div>
 
-                            <div className="p-6 bg-neutral-900 border-t border-white/5 flex justify-end gap-3">
-                                <Button variant="ghost" onClick={() => setShowEditDialog(false)} className="h-9 px-4 rounded-lg text-neutral-500 font-bold text-[10px] uppercase tracking-widest">
-                                    Descartar
-                                </Button>
-                                <Button onClick={handleSave} className="h-9 px-6 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold text-[10px] uppercase tracking-widest">
+                            {/* Clean Footer */}
+                            <div className="p-4 bg-neutral-900/50 border-t border-white/10 flex justify-end items-center gap-3">
+                                <button
+                                    onClick={() => setShowEditDialog(false)}
+                                    className="h-9 px-5 rounded-md bg-white/5 hover:bg-white/10 border border-white/10 text-neutral-400 hover:text-white font-semibold text-[10px] uppercase tracking-wide transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleSave}
+                                    className="h-9 px-6 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-semibold text-[10px] uppercase tracking-wide transition-colors flex items-center gap-1.5"
+                                >
+                                    <Check size={13} />
                                     Guardar
-                                </Button>
+                                </button>
                             </div>
                         </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Bulk Creation Dialog */}
+            <Dialog open={showBulkDialog} onOpenChange={setShowBulkDialog}>
+                <DialogContent className="bg-neutral-900 border-white/10 text-white max-w-sm p-6 rounded-2xl shadow-2xl outline-none">
+                    <DialogHeader>
+                        <DialogTitle className="text-lg font-black uppercase tracking-tighter">Generación Masiva</DialogTitle>
+                        <DialogDescription className="text-xs text-neutral-500 italic">
+                            Se generarán sub-unidades automáticamente siguiendo el patrón definido.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-6">
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest text-center block">Patrón de Nomenclatura</Label>
+                            <Input
+                                value={bulkPattern}
+                                onChange={(e) => setBulkPattern(e.target.value)}
+                                placeholder="A-Z, 13"
+                                className="bg-black/40 border-white/10 h-12 text-lg font-black text-blue-400 uppercase text-center rounded-xl"
+                            />
+                            <p className="text-[8px] text-neutral-600 uppercase font-bold text-center mt-2 px-4">
+                                Ejemplo: "A-Z, 13" generará lotes desde A01 hasta Z13.
+                            </p>
+                        </div>
+
+                        <Button onClick={handleBulkCreate} className="w-full h-12 bg-emerald-600 hover:bg-emerald-500 font-black text-[10px] uppercase tracking-widest text-white rounded-xl shadow-lg transition-all active:scale-95">
+                            <Layers className="mr-2" size={16} /> Iniciar Generación
+                        </Button>
                     </div>
                 </DialogContent>
             </Dialog>

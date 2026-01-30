@@ -2,173 +2,43 @@
 
 ## ✅ Funcionalidades Implementadas
 
-### 1. Webhook Hikvision
-- **Ruta**: `http://[IP_SERVIDOR]:10000/api/webhooks/hikvision`
-- **Método**: POST (multipart/form-data)
-- **Funcionalidad**:
-  - Recibe eventos de cámaras Hikvision
-  - Extrae XML con datos de matrícula
-  - Guarda imágenes en `/public/uploads/events`
-  - Identifica dispositivo por MAC Address
-  - Busca credenciales en base de datos
-  - Crea eventos de acceso (GRANT/DENY)
-  - Emite eventos en tiempo real vía Socket.io
-  - Responde con XML formato Hikvision
+### 1. Webhooks de Acceso (Hikvision y Akuvox)
+- **Hikvision**: Procesa eventos LPR y faciales desde cámaras.
+- **Akuvox**: Soporta terminales de la serie R29, A05, E16, etc.
+- **Lógica**: Identificación por MAC/IP, validación de credenciales en DB, guardado de capturas en S3/Local.
+- **Respuesta**: Emite eventos vía Socket.io y responde a los dispositivos para abrir puertas.
 
-### 2. Dashboard en Tiempo Real
-- **Ruta**: `http://localhost:10001/admin/dashboard`
-- **Funcionalidad**:
-  - Muestra eventos de acceso en tiempo real
-  - Carga últimos 20 eventos históricos al iniciar
-  - Actualización automática vía Socket.io (Puerto 10000)
-  - Muestra imagen, matrícula, decisión, usuario y dispositivo
-  - Estadísticas rápidas (eventos del día, denegados)
+### 2. Dashboard y Gestión Administrativa
+- **Dashboard**: Vista en tiempo real de eventos con fotos y decisiones.
+- **Dispositivos**: CRUD de cámaras y terminales con prueba de conexión ISAPI/Akuvox.
+- **Usuarios/Unidades**: Gestión de residentes, visitantes y su estructura jerárquica.
+- **Historial Maestro**: Tabla avanzada con filtros, scroll infinito y exportación a Excel.
 
-### 3. Gestión de Dispositivos
-- **Ruta**: `http://localhost:10001/admin/devices`
-- **Funcionalidad**:
-  - Crear dispositivos (Cámaras LPR / Terminales Faciales)
-  - Editar dispositivos existentes
-  - Eliminar dispositivos
-  - Probar conexión ISAPI (Hikvision)
-  - Mostrar estado de conexión
-  - Asignar a grupos de acceso
+### 3. Chatbot WhatsApp (WAHA Integration)
+- **Comandos**: `estado`, `ultimo`, `entradas`, `salidas`, `eventos`.
+- **Matrículas**: Consulta detallada enviando `ABC123.` (con punto) y gestión enviando `matricula ABC123`.
+- **Registro**: Permite agregar usuarios y matrículas directamente desde WhatsApp mediante flujo de sesión.
+- **Alertas**: Notificaciones en tiempo real de accesos denegados o permitidos.
 
-### 4. Gestión de Usuarios
-- **Ruta**: `http://localhost:10001/admin/users`
-- **Funcionalidad**:
-  - Crear usuarios con credenciales (PLATE/FACE)
-  - Asignar a unidades
-  - Asignar a grupos de acceso
-  - Sincronización automática a dispositivos
-
-### 5. Gestión de Unidades
-- **Ruta**: `http://localhost:10001/admin/units`
-- **Funcionalidad**:
-  - Crear unidades (departamentos, edificios, etc.)
-  - Asignar usuarios a unidades
-
-### 6. Grupos de Acceso
-- **Ruta**: `http://localhost:10001/admin/groups`
-- **Funcionalidad**:
-  - Crear grupos de acceso
-  - Asignar usuarios y dispositivos a grupos
-  - Control de acceso basado en grupos
-
-### 7. Historial de Eventos
-- **Ruta**: `http://localhost:10001/admin/history`
-- **Funcionalidad**:
-  - Ver todos los eventos de acceso
-  - Filtrar por fecha, usuario, dispositivo
-  - Ver imágenes de eventos
-
-## 🔧 Configuración de Cámaras Hikvision
-
-### Paso 1: Acceder a la Cámara
-1. Abrir navegador: `http://[IP_CAMARA]`
-2. Login con credenciales admin
-
-### Paso 2: Configurar Webhook
-1. Ir a: **Configuration → Event → Smart Event → ANPR**
-2. Buscar: **HTTP Listening** o **Upload to HTTP**
-3. Configurar:
-   - **IP de destino**: `[IP_SERVIDOR]` (ej: 192.168.196.191)
-   - **Puerto**: `10000`
-   - **URL**: `/api/webhooks/hikvision`
-   - **Protocolo**: `HTTP`
-   - **Método**: `POST`
-
-### Paso 3: Registrar Dispositivo en el Sistema
-1. Ir a: `http://localhost:10001/admin/devices`
-2. Clic en "Agregar Dispositivo"
-3. Completar:
-   - **Nombre**: Ej: "Cámara Entrada Principal"
-   - **Tipo**: LPR_CAMERA
-   - **Marca**: HIKVISION
-   - **IP**: [IP de la cámara]
-   - **MAC Address**: [MAC de la cámara] (importante para identificación)
-   - **Dirección**: ENTRY o EXIT
-   - **Usuario**: admin (de la cámara)
-   - **Contraseña**: [contraseña de la cámara]
-4. Clic en "Probar" para verificar conexión ISAPI
-
-## 📝 Flujo de Trabajo
-
-### Crear un Usuario con Matrícula
-1. Ir a: `http://localhost:10001/admin/units`
-2. Crear una unidad (ej: "Depto 101")
-3. Ir a: `http://localhost:10001/admin/users`
-4. Crear usuario:
-   - Nombre, email, teléfono
-   - Tipo de credencial: PLATE
-   - Valor: ABC123 (matrícula)
-   - Seleccionar unidad
-   - (Opcional) Asignar a grupo de acceso
-
-### Probar el Sistema
-1. Abrir dashboard: `http://localhost:10001/admin/dashboard`
-2. Hacer que la cámara detecte la matrícula ABC123
-3. Ver el evento aparecer en tiempo real:
-   - Si la matrícula está registrada: **GRANT** (verde)
-   - Si no está registrada: **DENY** (rojo)
-
-## 🐛 Solución de Problemas
-
-### La cámara no envía eventos
-1. Verificar que el webhook está configurado correctamente
-2. Probar endpoint: `http://[IP_SERVIDOR]:10000/api/webhooks/hikvision`
-3. Revisar logs del servidor en la consola
-4. Verificar firewall (puerto 10000 abierto)
-
-### No se ven eventos en el dashboard
-1. Abrir consola del navegador (F12)
-2. Verificar conexión Socket.io (puerto 10000)
-3. Revisar que el servidor esté corriendo
-4. Refrescar la página
-
-### Error de conexión ISAPI
-1. Verificar IP de la cámara
-2. Verificar credenciales (usuario/contraseña)
-3. Verificar que la cámara es accesible desde el servidor
-4. Revisar que el puerto HTTP está habilitado en la cámara
+### 4. Drivers de Dispositivos (Lib)
+- **HikvisionDriver**: Sincronización de matrículas y rostros (múltiples estrategias de búsqueda).
+- **AkuvoxDriver**: Sincronización de rostros, tags, PINs y apertura remota (relays).
 
 ## 📊 Base de Datos
+- **Prisma**: Uso de PostgreSQL.
+- **Modelos**: User, Vehicle, Unit, Credential, AccessGroup, Schedule, AccessEvent, WhatsAppSession, WahaRequestLog.
 
-### Modelos Principales
-- **Device**: Cámaras y terminales
-- **User**: Usuarios del sistema
-- **Unit**: Unidades (departamentos, edificios)
-- **Credential**: Credenciales (matrículas, rostros)
-- **AccessGroup**: Grupos de acceso
-- **AccessEvent**: Eventos de acceso (log)
+## 🚀 Próximos Pasos (Prioritarios)
 
-### Tipos de Dispositivos
-- **LPR_CAMERA**: Cámara de reconocimiento de matrículas
-- **FACE_TERMINAL**: Terminal de reconocimiento facial
+1. **Control de Horarios (Schedules)**: Implementar la validación de horas/días en los webhooks de acceso.
+2. **Autenticación**: Implementar NextAuth.js para el panel administrativo.
+3. **Mejoras Chatbot**:
+   - Comando `quien esta` (lista de personas presentes hoy).
+   - Búsqueda de personas por nombre.
+4. **Optimización**: Usar `sharp` para procesar miniaturas de eventos y ahorrar almacenamiento.
+5. **Drivers restantes**: Completar implementaciones de Dahua, Intelbras y ZKTeco.
+6. **App Móvil**: Iniciar desarrollo de visualizador de eventos para residentes.
 
-### Marcas Soportadas
-- HIKVISION (implementado)
-- AKUVOX (stub)
-- INTELBRAS (stub)
-- DAHUA (stub)
-- ZKTECO (stub)
-- AVICAM (stub)
-- MILESIGHT (stub)
-- UNIFI (stub)
-- UNIVIEW (stub)
-
-## 🚀 Próximos Pasos
-
-1. **Implementar drivers completos** para otras marcas
-2. **Agregar reconocimiento facial** (webhook Akuvox)
-3. **Implementar horarios de acceso** (Schedule model)
-4. **Agregar autenticación** (NextAuth.js)
-5. **Crear landing page** pública
-6. **Optimizar imágenes** con Sharp
-7. **Agregar notificaciones** (email, push)
-8. **Dashboard de estadísticas** avanzado
-9. **Exportar reportes** (PDF, Excel)
-10. **App móvil** (React Native)
 
 ## 📞 URLs Importantes
 

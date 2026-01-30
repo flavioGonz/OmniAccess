@@ -35,9 +35,35 @@ const WebhookDriverNode = memo(({ data }: any) => {
 
     const handleCopy = (e: React.MouseEvent) => {
         e.stopPropagation();
-        navigator.clipboard.writeText(data.fullUrl || `http://localhost:10000${data.sub}`);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        const textToCopy = data.fullUrl || `http://localhost:10000${data.sub}`;
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(textToCopy)
+                .then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                })
+                .catch(err => console.error('Failed to copy:', err));
+        } else {
+            // Fallback for non-secure contexts
+            const textArea = document.createElement("textarea");
+            textArea.value = textToCopy;
+            textArea.style.position = "fixed";
+            textArea.style.left = "-9999px";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+
+            try {
+                document.execCommand('copy');
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            } catch (err) {
+                console.error('Copy fallback failed:', err);
+            }
+
+            document.body.removeChild(textArea);
+        }
     };
 
     return (
@@ -50,8 +76,8 @@ const WebhookDriverNode = memo(({ data }: any) => {
             {/* Header */}
             <div className="flex items-center gap-2 mb-2 pointer-events-none">
                 <div className={cn(
-                    "p-1.5 rounded-lg transition-colors flex items-center justify-center w-8 h-8 bg-neutral-800 overflow-hidden",
-                    isActive ? "bg-blue-500/20 text-blue-400" : "text-neutral-400"
+                    "p-1.5 rounded-lg transition-colors flex items-center justify-center w-8 h-8 overflow-hidden",
+                    ImageSrc ? "bg-white p-0.5" : (isActive ? "bg-blue-500/20 text-blue-400" : "bg-neutral-800 text-neutral-400")
                 )}>
                     {ImageSrc ? (
                         <img src={ImageSrc} alt={data.label} className="w-full h-full object-contain" />
@@ -153,9 +179,9 @@ const initialNodes: Node[] = [
 
 // Dynamic webhook driver nodes with images
 const webhookDrivers = [
-    { id: 'webhook-hikvision', label: 'Hikvision', path: '/api/webhooks/hikvision', icon: Camera, color: '#3b82f6', image: '/uploads/devices/1766764683953_LPR.png' },
-    { id: 'webhook-akuvox', label: 'Akuvox', path: '/api/webhooks/akuvox', icon: Smartphone, color: '#3b82f6', image: '/uploads/brands/1766750081921_akuvox.png' },
-    { id: 'webhook-waha', label: 'WAHA Bot', path: '/api/waha/webhook', icon: MessageSquare, color: '#3b82f6' },
+    { id: 'webhook-hikvision', label: 'Hikvision', path: '/api/webhooks/hikvision', icon: Camera, color: '#3b82f6', image: '/logos/hikvision.png' },
+    { id: 'webhook-akuvox', label: 'Akuvox', path: '/api/webhooks/akuvox', icon: Smartphone, color: '#3b82f6', image: '/logos/akuvox.png' },
+    { id: 'webhook-waha', label: 'WAHA Bot', path: '/api/webhooks/whatsapp', icon: MessageSquare, color: '#3b82f6' },
 ];
 
 const connectionLineStyle = { stroke: '#fff' };

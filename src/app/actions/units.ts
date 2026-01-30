@@ -108,9 +108,8 @@ export async function getUnitsWithDetails() {
         include: {
             users: {
                 include: {
-                    credentials: {
-                        where: { type: 'PLATE' }
-                    }
+                    credentials: true,
+                    vehicles: true
                 }
             }
         },

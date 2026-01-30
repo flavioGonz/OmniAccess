@@ -233,7 +233,7 @@ export class AkuvoxDriver implements IDeviceDriver {
                         userPayload["FaceImage"] = base64; // Alternative field name
                         console.log(`[Akuvox] Embedded face image in user payload for Linux AC compatibility`);
                     }
-                } catch (e) {
+                } catch (e: any) {
                     console.warn(`[Akuvox] Could not embed face in user payload: ${e.message}`);
                 }
             }

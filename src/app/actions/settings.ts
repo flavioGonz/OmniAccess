@@ -77,7 +77,7 @@ export async function purgeAccessEvents() {
     }
 }
 
-async function getS3InternalClient() {
+export async function getS3InternalClient() {
     let endpoint, accessKey, secretKey;
     try {
         [endpoint, accessKey, secretKey] = await Promise.all([
@@ -230,18 +230,107 @@ export async function testDbConnection() {
     }
 }
 
+/**
+ * Tests a connection to an external database string
+ */
+export async function testExternalDbConnection(url: string) {
+    const { PrismaClient } = await import('@prisma/client');
+    const tempPrisma = new PrismaClient({
+        datasources: {
+            db: {
+                url: url
+            }
+        }
+    });
+
+    try {
+        await tempPrisma.$connect();
+        await tempPrisma.$queryRaw`SELECT 1`;
+
+        // Check if tables exist by looking for a common table
+        const tables = await tempPrisma.$queryRaw`
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public'
+        ` as { table_name: string }[];
+
+        const isVirgin = tables.length === 0;
+
+        return {
+            success: true,
+            message: "Conexión exitosa",
+            isVirgin
+        };
+    } catch (error: unknown) {
+        return { success: false, message: error instanceof Error ? error.message : String(error) };
+    } finally {
+        await tempPrisma.$disconnect();
+    }
+}
+
+/**
+ * Updates the DATABASE_URL in the .env file and restarts the app if possible
+ */
+export async function updateDatabaseUrl(newUrl: string) {
+    try {
+        const envPath = path.join(process.cwd(), '.env');
+        let envContent = await fs.readFile(envPath, 'utf8');
+
+        const dbUrlRegex = /^DATABASE_URL=.*$/m;
+        if (dbUrlRegex.test(envContent)) {
+            envContent = envContent.replace(dbUrlRegex, `DATABASE_URL="${newUrl}"`);
+        } else {
+            envContent += `\nDATABASE_URL="${newUrl}"`;
+        }
+
+        await fs.writeFile(envPath, envContent, 'utf8');
+
+        // Trigger a restart after a short delay to allow the response to reach the client
+        setTimeout(() => {
+            console.log("Restarting app to apply new DATABASE_URL...");
+            process.exit(0);
+        }, 1500);
+
+        return { success: true, message: "URL de base de datos actualizada. Reiniciando servicios en 1.5s..." };
+    } catch (error: unknown) {
+        console.error("Failed to update .env:", error);
+        return { success: false, message: error instanceof Error ? error.message : String(error) };
+    }
+}
+
+/**
+ * Runs migrations on the current database
+ */
+export async function runDatabaseMigrations() {
+    const { exec } = await import('child_process');
+    const util = await import('util');
+    const execPromise = util.promisify(exec);
+
+    try {
+        // Run prisma migrate deploy
+        const { stdout, stderr } = await execPromise('npx prisma migrate deploy');
+        console.log('Migration stdout:', stdout);
+        if (stderr) console.warn('Migration stderr:', stderr);
+
+        return { success: true, message: "Migraciones aplicadas correctamente" };
+    } catch (error: unknown) {
+        console.error("Migration failed:", error);
+        return { success: false, message: error instanceof Error ? error.message : String(error) };
+    }
+}
+
 export async function getDbStats() {
     try {
-        const dbSizeQuery: any[] = await prisma.$queryRaw`SELECT pg_size_pretty(pg_database_size(current_database())) as size`;
+        const dbSizeQuery = await prisma.$queryRaw`SELECT pg_size_pretty(pg_database_size(current_database())) as size` as { size: string }[];
 
-        const tableStats: any[] = await prisma.$queryRaw`
+        const tableStats = await prisma.$queryRaw`
             SELECT 
                 relname as table_name,
                 n_live_tup as row_count,
                 pg_size_pretty(pg_total_relation_size(relid)) as total_size
             FROM pg_stat_user_tables
             ORDER BY n_live_tup DESC;
-        `;
+        ` as { table_name: string, row_count: number, total_size: string }[];
 
         const dbUrl = process.env.DATABASE_URL || "";
         const dbMatch = dbUrl.match(/@([^/:]+):?(\d+)?/);
@@ -255,33 +344,219 @@ export async function getDbStats() {
             host: dbHost,
             port: dbPort
         };
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Error getting DB stats:", error);
-        return { success: false, message: error.message };
+        return { success: false, message: error instanceof Error ? error.message : String(error) };
     }
 }
 
 export async function downloadBackup() {
     try {
-        // En una implementación real con pg_dump sería mejor, pero para propósitos demostrativos
-        // y portabilidad, podemos exportar las tablas principales a JSON
-        const [users, vehicles, devices, events, units] = await Promise.all([
+        // Export all relevant tables
+        const [
+            users,
+            vehicles,
+            devices,
+            events,
+            units,
+            credentials,
+            accessGroups,
+            settings,
+            parkingSlots
+        ] = await Promise.all([
             prisma.user.findMany(),
             prisma.vehicle.findMany(),
             prisma.device.findMany(),
-            prisma.accessEvent.findMany({ take: 1000, orderBy: { timestamp: 'desc' } }), // Limitamos eventos por tamaño
+            prisma.accessEvent.findMany({ take: 5000, orderBy: { timestamp: 'desc' } }),
             prisma.unit.findMany(),
+            prisma.credential.findMany(),
+            prisma.accessGroup.findMany({ include: { users: true, devices: true } }),
+            prisma.setting.findMany(),
+            prisma.parkingSlot.findMany(),
         ]);
 
         const backupData = {
-            version: "1.0",
+            version: "1.1",
             timestamp: new Date().toISOString(),
-            data: { users, vehicles, devices, events, units }
+            data: {
+                users,
+                vehicles,
+                devices,
+                events,
+                units,
+                credentials,
+                accessGroups,
+                settings,
+                parkingSlots
+            }
         };
 
         return { success: true, data: backupData };
-    } catch (error: any) {
-        return { success: false, message: error.message };
+    } catch (error: unknown) {
+        console.error("Backup failed:", error);
+        return { success: false, message: error instanceof Error ? error.message : String(error) };
+    }
+}
+
+export async function restoreBackup(backupData: any, merge: boolean = false) {
+    try {
+        const data = backupData.data;
+        if (!data) throw new Error("Formato de backup inválido");
+
+        // Transaction to ensure integrity
+        await prisma.$transaction(async (tx) => {
+            // 1. Clean existing data IF NOT merging (Order matters for constraints)
+            if (!merge) {
+                await tx.wahaRequestLog.deleteMany();
+                await tx.accessEvent.deleteMany();
+                await tx.callEvent.deleteMany();
+                await tx.hardwareMirror.deleteMany();
+                await tx.credential.deleteMany();
+                await tx.vehicle.deleteMany();
+                await tx.accessGroup.deleteMany();
+                await tx.parkingSlot.deleteMany();
+                await tx.user.deleteMany();
+                await tx.unit.deleteMany();
+                await tx.topologyNode.deleteMany();
+                // await tx.setting.deleteMany(); // Keep current settings?
+            }
+
+            // 2. Restore/Merge data (Order matters)
+
+            // Units first (Parent of many)
+            if (data.units?.length > 0) {
+                // Separate parents and children if there are any self-relations
+                await tx.unit.createMany({
+                    data: data.units.map((u: any) => ({ ...u, parentId: null })),
+                    skipDuplicates: true
+                });
+                // Update parentId after all units exist
+                for (const u of data.units) {
+                    if (u.parentId) {
+                        await tx.unit.update({
+                            where: { id: u.id },
+                            data: { parentId: u.parentId }
+                        });
+                    }
+                }
+            }
+
+            // Users & Parking Slots
+            if (data.parkingSlots?.length > 0) {
+                await tx.parkingSlot.createMany({
+                    data: data.parkingSlots,
+                    skipDuplicates: true
+                });
+            }
+
+            if (data.users?.length > 0) {
+                await tx.user.createMany({
+                    data: data.users,
+                    skipDuplicates: true
+                });
+            }
+
+            // Vehicles & Credentials
+            if (data.vehicles?.length > 0) {
+                await tx.vehicle.createMany({
+                    data: data.vehicles,
+                    skipDuplicates: true
+                });
+            }
+            if (data.credentials?.length > 0) {
+                await tx.credential.createMany({
+                    data: data.credentials,
+                    skipDuplicates: true
+                });
+            }
+
+            // Devices & Groups
+            if (data.devices?.length > 0) {
+                for (const device of data.devices) {
+                    await tx.device.upsert({
+                        where: { id: device.id },
+                        create: device,
+                        update: device
+                    });
+                }
+            }
+
+            if (data.accessGroups?.length > 0) {
+                for (const group of data.accessGroups) {
+                    const { users, devices, ...groupData } = group;
+                    await tx.accessGroup.upsert({
+                        where: { id: group.id },
+                        create: groupData,
+                        update: groupData
+                    });
+
+                    // Reconnect relations
+                    if (users?.length > 0) {
+                        await tx.accessGroup.update({
+                            where: { id: group.id },
+                            data: { users: { connect: users.map((u: any) => ({ id: u.id })) } }
+                        });
+                    }
+                    if (devices?.length > 0) {
+                        await tx.accessGroup.update({
+                            where: { id: group.id },
+                            data: { devices: { connect: devices.map((d: any) => ({ id: d.id })) } }
+                        });
+                    }
+                }
+            }
+
+            // Events last
+            if (data.events?.length > 0) {
+                const events = data.events.map((e: any) => ({
+                    ...e,
+                    timestamp: new Date(e.timestamp),
+                    createdAt: new Date(e.createdAt)
+                }));
+                await tx.accessEvent.createMany({
+                    data: events,
+                    skipDuplicates: true
+                });
+            }
+
+            // Settings if included
+            if (data.settings?.length > 0) {
+                for (const s of data.settings) {
+                    await tx.setting.upsert({
+                        where: { key: s.key },
+                        create: s,
+                        update: s
+                    });
+                }
+            }
+        }, {
+            timeout: 30000 // Increase timeout for large restores
+        });
+
+        revalidatePath("/admin/settings");
+        return { success: true };
+    } catch (error: unknown) {
+        console.error("Restore failed:", error);
+        return { success: false, message: error instanceof Error ? error.message : String(error) };
+    }
+}
+
+export async function populateDatabase() {
+    try {
+        const { exec } = await import('child_process');
+        const util = await import('util');
+        const execPromise = util.promisify(exec);
+
+        // Run prisma seed
+        const { stdout, stderr } = await execPromise('npx prisma db seed');
+        console.log('Seed stdout:', stdout);
+        if (stderr) console.warn('Seed stderr:', stderr);
+
+        revalidatePath("/admin/settings");
+        return { success: true, message: "Base de datos poblada con éxito desde el seed oficial" };
+    } catch (error: unknown) {
+        console.error("Seed failed:", error);
+        return { success: false, message: error instanceof Error ? error.message : String(error) };
     }
 }
 
@@ -358,5 +633,25 @@ export async function getWahaSessions(url: string, apiKey?: string) {
         return { success: true, data: response.data };
     } catch (error: any) {
         return { success: false, message: error.message };
+    }
+}
+
+export async function getWahaHistory() {
+    try {
+        const logs = await prisma.wahaRequestLog.findMany({
+            orderBy: { timestamp: 'desc' },
+            take: 50
+        });
+
+        return logs.map(log => ({
+            id: log.id,
+            user: log.fromNumber,
+            command: log.messageBody,
+            response: log.responseDetails || log.status,
+            time: log.timestamp.toLocaleString('es-UY', { timeZone: 'America/Montevideo', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
+        }));
+    } catch (error) {
+        console.error("Failed to fetch WAHA history", error);
+        return [];
     }
 }

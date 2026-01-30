@@ -49,7 +49,8 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { createUser, updateUser } from "@/app/actions/users";
 import { addDevicePlate } from "@/app/actions/devices";
-import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { syncUserToDevice } from "@/app/actions/deviceMemory";
+import { Loader2, AlertCircle, CheckCircle2, ScanFace } from "lucide-react";
 
 type UserWithRelations = User & {
     unit: Unit | null;
@@ -89,6 +90,7 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
     const [pinValue, setPinValue] = useState(user?.credentials?.find(c => c.type === 'PIN')?.value || "");
     const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
     const [selectedDeviceIds, setSelectedDeviceIds] = useState<string[]>([]);
+    const [selectedFaceDeviceIds, setSelectedFaceDeviceIds] = useState<string[]>([]);
     const [deviceSyncStatuses, setDeviceSyncStatuses] = useState<Record<string, 'pending' | 'syncing' | 'success' | 'error'>>({});
     const [selectedUnitId, setSelectedUnitId] = useState<string>("none");
     const [activeTab, setActiveTab] = useState("general");
@@ -115,6 +117,7 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
             setSelectedGroupIds(user?.accessGroups?.map(g => g.id) || []);
             setSelectedUnitId(user?.unitId || "none");
             setSelectedDeviceIds([]); // Reset on open
+            setSelectedFaceDeviceIds([]); // Reset on open
             setDeviceSyncStatuses({});
         }
     }, [open, user]);
@@ -147,6 +150,9 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
             setTimeout(() => alert("El Nombre Completo es obligatorio."), 10);
             return;
         }
+
+        // Ensure values from state are in formData (Select components might not always trigger native form values)
+        formData.set("unitId", selectedUnitId);
 
         setIsSubmitting(true);
 
@@ -221,6 +227,47 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
                 }
                 setSyncStatus({ total: syncDeviceIds.length, current: syncDeviceIds.length, currentName: "Sincronización Finalizada" });
                 // Short delay to show completion
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+
+            // --- FACE MANUAL SYNC PROCESS ---
+            const allFaceSyncIds = formData.getAll("syncFaceDeviceId") as string[];
+            const syncFaceDeviceIds = Array.from(new Set(allFaceSyncIds));
+
+            if (previewUrl && syncFaceDeviceIds.length > 0 && currentUserId) {
+                console.log(`[Face Sync] Starting sync for ${user?.name || "User"} to ${syncFaceDeviceIds.length} devices...`);
+                setActiveTab("sync");
+                if (!plate) setSyncStatus({ total: syncFaceDeviceIds.length, current: 0, currentName: "" }); // Reset if plate sync didn't run
+
+                for (let i = 0; i < syncFaceDeviceIds.length; i++) {
+                    const devId = syncFaceDeviceIds[i];
+                    const device = devices.find(d => d.id === devId);
+
+                    setSyncStatus({
+                        total: syncFaceDeviceIds.length,
+                        current: i,
+                        currentName: device?.name || "Terminal Facial"
+                    });
+
+                    setDeviceSyncStatuses(prev => ({ ...prev, [devId]: 'syncing' }));
+
+                    try {
+                        // Use syncUserToDevice which handles face sync
+                        const res = await syncUserToDevice(devId, currentUserId);
+                        console.log(`[Face Sync] Result for ${device?.name}:`, res);
+
+                        if (res) {
+                            setDeviceSyncStatuses(prev => ({ ...prev, [devId]: 'success' }));
+                        } else {
+                            setDeviceSyncStatuses(prev => ({ ...prev, [devId]: 'error' }));
+                        }
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    } catch (err) {
+                        console.error(`Face Sync error for ${device?.name}:`, err);
+                        setDeviceSyncStatuses(prev => ({ ...prev, [devId]: 'error' }));
+                    }
+                }
+                setSyncStatus({ total: syncFaceDeviceIds.length, current: syncFaceDeviceIds.length, currentName: "Sincronización Finalizada" });
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
 
@@ -631,6 +678,80 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
                                                     <p className="text-[9px] text-blue-400 font-bold uppercase text-center tracking-widest">
                                                         La matrícula se enviará a {selectedDeviceIds.length} equipo(s) al guardar
                                                     </p>
+                                                </div>
+                                            )}
+
+                                            {/* Manual Face Sync Selection (Only if Face available) */}
+                                            {previewUrl && (
+                                                <div className="space-y-3 pt-4">
+                                                    <div className="flex items-center gap-2 text-[10px] font-black text-neutral-600 uppercase tracking-widest border-b border-neutral-800 pb-1">
+                                                        <ScanFace size={12} /> Sincronización Biométrica (Terminales Faciales)
+                                                    </div>
+                                                    <div className="grid grid-cols-1 gap-2">
+                                                        {devices.filter(d => d.deviceType === 'FACE_TERMINAL').length > 0 ? (
+                                                            devices.filter(d => d.deviceType === 'FACE_TERMINAL').map(device => {
+                                                                const isSelected = selectedFaceDeviceIds.includes(device.id);
+                                                                return (
+                                                                    <div
+                                                                        key={device.id}
+                                                                        onClick={() => setSelectedFaceDeviceIds(prev =>
+                                                                            isSelected ? prev.filter(id => id !== device.id) : [...prev, device.id]
+                                                                        )}
+                                                                        className={cn(
+                                                                            "p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all",
+                                                                            isSelected
+                                                                                ? "bg-purple-500/10 border-purple-500/30 ring-1 ring-purple-500/20"
+                                                                                : "bg-neutral-900/40 border-neutral-800 hover:border-neutral-700"
+                                                                        )}
+                                                                    >
+                                                                        <div className="flex items-center gap-3">
+                                                                            <div className={cn(
+                                                                                "p-2 rounded-lg",
+                                                                                isSelected ? "bg-purple-500/20 text-purple-400" : "bg-neutral-800 text-neutral-500"
+                                                                            )}>
+                                                                                {deviceSyncStatuses[device.id] === 'syncing' ? (
+                                                                                    <Loader2 size={14} className="animate-spin" />
+                                                                                ) : deviceSyncStatuses[device.id] === 'error' ? (
+                                                                                    <AlertCircle size={14} className="text-red-500" />
+                                                                                ) : deviceSyncStatuses[device.id] === 'success' ? (
+                                                                                    <CheckCircle2 size={14} className="text-emerald-500" />
+                                                                                ) : (
+                                                                                    <ScanFace size={14} />
+                                                                                )}
+                                                                            </div>
+                                                                            <div>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <p className="text-[11px] font-black text-white uppercase tracking-tight">{device.name}</p>
+                                                                                    {deviceSyncStatuses[device.id] === 'success' && (
+                                                                                        <span className="text-[7px] bg-emerald-500/10 text-emerald-500 px-1 py-0 rounded uppercase font-bold">OK</span>
+                                                                                    )}
+                                                                                    {deviceSyncStatuses[device.id] === 'error' && (
+                                                                                        <span className="text-[7px] bg-red-500/10 text-red-500 px-1 py-0 rounded uppercase font-bold">Error</span>
+                                                                                    )}
+                                                                                </div>
+                                                                                <p className="text-[10px] font-mono text-neutral-500">{device.ip}</p>
+                                                                            </div>
+                                                                        </div>
+                                                                        {isSelected && !deviceSyncStatuses[device.id] && <Check size={16} className="text-purple-500" />}
+                                                                        {deviceSyncStatuses[device.id] === 'success' && <CheckCircle2 size={16} className="text-emerald-500" />}
+                                                                        {deviceSyncStatuses[device.id] === 'error' && <AlertCircle size={16} className="text-red-500" />}
+                                                                    </div>
+                                                                );
+                                                            })
+                                                        ) : (
+                                                            <p className="text-[10px] text-neutral-600 italic p-2 text-center">No hay terminales faciales registrados.</p>
+                                                        )}
+                                                    </div>
+                                                    {selectedFaceDeviceIds.map(id => (
+                                                        <input key={id} type="hidden" name="syncFaceDeviceId" value={id} />
+                                                    ))}
+                                                    {selectedFaceDeviceIds.length > 0 && (
+                                                        <div className="p-2 bg-purple-500/5 border border-purple-500/10 rounded-lg">
+                                                            <p className="text-[9px] text-purple-400 font-bold uppercase text-center tracking-widest">
+                                                                El perfil facial se enviará a {selectedFaceDeviceIds.length} equipo(s)
+                                                            </p>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
 

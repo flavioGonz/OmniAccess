@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { DeviceType, DeviceBrand, DeviceDirection, AuthType, DoorStatus } from "@prisma/client";
+import { testDeviceConnection } from "@/app/actions/devices";
 import {
     Dialog,
     DialogContent,
@@ -39,7 +40,11 @@ import {
     Loader2,
     ImagePlus,
     Camera,
-    MapPin
+    MapPin,
+    Tag,
+    Settings,
+    Fingerprint,
+    Package
 } from "lucide-react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
@@ -98,8 +103,21 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
     });
     const [modelPhotoFile, setModelPhotoFile] = useState<File | null>(null);
     const [brandLogoFile, setBrandLogoFile] = useState<File | null>(null);
+    const [connectionResult, setConnectionResult] = useState<{ success: boolean; message: string } | null>(null);
 
     const isEdit = !!device;
+
+    useEffect(() => {
+        if (step === 3 && isEdit && device?.id) {
+            const runTest = async () => {
+                const result = await testDeviceConnection(device.id);
+                setConnectionResult(result);
+            };
+            runTest();
+        } else if (step !== 3) {
+            setConnectionResult(null);
+        }
+    }, [step, isEdit, device?.id]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
@@ -146,12 +164,12 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
             <DialogTrigger asChild>
                 {children}
             </DialogTrigger>
-            <DialogContent className="max-w-7xl p-0 bg-neutral-900 border-neutral-800 overflow-hidden sm:rounded-lg gap-0 shadow-2xl border-white/5">
+            <DialogContent className="max-w-5xl p-0 bg-neutral-900 border-neutral-800 overflow-hidden sm:rounded-lg gap-0 shadow-2xl border-white/5">
                 <DialogHeader className="sr-only">
                     <DialogTitle>{isEdit ? "Editar Dispositivo" : "Nuevo Dispositivo"}</DialogTitle>
                     <DialogDescription>Configuración técnica del nodo de acceso</DialogDescription>
                 </DialogHeader>
-                <div className="flex flex-col md:flex-row h-full min-h-[750px] bg-neutral-950 overflow-hidden">
+                <div className="flex flex-col md:flex-row h-full min-h-[580px] bg-neutral-950 overflow-hidden">
                     {/* LEFT SIDE: Active Form Content */}
                     <div className="flex-1 p-10 flex flex-col justify-between border-r border-white/5">
                         <div className="flex-1">
@@ -167,7 +185,7 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
                                     ))}
                                 </div>
                                 <h1 className="text-3xl font-black text-white uppercase tracking-tighter leading-none mb-1">
-                                    {isEdit ? "Sincronizar Nodo" : "Alta de Dispositivo"}
+                                    {isEdit ? (formData.deviceType === "LPR_CAMERA" ? "Configurar Cámara" : "Configurar Terminal") : "Alta de Dispositivo"}
                                 </h1>
                                 <p className="text-[10px] font-black text-neutral-600 uppercase tracking-[0.2em]">
                                     {formData.brand} • {formData.deviceType.replace('_', ' ')}
@@ -179,7 +197,7 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
                                     <div className="space-y-8">
                                         <div className="space-y-2">
                                             <Label className="text-neutral-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-                                                <HardDrive size={10} /> Nombre de Identificación
+                                                <Tag size={10} /> Nombre de Identificación
                                             </Label>
                                             <Input
                                                 name="name"
@@ -191,10 +209,15 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
                                         </div>
                                         <div className="grid grid-cols-2 gap-8">
                                             <div className="space-y-2">
-                                                <Label className="text-neutral-500 text-[10px] font-black uppercase tracking-widest">Tipo</Label>
+                                                <Label className="text-neutral-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                                                    <Settings size={10} /> Tipo
+                                                </Label>
                                                 <Select value={formData.deviceType} onValueChange={(val) => handleSelectChange("deviceType", val)}>
-                                                    <SelectTrigger className="bg-neutral-900 border-neutral-800 h-12 rounded-lg font-bold">
-                                                        <SelectValue />
+                                                    <SelectTrigger className="bg-neutral-900 border-neutral-800 h-12 rounded-lg font-bold gap-3 text-left">
+                                                        <div className="flex items-center gap-3">
+                                                            <Settings size={18} className="text-blue-500/50" />
+                                                            <SelectValue />
+                                                        </div>
                                                     </SelectTrigger>
                                                     <SelectContent className="bg-[#0c0c0c] border-neutral-800 text-white rounded-2xl">
                                                         <SelectItem value="LPR_CAMERA" className="py-3 font-bold">Cámara LPR</SelectItem>
@@ -203,10 +226,15 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
                                                 </Select>
                                             </div>
                                             <div className="space-y-2">
-                                                <Label className="text-neutral-500 text-[10px] font-black uppercase tracking-widest">Fabricante</Label>
+                                                <Label className="text-neutral-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                                                    <Shield size={10} /> Fabricante
+                                                </Label>
                                                 <Select value={formData.brand} onValueChange={(val) => handleSelectChange("brand", val)}>
-                                                    <SelectTrigger className="bg-neutral-900 border-neutral-800 h-12 rounded-lg font-bold">
-                                                        <SelectValue />
+                                                    <SelectTrigger className="bg-neutral-900 border-neutral-800 h-12 rounded-lg font-bold gap-3 text-left">
+                                                        <div className="flex items-center gap-3">
+                                                            <Shield size={18} className="text-blue-500/50" />
+                                                            <SelectValue />
+                                                        </div>
                                                     </SelectTrigger>
                                                     <SelectContent className="bg-[#0c0c0c] border-neutral-800 text-white rounded-2xl">
                                                         {BRANDS.map(b => (
@@ -220,17 +248,22 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
                                         </div>
                                         <div className="space-y-2">
                                             <Label className="text-neutral-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-                                                <Cpu size={10} /> Modelo Hardware
+                                                <Package size={10} /> Modelo Hardware
                                             </Label>
                                             <Popover open={modelComboOpen} onOpenChange={setModelComboOpen}>
                                                 <PopoverTrigger asChild>
                                                     <Button
                                                         variant="outline"
-                                                        className="w-full justify-between bg-neutral-900 border-neutral-800 h-12 rounded-lg text-sm font-mono font-bold"
+                                                        className="w-full justify-between bg-neutral-900 border-neutral-800 h-12 rounded-lg text-sm font-mono font-bold gap-3"
                                                     >
-                                                        {formData.deviceModel
-                                                            ? DRIVER_MODELS[formData.brand as DriverDeviceBrand]?.find((m) => m.value === formData.deviceModel)?.label
-                                                            : "Seleccionar modelo..."}
+                                                        <div className="flex items-center gap-3 overflow-hidden">
+                                                            <Package size={18} className="text-blue-500/50 shrink-0" />
+                                                            <span className="truncate">
+                                                                {formData.deviceModel
+                                                                    ? DRIVER_MODELS[formData.brand as DriverDeviceBrand]?.find((m) => m.value === formData.deviceModel)?.label
+                                                                    : "Seleccionar modelo..."}
+                                                            </span>
+                                                        </div>
                                                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                                     </Button>
                                                 </PopoverTrigger>
@@ -268,7 +301,7 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
                                         <div className="grid grid-cols-2 gap-8">
                                             <div className="space-y-2">
                                                 <Label className="text-neutral-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-                                                    <Wifi size={10} /> Host / IP
+                                                    <Network size={10} /> Host / IP
                                                 </Label>
                                                 <Input
                                                     name="ip"
@@ -279,7 +312,7 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
                                             </div>
                                             <div className="space-y-2">
                                                 <Label className="text-neutral-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-                                                    <Globe size={10} /> Hardware ID (MAC)
+                                                    <Fingerprint size={10} /> Hardware ID (MAC)
                                                 </Label>
                                                 <Input
                                                     name="mac"
@@ -316,7 +349,7 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
                                             </div>
                                             <div className="space-y-2">
                                                 <Label className="text-neutral-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
-                                                    <Lock size={10} /> API Password
+                                                    <Key size={10} /> API Password
                                                 </Label>
                                                 <Input
                                                     name="password"
@@ -334,8 +367,11 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
                                                     <ArrowRightLeft size={10} /> Sentido del Flujo
                                                 </Label>
                                                 <Select value={formData.direction} onValueChange={(val) => handleSelectChange("direction", val)}>
-                                                    <SelectTrigger className="bg-neutral-900 border-neutral-800 h-12 rounded-lg font-bold">
-                                                        <SelectValue />
+                                                    <SelectTrigger className="bg-neutral-900 border-neutral-800 h-12 rounded-lg font-bold gap-3 text-left">
+                                                        <div className="flex items-center gap-3">
+                                                            <ArrowRightLeft size={18} className="text-blue-500/50" />
+                                                            <SelectValue />
+                                                        </div>
                                                     </SelectTrigger>
                                                     <SelectContent className="bg-[#0c0c0c] border-neutral-800 text-white rounded-2xl">
                                                         <SelectItem value="ENTRY" className="py-3 font-bold">ENTRADA (Ingreso)</SelectItem>
@@ -370,7 +406,7 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
                                     variant="outline"
                                     className="h-12 px-8 rounded-lg border-neutral-800 text-neutral-500 font-bold uppercase tracking-widest text-[9px] hover:bg-neutral-900 hover:text-white transition-all"
                                 >
-                                    Atrás
+                                    <ArrowRightLeft size={16} className="mr-2 rotate-180 opacity-50" /> Atrás
                                 </Button>
                             )}
                             {step < 3 ? (
@@ -387,20 +423,35 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
                                     disabled={isSubmitting}
                                     className="flex-1 h-12 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black uppercase tracking-widest text-xs shadow-[0_0_30px_rgba(37,99,235,0.2)]"
                                 >
-                                    {isSubmitting ? <Loader2 className="animate-spin" /> : isEdit ? "Sincronizar Nodo" : "Finalizar y Vincular"}
+                                    {isSubmitting ? <Loader2 className="animate-spin" /> : isEdit ? "Guardar Cambios" : "Finalizar y Vincular"}
                                 </Button>
                             )}
                         </div>
                     </div>
 
-                    {/* RIGHT SIDE: Tech Aesthetic + Large Floating Numbers */}
                     <div className="relative w-full md:w-1/2 bg-black flex flex-col items-center justify-center p-12 group overflow-hidden shrink-0">
-                        <Image
-                            src="/device_background.png"
-                            alt="Hardware Architecture"
-                            fill
-                            className="object-cover opacity-10 grayscale transition-all duration-1000 group-hover:scale-110 group-hover:opacity-20"
-                        />
+                        {step === 3 && isEdit && device?.id ? (
+                            <img
+                                src={`http://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:10000/api/live/${device.id}`}
+                                alt="Live View"
+                                className="absolute inset-0 w-full h-full object-cover opacity-50 grayscale transition-all duration-1000 group-hover:grayscale-0 group-hover:opacity-70"
+                            />
+                        ) : (
+                            <Image
+                                src="/device_background.png"
+                                alt="Hardware Architecture"
+                                fill
+                                className="object-cover opacity-10 grayscale transition-all duration-1000 group-hover:scale-110 group-hover:opacity-20"
+                            />
+                        )}
+
+                        {/* Connection Status Overlay */}
+                        {step === 3 && connectionResult?.success && (
+                            <div className="absolute top-10 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-emerald-500/20 border border-emerald-500/50 px-5 py-2.5 rounded-full backdrop-blur-xl animate-in fade-in zoom-in slide-in-from-top-4 duration-700 shadow-[0_0_30px_rgba(16,185,129,0.2)]">
+                                <BadgeCheck className="text-emerald-500 animate-pulse" size={20} />
+                                <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Enlace Estable • Conexión Exitosa</span>
+                            </div>
+                        )}
 
                         {/* Animated Grid Mask */}
                         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.01)_1px,transparent_1px)] bg-[size:50px_50px] [mask-image:radial-gradient(ellipse_at_center,black,transparent)]" />
@@ -417,7 +468,7 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
                                             : "opacity-0 scale-50 blur-xl translate-y-20"
                                     )}
                                 >
-                                    <span className="text-[280px] text-blue-500 drop-shadow-[0_0_40px_rgba(59,130,246,0.5)] tracking-tighter">
+                                    <span className="text-[200px] text-blue-500 drop-shadow-[0_0_40px_rgba(59,130,246,0.5)] tracking-tighter">
                                         {i === 1 ? '01' : i === 2 ? '02' : '03'}
                                     </span>
                                 </div>

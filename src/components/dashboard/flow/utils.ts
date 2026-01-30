@@ -1,5 +1,5 @@
 
-import { Position, Node, InternalNode } from 'reactflow';
+import { Position, Node } from 'reactflow';
 
 // Get the intersection point between the center of the node and the target position
 function getNodeIntersection(intersectionNode: any, targetNode: any) {
@@ -82,7 +82,7 @@ export function createNodesAndEdges() {
         },
     ];
 
-    const edges = [];
+    const edges: any[] = [];
 
     return { nodes, edges };
 }

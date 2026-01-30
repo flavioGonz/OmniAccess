@@ -4,10 +4,30 @@ import { XMLParser } from "fast-xml-parser";
 import { uploadToS3 } from "@/lib/s3";
 import { AccessDecision } from "@prisma/client";
 import { getVehicleBrandName } from "@/lib/hikvision-codes";
+import { sendWahaText, sendWahaImage } from "@/lib/whatsapp";
+import { getSetting } from "@/app/actions/settings";
 
-// Global cache for debounce: Plate -> Timestamp
 const debounceCache = new Map<string, number>();
 const DEBOUNCE_TIME = 5000;
+
+// Helpers for formatted S3 filenames
+const formatEventDate = (date: Date) => {
+    const d = new Date(date);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${day}-${month}-${year}-${hours}-${minutes}`;
+};
+
+const sanitizeName = (name: string | null | undefined) => {
+    return (name || "unknown").toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+};
+
+const generateId = () => {
+    return Math.random().toString(36).substring(2, 9);
+};
 
 // Simple GET endpoint for testing
 export async function GET(req: NextRequest) {
@@ -19,7 +39,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-    const logPrefix = `[${new Date().toISOString()}]`;
+    const logPrefix = `[HIK-${Date.now()}]`;
+    const eventId = generateId();
     let logDetails = "";
 
     try {
@@ -91,89 +112,131 @@ export async function POST(req: NextRequest) {
             logDetails += "DEVICE_ID_NOT_FOUND_IN_XML: No macAddress tag found\\n";
         }
 
-        // Extract plate number (como el PHP: $xml->ANPR->licensePlate)
-        const plateNumber = xmlData.ANPR?.licensePlate ||
-            xmlData.EventNotificationAlert?.ANPR?.licensePlate ||
-            xmlData.licensePlate;
-
+        // Detect Event Type and Extract Identifier
         const eventType = xmlData.eventType || xmlData.EventNotificationAlert?.eventType || 'unknown';
+        const eventNotification = xmlData.EventNotificationAlert || xmlData;
 
-        if (!plateNumber) {
-            logDetails += "WEBHOOK_FAIL: No plate number found in XML\\n";
+        let plateNumber = eventNotification.ANPR?.licensePlate || eventNotification.licensePlate;
+        let employeeNo = eventNotification.AccessControlEvent?.employeeNoString || eventNotification.employeeNo;
+        let personName = eventNotification.AccessControlEvent?.name || eventNotification.name;
+
+        let identifier = "";
+        let idType: 'PLATE' | 'FACE' | 'UNKNOWN' = 'UNKNOWN';
+
+        if (plateNumber) {
+            identifier = plateNumber.toString().toUpperCase().replace(/[^A-Z0-9]/g, "");
+            idType = 'PLATE';
+        } else if (employeeNo) {
+            identifier = employeeNo.toString();
+            idType = 'FACE';
+        }
+
+        if (!identifier) {
+            logDetails += `WEBHOOK_FAIL: No identifier (plate or face) found in XML. EventType: ${eventType}\\n`;
             console.error(`${logPrefix} ${logDetails} `);
             return NextResponse.json({
-                error: "Plate number not found"
+                error: "Identifier not found"
             }, { status: 400 });
         }
 
-        // Clean plate (como el PHP: strtoupper(preg_replace('/[^A-Z0-9]/i', '', $plate)))
-        const cleanPlate = plateNumber.toString().toUpperCase().replace(/[^A-Z0-9]/g, "");
-        logDetails += `PLATE_EXTRACTED: ${cleanPlate} \\n`;
+        logDetails += `EVENT_TYPE: ${eventType}, ID: ${identifier} (${idType}) \\n`;
 
-        // Get timestamp from camera or fallback to server (como el PHP)
+        // Get timestamp from camera or fallback to server
         let eventTimestamp = new Date();
-        const cameraDateTime = xmlData.dateTime || xmlData.EventNotificationAlert?.dateTime;
+        const cameraDateTime = eventNotification.dateTime;
 
         if (cameraDateTime) {
             try {
                 eventTimestamp = new Date(cameraDateTime);
-                logDetails += `TIMESTAMP_FROM_CAMERA: ${cameraDateTime} (${eventTimestamp.toISOString()}) \\n`;
+                logDetails += `TIMESTAMP_FROM_CAMERA: ${cameraDateTime} \\n`;
             } catch (e) {
-                logDetails += `TIMESTAMP_PARSE_ERROR: Could not parse '${cameraDateTime}'.Using server time.\\n`;
-                eventTimestamp = new Date();
+                logDetails += `TIMESTAMP_PARSE_ERROR: ${cameraDateTime}. Using server time.\\n`;
             }
-        } else {
-            logDetails += "TIMESTAMP_MISSING_XML: Using server time\\n";
         }
 
-        // DEBOUNCE
+        // DEBOUNCE (using identifier + type to avoid cross-type collisions)
+        const debounceKey = `${idType}:${identifier}`;
         const now = Date.now();
-        const lastSeen = debounceCache.get(cleanPlate);
+        const lastSeen = debounceCache.get(debounceKey);
         if (lastSeen && now - lastSeen < DEBOUNCE_TIME) {
-            logDetails += `DEBOUNCED: ${cleanPlate} \\n`;
+            logDetails += `DEBOUNCED: ${debounceKey} \\n`;
             console.log(`${logPrefix} ${logDetails} `);
-            return NextResponse.json({ message: "Debounced", plate: cleanPlate });
+            return NextResponse.json({ message: "Debounced", id: identifier });
         }
-        debounceCache.set(cleanPlate, now);
+        debounceCache.set(debounceKey, now);
 
         // Save Image (como el PHP)
         let relativeImagePath = "";
         if (imageFile) {
             try {
                 const buffer = Buffer.from(await imageFile.arrayBuffer());
-                const filename = `hik_${cleanPlate}_${eventTimestamp.getTime()}.jpg`;
+                const folder = idType === 'PLATE' ? 'lpr' : 'face';
 
-                relativeImagePath = await uploadToS3(buffer, filename, imageFile.type || "image/jpeg", "lpr");
+                const devName = sanitizeName(device?.name);
+                const fDate = formatEventDate(eventTimestamp);
+
+                let filename = "";
+                if (idType === 'PLATE') {
+                    const direction = (device as any)?.direction === 'EXIT' ? 'salida' : 'entrada';
+                    filename = `hik-lpr-${devName}-${direction}-${fDate}-${eventId}.jpg`;
+                } else {
+                    const direction = (device as any)?.direction === 'EXIT' ? 'salida' : 'entrada';
+                    filename = `hik-face-${devName}-${direction}-${fDate}-${eventId}.jpg`;
+                }
+
+                relativeImagePath = await uploadToS3(buffer, filename, imageFile.type || "image/jpeg", folder);
                 logDetails += `IMAGE_SAVED_S3: ${relativeImagePath} \\n`;
             } catch (imgError: any) {
                 logDetails += `IMAGE_S3_UPLOAD_ERROR: ${imgError.message} \\n`;
             }
         }
 
-        // Find Credential & User (como el PHP busca en vehicles)
-        const credential = await prisma.credential.findFirst({
-            where: { value: cleanPlate, type: "PLATE" },
-            include: { user: true },
-        });
+        // Find Credential & User
+        let credential = null;
+        if (idType === 'PLATE') {
+            credential = await prisma.credential.findFirst({
+                where: { value: identifier, type: "PLATE" },
+                include: { user: true },
+            });
+        } else {
+            // For Face events, the identifier is usually the employeeNo.
+            // In OmniAccess, we might map this to a DNI or a special EmployeeNo credential.
+            // Let's look for a user where employeeNo match or fallback to DNI
+            credential = await prisma.credential.findFirst({
+                where: {
+                    userId: { not: undefined },
+                    value: identifier,
+                    type: "FACE" // Face recognition credential type
+                },
+                include: { user: true }
+            });
+
+            if (!credential) {
+                // Try finding user directly by personal ID (DNI) if identifier matches
+                const user = await prisma.user.findFirst({
+                    where: { OR: [{ dni: identifier }, { name: personName }] }
+                });
+                if (user) {
+                    credential = { userId: user.id, user } as any;
+                }
+            }
+        }
 
         const decision: AccessDecision = credential ? "GRANT" : "DENY";
-        logDetails += `ACCESS_DECISION: ${decision}${credential ? ` for user ${credential.user?.name}` : ' (no match)'} \n`;
+        logDetails += `ACCESS_DECISION: ${decision}${credential?.user ? ` for user ${credential.user.name}` : ' (no match)'} \n`;
 
-        // Extract Vehicle Metadata from the correct fields
-        const anprData = xmlData.ANPR || xmlData.EventNotificationAlert?.ANPR || {};
-        const vehicleInfo = anprData.vehicleInfo || {};
+        // Extract Metadata
+        let detailsString = "";
+        if (idType === 'PLATE') {
+            const anprData = eventNotification.ANPR || {};
+            const vehicleInfo = anprData.vehicleInfo || {};
+            const brandName = vehicleInfo.vehicleLogoRecog ? getVehicleBrandName(vehicleInfo.vehicleLogoRecog) : "Desconocido";
+            detailsString = `Marca: ${brandName}, Color: ${vehicleInfo.color || "N/A"}, Tipo: ${anprData.vehicleType || "Vehículo"}`;
+        } else {
+            const acEvent = eventNotification.AccessControlEvent || {};
+            detailsString = `Modo: ${acEvent.currentVerifyMode || "Rostro"}, Persona: ${personName || "N/A"}`;
+        }
 
-        // Color: Ya viene como texto en vehicleInfo.color ("blue", "gray", "white", etc.)
-        const colorText = vehicleInfo.color || "Desconocido";
-
-        // Tipo: Ya viene como texto en vehicleType ("SUVMPV", "sedan", etc.)
-        const typeText = anprData.vehicleType || "Vehículo";
-
-        // Marca: Viene como código numérico en vehicleInfo.vehicleLogoRecog
-        const brandCode = vehicleInfo.vehicleLogoRecog;
-        const brandName = brandCode ? getVehicleBrandName(brandCode) : "Desconocido";
-
-        const detailsString = `Marca: ${brandName}, Color: ${colorText}, Tipo: ${typeText} `;
         logDetails += `METADATA: ${detailsString} \n`;
 
         // Use found device or first available
@@ -188,16 +251,17 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // Create AccessEvent
+        // Create AccessEvent (como el create_event_record de PHP)
         const event = await prisma.accessEvent.create({
             data: {
+                id: eventId,
                 timestamp: eventTimestamp,
-                credentialId: credential?.id,
+                credentialId: (credential as any)?.id,
                 userId: credential?.userId,
                 deviceId: device.id,
                 snapshotPath: relativeImagePath,
                 decision,
-                plateDetected: cleanPlate,
+                plateDetected: idType === 'PLATE' ? identifier : null,
                 details: detailsString,
             },
             include: {
@@ -205,7 +269,7 @@ export async function POST(req: NextRequest) {
                     select: {
                         id: true,
                         name: true,
-                        cara: true, // Explicitly select the face image path
+                        cara: true,
                         unit: true
                     }
                 },
@@ -220,6 +284,38 @@ export async function POST(req: NextRequest) {
         if ((global as any).io) {
             (global as any).io.emit("NEW_ACCESS", event);
             logDetails += "SOCKET_EMITTED\\n";
+        }
+
+        // WAHA Notification
+        try {
+            const notifyNumberSetting = await getSetting("WAHA_NOTIFICATION_NUMBER");
+            if (notifyNumberSetting && notifyNumberSetting.value) {
+                const notifyNumber = notifyNumberSetting.value;
+                const timeStr = eventTimestamp.toLocaleString('es-UY', { timeZone: 'America/Montevideo', hour: '2-digit', minute: '2-digit' });
+                const icon = decision === 'GRANT' ? '✅' : '🚫';
+                const userName = event.user?.name || "Desconocido";
+                const unitName = (event.user as any)?.unit?.name || "-";
+
+                const caption = `🚨 *Nuevo Evento Detectado*\n\n` +
+                    `🕒 ${timeStr}\n` +
+                    `${idType === 'PLATE' ? '🚘' : '👤'} *${idType === 'PLATE' ? identifier : (personName || identifier)}*\n` +
+                    `📍 ${device.name}\n` +
+                    `${idType === 'PLATE' ? `👤 ${userName} (${unitName})\n` : ''}` +
+                    `📊 Estado: ${icon} ${decision === 'GRANT' ? 'Permitido' : 'Denegado'}`;
+
+                if (imageFile) {
+                    const buffer = Buffer.from(await imageFile.arrayBuffer());
+                    const base64 = `data:image/jpeg;base64,${buffer.toString('base64')}`;
+                    await sendWahaImage(notifyNumber, { base64 }, caption);
+                    logDetails += `WAHA_IMG_SENT: ${notifyNumber}\\n`;
+                } else {
+                    await sendWahaText(notifyNumber, caption);
+                    logDetails += `WAHA_TEXT_SENT: ${notifyNumber}\\n`;
+                }
+            }
+        } catch (wahaError) {
+            console.error("Failed to send WAHA notification", wahaError);
+            logDetails += `WAHA_ERROR: ${wahaError}\\n`;
         }
 
         // Respond with Hikvision XML format (como el PHP)

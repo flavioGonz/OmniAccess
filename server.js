@@ -61,6 +61,26 @@ const isValidImage = (buffer, contentType) => {
     return false;
 };
 
+// Helpers for formatted S3 filenames
+const formatEventDate = (date) => {
+    const d = new Date(date);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${day}-${month}-${year}-${hours}-${minutes}`;
+};
+
+const sanitizeName = (name) => {
+    return (name || "unknown").toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+};
+
+const generateId = () => {
+    // Generates a short unique ID similar to cuid/uuid but shorter for filenames
+    return Math.random().toString(36).substring(2, 9);
+};
+
 // Helper for Camera Snapshots (Basic/Digest)
 const fetchCameraSnapshot = async (device) => {
     let baseUrl = device.ip.startsWith('http') ? device.ip : `http://${device.ip}`;
@@ -877,6 +897,7 @@ const handleWebhook = async (req, res, logPrefix) => {
             // --- Process Images (Full vs Face) ---
             let fullImagePath = "";
             let faceImagePath = "";
+            const eventId = generateId();
 
             if (images.length > 0) {
                 // Improved Image Classification based on Field Name
@@ -897,14 +918,18 @@ const handleWebhook = async (req, res, logPrefix) => {
                 }
 
                 try {
+                    const devName = sanitizeName(device?.name);
+                    const direction = (device?.direction === 'EXIT' ? 'salida' : 'entrada');
+                    const fDate = formatEventDate(eventTimestamp);
+
                     // Upload Full (Using 'face' bucket for all face recognition events)
-                    const fnameFull = `hik_face_full_${Date.now()}_${personName.replace(/\s+/g, '_')}.jpg`;
+                    const fnameFull = `hik-face-${devName}-${direction}-${fDate}-${eventId}-full.jpg`;
                     fullImagePath = await uploadToS3(fullImg.buffer, fnameFull, fullImg.mimeType, "face");
                     console.log(`${logPrefix} [S3] Full image uploaded to face bucket: ${fullImagePath}`);
 
                     // Upload Face Crop (if exists)
                     if (faceImg) {
-                        const fnameFace = `hik_face_crop_${Date.now()}_${personName.replace(/\s+/g, '_')}.jpg`;
+                        const fnameFace = `hik-face-${devName}-${direction}-${fDate}-${eventId}-crop.jpg`;
                         faceImagePath = await uploadToS3(faceImg.buffer, fnameFace, faceImg.mimeType, "face");
                         console.log(`${logPrefix} [S3] Face crop uploaded to face bucket: ${faceImagePath}`);
                     }
@@ -942,6 +967,7 @@ const handleWebhook = async (req, res, logPrefix) => {
             // --- Create Event ---
             const event = await prisma.accessEvent.create({
                 data: {
+                    id: eventId,
                     deviceId: device ? device.id : null,
                     credentialId,
                     userId,
@@ -1230,34 +1256,10 @@ const handleWebhook = async (req, res, logPrefix) => {
         }
         debounceCache.set(finalPlate, now);
 
-        // Save Image to S3 (MinIO)
-        // Save Image to S3 (MinIO)
-        let relativeImagePath = "";
-
-        // Sort images by size to pick the largest (Full Scene) instead of the crop
-        if (images.length > 1) {
-            images.sort((a, b) => b.size - a.size);
-        }
-        const imageFile = images.length > 0 ? images[0] : null;
-
-        if (imageFile) {
-            try {
-                const filename = `hik_${finalPlate}_${eventTimestamp.getTime()}.jpg`;
-                console.log(`${logPrefix} [S3] Attempting upload of ${imageFile.size} bytes to bucket 'lpr'...`);
-                relativeImagePath = await uploadToS3(imageFile.buffer, filename, imageFile.mimeType || "image/jpeg", "lpr");
-                console.log(`${logPrefix} [S3] Upload SUCCESS: ${relativeImagePath}`);
-            } catch (imgError) {
-                console.error(`${logPrefix} [S3] Upload FAILED: ${imgError.message}`);
-                // Fallback to empty to avoid crashing but log it clearly
-            }
-        } else {
-            console.warn(`${logPrefix} [S3] Skip upload: No image part in webhook.`);
-        }
-
         // Helper to normalize MAC (removes colons, dashes, and makes uppercase)
-        const normalizeMac = (m) => m ? m.replace(/[:-\s]/g, "").toUpperCase() : null;
+        const normalizeMac = (m) => m ? m.replace(/[:-\s]/g, "").toUpperCase() : m;
 
-        // Find Device - Strategic lookup
+        // Find Device - Strategic lookup (MOVED UP)
         let device = null;
         const cleanIncomingMac = normalizeMac(macAddress);
 
@@ -1285,6 +1287,33 @@ const handleWebhook = async (req, res, logPrefix) => {
                 where: { id: device.id },
                 data: { lastOnlinePush: new Date() }
             }).catch(e => { });
+        }
+
+        // Save Image to S3 (MinIO)
+        let relativeImagePath = "";
+        const eventId = generateId();
+
+        // Sort images by size to pick the largest (Full Scene) instead of the crop
+        if (images.length > 1) {
+            images.sort((a, b) => b.size - a.size);
+        }
+        const imageFile = images.length > 0 ? images[0] : null;
+
+        if (imageFile) {
+            try {
+                const devName = sanitizeName(device?.name);
+                const direction = (device?.direction === 'EXIT' ? 'salida' : 'entrada');
+                const fDate = formatEventDate(eventTimestamp);
+
+                const filename = `hik-lpr-${devName}-${direction}-${fDate}-${eventId}.jpg`;
+                console.log(`${logPrefix} [S3] Attempting upload of ${imageFile.size} bytes: ${filename}`);
+                relativeImagePath = await uploadToS3(imageFile.buffer, filename, imageFile.mimeType || "image/jpeg", "lpr");
+                console.log(`${logPrefix} [S3] Upload SUCCESS: ${relativeImagePath}`);
+            } catch (imgError) {
+                console.error(`${logPrefix} [S3] Upload FAILED: ${imgError.message}`);
+            }
+        } else {
+            console.warn(`${logPrefix} [S3] Skip upload: No image part in webhook. Images length: ${images.length}`);
         }
 
         // Finalize debug emission for ACTUAL events
@@ -1339,9 +1368,12 @@ const handleWebhook = async (req, res, logPrefix) => {
             }
         }
 
+        console.log(`${logPrefix} [DEBUG] Generated eventId: ${eventId}`);
+
         // Persist Event
         const event = await prisma.accessEvent.create({
             data: {
+                id: eventId,
                 deviceId: device ? device.id : null,
                 credentialId,
                 userId,
@@ -1391,6 +1423,7 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
         console.log(`${logPrefix} === Akuvox Webhook Received ===`);
         const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
         const params = Object.fromEntries(parsedUrl.searchParams);
+        const eventId = generateId();
 
         console.log(`${logPrefix} Akuvox Params:`, params);
 
@@ -1513,13 +1546,17 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
                     const snapBuffer = await fetchAkuvoxFaceImage(device, { name: params.user || params.name });
                     if (snapBuffer) {
                         try {
-                            const filename = `aku_open_${device.id}_${Date.now()}.jpg`;
+                            const devName = sanitizeName(device?.name);
+                            const direction = (device?.direction === 'EXIT' ? 'salida' : 'entrada');
+                            const fDate = formatEventDate(new Date());
+                            const filename = `aku-open-${devName}-${direction}-${fDate}-${eventId}.jpg`;
                             snapPath = await uploadToS3(snapBuffer, filename, "image/jpeg", "face");
                             details += " (Evidencia capturada)";
                         } catch (e) {
                             console.error("Error uploading open snapshot to S3:", e.message);
                         }
                     }
+
                 } catch (e) { console.error("Error updating door status:", e); }
             }
 
@@ -1568,7 +1605,10 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
                 const snapBuffer = await fetchAkuvoxFaceImage(device, { userId: params.userid, card: cardNumber, name: params.user || params.name });
                 if (snapBuffer) {
                     try {
-                        const filename = `aku_card_${device.id}_${Date.now()}.jpg`;
+                        const devName = sanitizeName(device?.name);
+                        const direction = (device?.direction === 'EXIT' ? 'salida' : 'entrada');
+                        const fDate = formatEventDate(new Date());
+                        const filename = `aku-card-${devName}-${direction}-${fDate}-${eventId}.jpg`;
                         snapPath = await uploadToS3(snapBuffer, filename, "image/jpeg", "face");
                         details += " (Evidencia capturada)";
                     } catch (e) {
@@ -1609,7 +1649,10 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
                 });
                 if (snapBuffer) {
                     try {
-                        const filename = `aku_face_${device.id}_${Date.now()}.jpg`;
+                        const devName = sanitizeName(device?.name);
+                        const direction = (device?.direction === 'EXIT' ? 'salida' : 'entrada');
+                        const fDate = formatEventDate(new Date());
+                        const filename = `aku-face-${devName}-${direction}-${fDate}-${eventId}.jpg`;
                         snapPath = await uploadToS3(snapBuffer, filename, "image/jpeg", "face");
 
                         // Enrich details for the UI modal (EventDetailsDialog expects FaceImage: <path>)
@@ -1623,7 +1666,8 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
                     } catch (e) {
                         console.error("Error uploading face snapshot to S3:", e.message);
                     }
-                } else {
+                }
+                else {
                     console.warn(`${logPrefix} [AUTO-SNAP] ✗ Failed to fetch face image from device`);
                 }
             }
@@ -1639,7 +1683,10 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
                 const snapBuffer = await fetchAkuvoxFaceImage(device, { userId: params.userid, name: params.user || params.name });
                 if (snapBuffer) {
                     try {
-                        const filename = `aku_pin_${device.id}_${Date.now()}.jpg`;
+                        const devName = sanitizeName(device?.name);
+                        const direction = (device?.direction === 'EXIT' ? 'salida' : 'entrada');
+                        const fDate = formatEventDate(new Date());
+                        const filename = `aku-pin-${devName}-${direction}-${fDate}-${eventId}.jpg`;
                         snapPath = await uploadToS3(snapBuffer, filename, "image/jpeg", "face");
                         details += " (Evidencia capturada)";
                     } catch (e) {
@@ -1673,7 +1720,10 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
                 const snapBuffer = await fetchAkuvoxFaceImage(device, { name: params.user || params.name, type: 'intercom' });
                 if (snapBuffer) {
                     try {
-                        const filename = `aku_call_${device.id}_${Date.now()}.jpg`;
+                        const devName = sanitizeName(device?.name);
+                        const direction = (device?.direction === 'EXIT' ? 'salida' : 'entrada');
+                        const fDate = formatEventDate(new Date());
+                        const filename = `aku-call-${devName}-${direction}-${fDate}-${eventId}.jpg`;
                         snapPath = await uploadToS3(snapBuffer, filename, "image/jpeg", "face");
                         details += " (Foto S3 capturada)";
                     } catch (e) {
@@ -1696,7 +1746,10 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
                 const snapBuffer = await fetchAkuvoxFaceImage(device, { userId: params.userid, name: params.user || params.name });
                 if (snapBuffer) {
                     try {
-                        const filename = `aku_qr_${device.id}_${Date.now()}.jpg`;
+                        const devName = sanitizeName(device?.name);
+                        const direction = (device?.direction === 'EXIT' ? 'salida' : 'entrada');
+                        const fDate = formatEventDate(new Date());
+                        const filename = `aku-qr-${devName}-${direction}-${fDate}-${eventId}.jpg`;
                         snapPath = await uploadToS3(snapBuffer, filename, "image/jpeg", "face");
                         details += " (Foto S3 capturada)";
                     } catch (e) { }
@@ -1810,6 +1863,7 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
         if (device) {
             const event = await prisma.accessEvent.create({
                 data: {
+                    id: eventId,
                     deviceId: device.id,
                     timestamp: new Date(),
                     accessType: credentialType || (eventType.includes('face') ? 'FACE' : 'TAG'),
@@ -2179,9 +2233,10 @@ const requestHandler = async (req, res) => {
     }
 
     // WAHA (WhatsApp Chatbot)
-    if (url.includes('/api/waha/webhook')) {
-        console.log(`${logPrefix} 💬 Match: WAHA WhatsApp Webhook`);
-        await handleWahaWebhook(req, res, logPrefix);
+    // We make this more permissive as various environments might strip or add slashes
+    if (url.includes('waha') || url.includes('whatsapp')) {
+        console.log(`${logPrefix} 💬 Match: WAHA WhatsApp Webhook (Path: ${req.url})`);
+        await handleWahaWebhook(req, res, logPrefix, prisma);
         return;
     }
 
@@ -2190,7 +2245,7 @@ const requestHandler = async (req, res) => {
         console.warn(`${logPrefix} ❓ Webhook detectado pero no coincide con marca específica: ${req.url}`);
     }
 
-    console.log(`${logPrefix} ⚠️  404 Not Found: ${req.method} ${req.url}`);
+    console.log(`${logPrefix} ⚠️  404 Not Found: ${req.method} ${req.url}. URL processed: ${url}`);
     res.writeHead(404);
     res.end();
 };

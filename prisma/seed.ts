@@ -5,6 +5,21 @@ const prisma = new PrismaClient()
 async function main() {
     console.log('🌱 Starting database seed...\n')
 
+    // 0. Clean slate
+    console.log('🧹 Cleaning existing data...')
+    await prisma.wahaRequestLog.deleteMany()
+    await prisma.accessEvent.deleteMany()
+    await prisma.callEvent.deleteMany()
+    await prisma.hardwareMirror.deleteMany()
+    await prisma.credential.deleteMany()
+    await prisma.vehicle.deleteMany()
+    await prisma.accessGroup.deleteMany()
+    await prisma.parkingSlot.deleteMany()
+    await prisma.user.deleteMany()
+    await prisma.unit.deleteMany()
+    await prisma.topologyNode.deleteMany()
+    console.log('✅ Base cleaned\n')
+
     // 1. Create Admin User
     console.log('👤 Creating admin user...')
     const admin = await prisma.user.create({

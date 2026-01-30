@@ -54,6 +54,7 @@ import { DeviceFormDialog } from "@/components/DeviceFormDialog";
 import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { DeviceMemoryDialog } from "@/components/DeviceMemoryDialog";
 import { DevicePlateListDialog } from "@/components/DevicePlateListDialog";
+import { DeviceFaceListDialog } from "@/components/DeviceFaceListDialog";
 import { AkuvoxActionUrlDialog } from "@/components/AkuvoxActionUrlDialog";
 import { DRIVER_MODELS, DEVICE_MODELS } from "@/lib/driver-models";
 
@@ -104,6 +105,7 @@ export default function DevicesPage() {
     const [configActionUrl, setConfigActionUrl] = useState<any>(null);
     const [viewingLive, setViewingLive] = useState<any>(null);
     const [managingPlates, setManagingPlates] = useState<any>(null);
+    const [managingFaceList, setManagingFaceList] = useState<any>(null);
 
     const typeFilter = searchParams.get('type');
 
@@ -615,14 +617,19 @@ export default function DevicesPage() {
                                                     <DropdownMenuLabel className="text-xs font-black uppercase tracking-widest text-neutral-500">Gestión</DropdownMenuLabel>
 
                                                     {dev.deviceType === 'FACE_TERMINAL' && (
-                                                        <DropdownMenuItem onClick={() => setManagingMemory(dev)} className="cursor-pointer gap-2 text-xs font-bold hover:bg-white/5 hover:text-indigo-400 focus:bg-white/5 focus:text-indigo-400">
-                                                            <Database size={14} /> Memoria Flash
-                                                        </DropdownMenuItem>
+                                                        <>
+                                                            <DropdownMenuItem onClick={() => setManagingFaceList(dev)} className="cursor-pointer gap-2 text-xs font-bold hover:bg-white/5 hover:text-indigo-400 focus:bg-white/5 focus:text-indigo-400">
+                                                                <ScanFace size={14} /> Gestión de Usuarios
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => setManagingMemory(dev)} className="cursor-pointer gap-2 text-xs font-bold hover:bg-white/5 hover:text-indigo-400 focus:bg-white/5 focus:text-indigo-400">
+                                                                <Database size={14} /> Logs y Eventos
+                                                            </DropdownMenuItem>
+                                                        </>
                                                     )}
 
                                                     {dev.deviceType === 'LPR_CAMERA' && dev.brand === 'HIKVISION' && (
                                                         <DropdownMenuItem onClick={() => setManagingPlates(dev)} className="cursor-pointer gap-2 text-xs font-bold hover:bg-white/5 hover:text-blue-400 focus:bg-white/5 focus:text-blue-400">
-                                                            <Database size={14} /> Lista Blanca LPR
+                                                            <Database size={14} /> Listas internas
                                                         </DropdownMenuItem>
                                                     )}
 
@@ -685,6 +692,14 @@ export default function DevicesPage() {
                     device={configActionUrl}
                     open={!!configActionUrl}
                     onOpenChange={(v) => !v && setConfigActionUrl(null)}
+                />
+            )}
+
+            {managingFaceList && (
+                <DeviceFaceListDialog
+                    device={managingFaceList}
+                    open={!!managingFaceList}
+                    onOpenChange={(v) => !v && setManagingFaceList(null)}
                 />
             )}
 

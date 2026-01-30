@@ -583,7 +583,7 @@ export default function AccessDashboard() {
 
     const entryEvents = filteredEvents.filter(e => e.direction === 'ENTRY');
     const exitEvents = filteredEvents.filter(e => e.direction === 'EXIT');
-    const captureEvents = filteredEvents.filter(e => e.imagePath || e.snapshotPath || e.user?.cara);
+    const captureEvents = filteredEvents.filter(e => e.imagePath || e.snapshotPath || (e.accessType !== 'PLATE' && e.user?.cara));
 
     return (
         <div className="h-full p-6 overflow-hidden animate-in fade-in duration-700 flex flex-col gap-6">
@@ -741,7 +741,7 @@ export default function AccessDashboard() {
                                         event.decision === "GRANT" ? "border-emerald-500/30 shadow-emerald-900/20" : "border-red-500/30 shadow-red-900/20"
                                     )}>
                                         <Image
-                                            src={getImageUrl(event.imagePath || event.snapshotPath) || (event.user?.cara ? getImageUrl(event.user.cara) : "/placeholder-camera.jpg")}
+                                            src={getImageUrl(event.imagePath || event.snapshotPath) || ((event.user?.cara && event.accessType !== 'PLATE') ? getImageUrl(event.user.cara) : "/placeholder-camera.jpg")}
                                             alt="Capture"
                                             fill
                                             className="object-cover group-hover:scale-105 transition-transform duration-700"
@@ -789,28 +789,24 @@ export default function AccessDashboard() {
                                         )}
 
                                         {/* Identity / Plate Overlay */}
-                                        {/* Center Overlay: Resident Name & Time Status */}
+                                        {/* Center Overlay: Resident Name & Duration */}
                                         {(event.user?.name || (detailsMap['Name'] && detailsMap['Name'] !== 'unknown') || cameraName) && (
-                                            <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none p-4 text-center">
+                                            <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none p-4 text-center gap-2">
                                                 <h3 className="text-2xl font-black text-white uppercase tracking-tighter drop-shadow-[0_4px_4px_rgba(0,0,0,1)] bg-black/40 px-4 py-1 rounded-full backdrop-blur-[2px]">
                                                     {event.user?.name || cameraName || detailsMap['Name']}
                                                 </h3>
-                                                {isFace && similarity && (
-                                                    <div className="mt-1 bg-black/60 px-3 py-1 rounded-full border border-emerald-500/20 text-emerald-400 font-black text-[10px] uppercase tracking-widest shadow-lg backdrop-blur-md">
-                                                        {similarity}% SIMILITUD
-                                                    </div>
-                                                )}
 
+                                                {/* Duration Badge (smaller) */}
                                                 {(() => {
                                                     const duration = calculateDuration(event);
                                                     if (duration) {
                                                         return (
-                                                            <div className="mt-2 px-3 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/10 flex items-center gap-2 shadow-2xl animate-in fade-in slide-in-from-bottom-2">
-                                                                <span className={cn("text-[10px] font-black uppercase tracking-widest", duration.color)}>
+                                                            <div className="px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/10 flex items-center gap-1.5 shadow-xl">
+                                                                <span className={cn("text-[9px] font-black uppercase tracking-widest", duration.color)}>
                                                                     {duration.label}
                                                                 </span>
-                                                                <span className="text-white/20">•</span>
-                                                                <span className="text-[10px] font-mono text-white font-bold">
+                                                                <span className="text-white/20 text-[9px]">•</span>
+                                                                <span className="text-[9px] font-mono text-white font-bold">
                                                                     {duration.value}
                                                                 </span>
                                                             </div>
@@ -818,9 +814,29 @@ export default function AccessDashboard() {
                                                     }
                                                     return null;
                                                 })()}
-
                                             </div>
                                         )}
+
+                                        {/* Duration Badge for events WITHOUT name (show in center) */}
+                                        {!(event.user?.name || (detailsMap['Name'] && detailsMap['Name'] !== 'unknown') || cameraName) && (() => {
+                                            const duration = calculateDuration(event);
+                                            if (duration) {
+                                                return (
+                                                    <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+                                                        <div className="px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/10 flex items-center gap-1.5 shadow-xl">
+                                                            <span className={cn("text-[9px] font-black uppercase tracking-widest", duration.color)}>
+                                                                {duration.label}
+                                                            </span>
+                                                            <span className="text-white/20 text-[9px]">•</span>
+                                                            <span className="text-[9px] font-mono text-white font-bold">
+                                                                {duration.value}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        })()}
 
                                         {/* Identity / Plate Overlay (Bottom Left) */}
                                         <div className="absolute bottom-3 left-3 flex flex-col items-start z-10 max-w-[70%]">

@@ -1,26 +1,3 @@
-enum VehicleType {
-  SEDAN
-  SUV
-  PICKUP
-  VAN
-  TRUCK
-  MOTORCYCLE
-}
-
-model Vehicle {
-  id          String       @id @default(cuid())
-  plate       String       @unique
-  type        VehicleType  @default(SEDAN)
-  brand       String?
-  model       String?
-  color       String?
-  imagePath   String?
-  notes       String?
-  userId      String
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-}
 generator client {
   provider = "prisma-client-js"
 }
@@ -30,41 +7,237 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Vehicle {
+  id        String      @id @default(cuid())
+  plate     String      @unique
+  type      VehicleType @default(SEDAN)
+  brand     String?
+  model     String?
+  color     String?
+  imagePath String?
+  notes     String?
+  userId    String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Unit {
+  id           String        @id @default(cuid())
+  name         String
+  description  String?
+  type         UnitType      @default(EDIFICIO)
+  number       String        @default("")
+  floors       Int?
+  lot          String?
+  houseNumber  String?
+  address      String?
+  coordinates  String?
+  mapPoints    String?
+  contactName  String?
+  contactEmail String?
+  adminPhone   String?
+  deviceCount  Int           @default(0)
+  deviceType   String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  parentId     String?
+  parkingSlots ParkingSlot[]
+  parent       Unit?         @relation("SubUnits", fields: [parentId], references: [id])
+  children     Unit[]        @relation("SubUnits")
+  users        User[]
+}
+
+model User {
+  id            String        @id @default(cuid())
+  name          String
+  email         String?
+  phone         String?
+  dni           String?
+  cara          String?
+  unitId        String?
+  apartment     String?
+  parkingSlotId String?       @unique
+  role          UserRole      @default(RESIDENT)
+  accessTags    String[]      @default([])
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  accessEvents  AccessEvent[]
+  credentials   Credential[]
+  parkingSlot   ParkingSlot?  @relation(fields: [parkingSlotId], references: [id])
+  unit          Unit?         @relation(fields: [unitId], references: [id])
+  vehicles      Vehicle[]
+  accessGroups  AccessGroup[] @relation("AccessGroupToUser")
+}
+
+model Credential {
+  id        String         @id @default(cuid())
+  type      CredentialType
+  value     String
+  notes     String?
+  userId    String
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AccessGroup {
+  id        String     @id @default(cuid())
+  name      String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  schedules Schedule[]
+  devices   Device[]   @relation("AccessGroupToDevice")
+  users     User[]     @relation("AccessGroupToUser")
+}
+
+model Schedule {
+  id            String      @id @default(cuid())
+  accessGroupId String
+  days          DayOfWeek[]
+  startTime     String
+  endTime       String
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  accessGroup   AccessGroup @relation(fields: [accessGroupId], references: [id], onDelete: Cascade)
+}
+
+model Device {
+  id              String           @id @default(cuid())
+  name            String
+  deviceType      DeviceType       @default(LPR_CAMERA)
+  brand           DeviceBrand
+  deviceModel     String?
+  modelPhoto      String?
+  brandLogo       String?
+  ip              String
+  mac             String?
+  location        String?
+  direction       DeviceDirection  @default(ENTRY)
+  doorStatus      DoorStatus       @default(UNKNOWN)
+  authType        AuthType         @default(BASIC)
+  username        String?
+  password        String?
+  lastOnlinePull  DateTime?
+  lastOnlinePush  DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  accessEvents    AccessEvent[]
+  callEvents      CallEvent[]
+  hardwareMirrors HardwareMirror[]
+  accessGroups    AccessGroup[]    @relation("AccessGroupToDevice")
+}
+
+model AccessEvent {
+  id            String          @id @default(cuid())
+  timestamp     DateTime
+  accessType    CredentialType?
+  credentialId  String?
+  userId        String?
+  deviceId      String?
+  imagePath     String?
+  decision      AccessDecision
+  plateDetected String?
+  direction     DeviceDirection @default(ENTRY)
+  location      String?
+  snapshotPath  String?
+  plateNumber   String?
+  details       String?
+  createdAt     DateTime        @default(now())
+  device        Device?         @relation(fields: [deviceId], references: [id], map: "AccessEvent_deviceId_fkey_v2")
+  user          User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CallEvent {
+  id         String   @id @default(cuid())
+  timestamp  DateTime
+  deviceId   String
+  callerName String?
+  callerId   String?
+  calleeName String?
+  calleeId   String?
+  duration   Int      @default(0)
+  status     String
+  direction  String
+  createdAt  DateTime @default(now())
+  device     Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+}
+
+model HardwareMirror {
+  id          String   @id @default(cuid())
+  deviceId    String
+  hardwareId  String
+  name        String?
+  cardCode    String?
+  pin         String?
+  faceUrl     String?
+  syncStatus  String   @default("IN_SYNC")
+  lastUpdated DateTime @default(now())
+  device      Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, hardwareId])
+}
+
+model Setting {
+  key       String   @id @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ParkingSlot {
+  id         String   @id @default(cuid())
+  x          Float    @default(0)
+  y          Float    @default(0)
+  width      Float    @default(0)
+  height     Float    @default(0)
+  label      String
+  isOccupied Boolean  @default(false)
+  points     String?
+  unitId     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  unit       Unit?    @relation(fields: [unitId], references: [id])
+  user       User?
+}
+
+model TopologyNode {
+  id        String   @id @unique
+  x         Float
+  y         Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WhatsAppSession {
+  phoneNumber String   @id
+  step        String
+  data        String?
+  updatedAt   DateTime @updatedAt
+}
+
+model WahaRequestLog {
+  id              String   @id @default(cuid())
+  timestamp       DateTime @default(now())
+  fromNumber      String
+  messageBody     String
+  status          String
+  responseDetails String?
+}
+
+enum VehicleType {
+  SEDAN
+  SUV
+  PICKUP
+  VAN
+  TRUCK
+  MOTORCYCLE
+}
+
 enum UnitType {
   BARRIO
   EDIFICIO
   CASA
-}
-
-model Unit {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  type        UnitType @default(EDIFICIO)
-  number      String   @default("")
-  users       User[]
-  parkingSlots ParkingSlot[]
-  
-  // Extended Details
-  floors      Int?        // For EDIFICIO: Cantidad de niveles
-  lot         String?     // For BARRIO: Identificador de lote (letras o números)
-  houseNumber String?     // For BARRIO/CASA: Número de casa
-  address     String?
-  coordinates String?     // "lat,lng" (Center or main point)
-  mapPoints   String?     // JSON string of polygon points for neighborhood map
-  contactName String?
-  contactEmail String?
-  adminPhone  String?
-  deviceCount Int         @default(0)
-  deviceType  String?     // "LPR", "FACE", "BOTH"
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Hierarchy for sub-units (e.g. Barrio -> Lotes)
-  parentId    String?
-  parent      Unit?    @relation("SubUnits", fields: [parentId], references: [id])
-  children    Unit[]   @relation("SubUnits")
 }
 
 enum UserRole {
@@ -76,59 +249,12 @@ enum UserRole {
   TEMPORARY_VISITOR
 }
 
-model User {
-  id            String        @id @default(cuid())
-  name          String
-  email         String?
-  phone         String?
-  dni           String?       // Documento de identidad (DNI/CEDULA)
-  cara          String?       // Foto para lectores faciales
-  unitId        String?
-  unit          Unit?         @relation(fields: [unitId], references: [id])
-  apartment     String?       // Número de departamento o unidad funcional
-  
-  parkingSlotId String?       @unique
-  parkingSlot   ParkingSlot?  @relation(fields: [parkingSlotId], references: [id])
-
-  role          UserRole      @default(RESIDENT)
-  credentials   Credential[]
-  vehicles      Vehicle[]
-  accessGroups  AccessGroup[]
-  accessEvents  AccessEvent[]
-  
-  accessTags    String[]      @default([]) // New Access Tags field
-  
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-}
-
 enum CredentialType {
   PLATE
   FACE
   TAG
   PIN
   FINGERPRINT
-}
-
-model Credential {
-  id        String         @id @default(cuid())
-  type      CredentialType
-  value     String
-  notes     String?        // Metadata: Fecha y equipo de origen
-  userId    String
-  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
-}
-
-model AccessGroup {
-  id        String     @id @default(cuid())
-  name      String
-  users     User[]
-  devices   Device[]
-  schedules Schedule[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
 }
 
 enum DayOfWeek {
@@ -141,21 +267,11 @@ enum DayOfWeek {
   SUNDAY
 }
 
-model Schedule {
-  id            String      @id @default(cuid())
-  accessGroupId String
-  accessGroup   AccessGroup @relation(fields: [accessGroupId], references: [id], onDelete: Cascade)
-  days          DayOfWeek[]
-  startTime     String // HH:mm
-  endTime       String // HH:mm
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-}
-
-
 enum DeviceType {
   LPR_CAMERA
   FACE_TERMINAL
+  ACCESS_CONTROL
+  DOOR_INTERCOM
 }
 
 enum DeviceBrand {
@@ -187,116 +303,7 @@ enum DeviceDirection {
   EXIT
 }
 
-model Device {
-  id           String          @id @default(cuid())
-  name         String
-  deviceType   DeviceType      @default(LPR_CAMERA)
-  brand        DeviceBrand
-  deviceModel  String?         // Specific device model (e.g., DS-2CD4A26FWD-IZS, R20A)
-  modelPhoto   String?         // Custom photo of the device
-  brandLogo    String?         // Custom logo for the manufacturer
-  ip           String
-  mac          String?
-  location     String?         // Added location field
-  direction    DeviceDirection @default(ENTRY)
-  doorStatus   DoorStatus      @default(UNKNOWN)
-  authType     AuthType        @default(BASIC)
-  username     String?
-  password     String?
-  accessGroups AccessGroup[]
-  accessEvents AccessEvent[]
-  lastOnlinePull DateTime?      // Server -> Device heartbeat
-  lastOnlinePush DateTime?      // Device -> Server heartbeat
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  
-  callEvents       CallEvent[]
-  hardwareMirrors  HardwareMirror[]
-}
-
 enum AccessDecision {
   GRANT
   DENY
-}
-
-model AccessEvent {
-  id            String          @id @default(cuid())
-  timestamp     DateTime
-  accessType    CredentialType? // Enriquecemos con el tipo (PLATE, FACE, TAG)
-  credentialId  String?
-  userId        String?
-  user          User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deviceId      String?
-  device        Device?         @relation(fields: [deviceId], references: [id], onDelete: SetNull, map: "AccessEvent_deviceId_fkey_v2")
-  imagePath     String?
-  decision      AccessDecision
-  plateDetected String?
-  direction     DeviceDirection @default(ENTRY)
-  location      String?         // Added location field
-  snapshotPath  String?
-  plateNumber   String?
-  details       String?
-  createdAt     DateTime        @default(now())
-}
-
-model CallEvent {
-  id           String   @id @default(cuid())
-  timestamp    DateTime
-  deviceId     String
-  device       Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-  callerName   String?
-  callerId     String?
-  calleeName   String?
-  calleeId     String?
-  duration     Int      @default(0) // in seconds
-  status       String   // "SUCCESS", "MISSED", etc.
-  direction    String   // "INCOMING", "OUTGOING"
-  createdAt    DateTime @default(now())
-}
-
-model HardwareMirror {
-  id           String   @id @default(cuid())
-  deviceId     String
-  device       Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-  hardwareId   String   // The ID on the physical device (e.g. index or UserID)
-  name         String?
-  cardCode     String?
-  pin          String?
-  faceUrl      String?
-  syncStatus   String   @default("IN_SYNC") // "IN_SYNC", "ONLY_HARDWARE", "OUTDATED"
-  lastUpdated  DateTime @default(now())
-  
-  @@unique([deviceId, hardwareId])
-}
-
-model Setting {
-  key       String   @id @unique
-  value     String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model ParkingSlot {
-  id          String   @id @default(cuid())
-  x           Float    @default(0)
-  y           Float    @default(0)
-  width       Float    @default(0)
-  height      Float    @default(0)
-  label       String
-  isOccupied  Boolean  @default(false)
-  points      String?  // JSON string of polygon points
-  unitId      String?
-  unit        Unit?    @relation(fields: [unitId], references: [id], onDelete: SetNull)
-  user        User?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-
-model TopologyNode {
-  id        String   @id @unique
-  x         Float
-  y         Float
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }

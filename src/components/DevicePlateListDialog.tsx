@@ -15,6 +15,12 @@ import {
     DialogTitle,
     DialogDescription,
 } from "@/components/ui/dialog";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -31,6 +37,8 @@ import {
     ChevronRight,
     PlayCircle,
     Filter,
+    AlertTriangle,
+    Info
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -213,6 +221,7 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
             // Note: This is an expensive operation if we have 600+ plates.
             // For now, let's keep the server action but we can't show real interim progress easily.
             // Alternative: Call the server action and show an indeterminate progress or "Processing"
+            // Alternative: Call the server action and show an indeterminate progress or "Processing"
             const result = await syncPlatesToDevice(device.id);
 
             if (result.success) {
@@ -226,6 +235,13 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
             toast.error(error.message);
         } finally {
             setIsSyncingToCamera(false);
+        }
+    };
+
+    const handleSyncClick = () => {
+        // Custom confirmation with reminder
+        if (confirm("⚠️ IMPORTANTE:\n\nAl sincronizar, se SOBREESCRIBIRÁ la lista interna de la cámara con los datos de la App.\nCualquier matrícula en la cámara que no esté en la App se perderá.\n\n¿Deseas continuar?")) {
+            handleSyncToCamera();
         }
     };
 
@@ -267,45 +283,79 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
-                className="max-w-2xl h-[85vh] p-0 flex flex-col border-neutral-800 bg-neutral-950 overflow-hidden shadow-2xl rounded-3xl"
+                className="max-w-3xl h-[85vh] p-0 flex flex-col border-neutral-800 bg-[#0a0a0a] overflow-hidden shadow-2xl rounded-xl"
                 onPointerDownOutside={(e) => e.preventDefault()}
             >
                 {/* Fixed Header */}
-                <DialogHeader className="p-6 pb-4 border-b border-neutral-900 bg-neutral-900/40 shrink-0">
+                <DialogHeader className="p-6 pb-4 border-b border-neutral-900 bg-neutral-950/50 shrink-0">
                     <div className="flex items-center justify-between gap-4">
                         <div className="flex items-center gap-4">
-                            <div className="p-2 bg-indigo-500/10 rounded-xl border border-indigo-500/20">
-                                <Car className="w-5 h-5 text-indigo-400" />
+                            <div className="p-2.5 bg-neutral-900 rounded-lg border border-white/5 shadow-inner">
+                                <Car className="w-6 h-6 text-indigo-500" />
                             </div>
                             <div>
-                                <DialogTitle className="text-xl font-black text-neutral-100 uppercase tracking-tight leading-none mb-1">Control LPR</DialogTitle>
-                                <DialogDescription className="text-[9px] text-neutral-500 font-black uppercase tracking-[0.2em]">
+                                <DialogTitle className="text-xl font-black text-neutral-100 uppercase tracking-tight leading-none mb-1">Listas Internas de Hardware</DialogTitle>
+                                <DialogTitle className="text-lg font-black text-neutral-100 uppercase tracking-tight leading-none mb-1">Listas Internas de Hardware</DialogTitle>
+                                <DialogDescription className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest">
                                     {device?.name} • {device?.ip}
                                 </DialogDescription>
                             </div>
                         </div>
 
-                        {/* Comparing Counters at Top */}
-                        <div className="flex items-center gap-3 bg-black/40 px-4 py-2 rounded-xl border border-white/5">
-                            <div className="flex flex-col items-center min-w-[50px]">
-                                <span className="text-[7px] font-black text-blue-500 uppercase tracking-widest mb-0.5">Cámara</span>
-                                <span className="text-sm font-bold font-mono text-white leading-none">{totalMatches || plates.length}</span>
-                            </div>
-                            <Separator orientation="vertical" className="h-5 bg-neutral-800" />
-                            <div className="flex flex-col items-center min-w-[50px]">
-                                <span className="text-[7px] font-black text-emerald-500 uppercase tracking-widest mb-0.5">App BBDD</span>
-                                <span className="text-sm font-bold font-mono text-emerald-400 leading-none">{localPlates.length}</span>
-                            </div>
+                        {/* Comparing Counters at Top - Redesigned */}
+                        <div className="flex items-center gap-0 bg-neutral-900 border border-neutral-800 rounded-lg overflow-hidden h-10">
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <div className="flex items-center gap-3 px-4 h-full hover:bg-white/5 transition-colors cursor-help border-r border-neutral-800">
+                                            <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
+                                            <div className="flex flex-col leading-none">
+                                                <span className="text-[10px] font-bold text-neutral-400 uppercase">Cámara</span>
+                                                <span className="text-xs font-black font-mono text-white">{totalMatches || plates.length}</span>
+                                            </div>
+                                        </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p>Matrículas almacenadas actualmente en el dispositivo físico</p></TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <div className="flex items-center gap-3 px-4 h-full hover:bg-white/5 transition-colors cursor-help">
+                                            <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                                            <div className="flex flex-col leading-none">
+                                                <span className="text-[10px] font-bold text-neutral-400 uppercase">Sistema</span>
+                                                <span className="text-xs font-black font-mono text-white">{localPlates.length}</span>
+                                            </div>
+                                        </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p>Matrículas registradas en la base de datos de la App</p></TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
                         </div>
                     </div>
 
                     {(loading || isSyncingToCamera) && (
                         <div className="mt-4 space-y-2">
                             <div className="flex justify-between text-[9px] uppercase font-black tracking-widest text-indigo-400 font-mono">
-                                <span>{isSyncingToCamera ? "Sincronizando con cámara..." : "Capturando hardware..."}</span>
+                                <span className="flex items-center gap-2">
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    {isSyncingToCamera ? "Sincronizando con cámara..." : "Capturando hardware..."}
+                                </span>
                                 <span>{isSyncingToCamera ? syncProgress : fetchProgress}%</span>
                             </div>
                             <Progress value={isSyncingToCamera ? syncProgress : fetchProgress} className="h-1 bg-neutral-900" indicatorClassName="bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
+                        </div>
+                    )}
+
+                    {/* Hikvision Wipe Warning */}
+                    {device?.brand === 'HIKVISION' && !loading && !isSyncingToCamera && (
+                        <div className="mt-4 flex items-center gap-3 p-3 rounded-lg bg-orange-500/5 border border-orange-500/10 text-orange-500/80">
+                            <AlertTriangle className="w-4 h-4 shrink-0" />
+                            <p className="text-[10px] uppercase font-bold tracking-wide">
+                                Advertencia: La sincronización BORRARÁ la lista actual de la cámara y cargará la de la App.
+                            </p>
                         </div>
                     )}
                 </DialogHeader>
@@ -323,14 +373,14 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                                     placeholder="Añadir nueva matrícula (ej. AB123CD)..."
                                     value={newPlate}
                                     onChange={(e) => setNewPlate(e.target.value)}
-                                    className="h-11 border-neutral-800 bg-neutral-900/40 rounded-xl font-mono text-xs pl-10 focus:ring-indigo-500/30"
+                                    className="h-10 border-neutral-800 bg-neutral-900/60 rounded-lg font-mono text-xs pl-10 focus:ring-1 focus:ring-indigo-500/50"
                                     onKeyDown={(e) => e.key === 'Enter' && handleAddPlate()}
                                 />
                             </div>
                             <Button
                                 onClick={handleAddPlate}
                                 disabled={isAdding || !newPlate}
-                                className="bg-indigo-600 hover:bg-indigo-500 text-white h-11 w-11 rounded-xl shrink-0"
+                                className="bg-indigo-600 hover:bg-indigo-500 text-white h-10 w-10 rounded-lg shrink-0 shadow-lg shadow-indigo-900/20"
                                 size="icon"
                             >
                                 {isAdding ? <Loader2 className="animate-spin w-4 h-4" /> : <Plus className="w-4 h-4" />}
@@ -340,7 +390,7 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                         <div className="flex gap-2">
                             {/* Search */}
                             <div className="relative flex-1">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-700 w-4 h-4" />
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600 w-4 h-4" />
                                 <Input
                                     placeholder="Buscar en la lista..."
                                     value={searchTerm}
@@ -348,49 +398,64 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                                         setSearchTerm(e.target.value);
                                         setCurrentPage(1);
                                     }}
-                                    className="pl-10 h-11 border-neutral-800 bg-neutral-900/40 text-xs font-bold rounded-xl"
+                                    className="pl-10 h-10 border-neutral-800 bg-neutral-900/60 text-xs font-bold rounded-lg focus:ring-1 focus:ring-white/10"
                                 />
                             </div>
 
                             {/* Filter and Control Buttons */}
                             <div className="flex gap-2 shrink-0">
-                                <Button
-                                    variant={filterOnlyMissing ? "default" : "outline"}
-                                    size="icon"
-                                    onClick={() => {
-                                        setFilterOnlyMissing(!filterOnlyMissing);
-                                        setCurrentPage(1);
-                                    }}
-                                    className={cn(
-                                        "h-11 w-11 rounded-xl transition-all",
-                                        filterOnlyMissing ? "bg-orange-600 hover:bg-orange-500" : "border-neutral-800 bg-neutral-900 text-neutral-400"
-                                    )}
-                                    title="Mostrar solo lo que falta en Base de Datos"
-                                >
-                                    <Filter className="w-4 h-4" />
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    onClick={loadPlates}
-                                    disabled={loading}
-                                    className="h-11 w-11 rounded-xl border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-white"
-                                >
-                                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlayCircle className="w-4 h-4" />}
-                                </Button>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button
+                                                variant={filterOnlyMissing ? "default" : "outline"}
+                                                size="icon"
+                                                onClick={() => {
+                                                    setFilterOnlyMissing(!filterOnlyMissing);
+                                                    setCurrentPage(1);
+                                                }}
+                                                className={cn(
+                                                    "h-10 w-10 rounded-lg transition-all",
+                                                    filterOnlyMissing ? "bg-orange-600 hover:bg-orange-500 text-white border-transparent" : "border-neutral-800 bg-neutral-900 text-neutral-400 hover:bg-white/5"
+                                                )}
+                                            >
+                                                <Filter className="w-4 h-4" />
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p className="text-[10px] font-bold">Ver solo matrículas que faltan en BBDD</p></TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button
+                                                variant="outline"
+                                                size="icon"
+                                                onClick={loadPlates}
+                                                disabled={loading}
+                                                className="h-10 w-10 rounded-lg border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-white hover:bg-white/5"
+                                            >
+                                                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlayCircle className="w-4 h-4" />}
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p className="text-[10px] font-bold">Recargar Lista de Cámara</p></TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+
                                 <Button
                                     size="sm"
                                     onClick={() => setShowImportPreview(true)}
                                     disabled={loading || plates.length === 0}
-                                    className="bg-blue-600 hover:bg-blue-500 text-white font-black text-[9px] uppercase tracking-widest rounded-xl h-11 px-4"
+                                    className="bg-blue-600 hover:bg-blue-500 text-white font-black text-[9px] uppercase tracking-widest rounded-lg h-10 px-4 shadow-lg shadow-blue-900/20"
                                 >
                                     Bajar
                                 </Button>
                                 <Button
                                     size="sm"
-                                    onClick={handleSyncToCamera}
+                                    onClick={handleSyncClick}
                                     disabled={loading || isSyncingToCamera}
-                                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[9px] uppercase tracking-widest rounded-xl h-11 px-4"
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[9px] uppercase tracking-widest rounded-lg h-10 px-4 shadow-lg shadow-emerald-900/20"
                                 >
                                     {isSyncingToCamera ? <Loader2 className="w-3 h-3 animate-spin" /> : <UploadCloud className="w-3 h-3 mr-2" />}
                                     Sync
@@ -399,64 +464,92 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                         </div>
                     </div>
 
-                    {/* Matrix View */}
-                    <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-                        <div className="flex-1 overflow-y-auto p-1 custom-scrollbar">
+                    {/* Matrix View - Refined */}
+                    <div className="flex-1 min-h-0 overflow-hidden flex flex-col bg-neutral-900/30 rounded-lg border border-neutral-800/50">
+                        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
                             {paginatedPlates.length === 0 ? (
-                                <div className="h-full flex flex-col items-center justify-center text-neutral-800 opacity-30 mt-10">
-                                    <Database className="w-12 h-12 mb-3" />
-                                    <p className="text-[10px] font-black uppercase tracking-[0.2em]">Sin registros que mostrar</p>
+                                <div className="h-full flex flex-col items-center justify-center text-neutral-800 opacity-30">
+                                    <Database className="w-16 h-16 mb-4" />
+                                    <p className="text-xs font-black uppercase tracking-widest">Sin registros disponibles</p>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {paginatedPlates.map(({ plate, inCamera, inLocal, residentName, brand, color }) => (
-                                        <div key={plate} className="group p-4 rounded-2xl border border-neutral-900 bg-neutral-900/20 hover:bg-neutral-900/60 hover:border-neutral-800 transition-all flex flex-col h-32 justify-between shadow-sm relative overflow-hidden">
-                                            {/* Decoration for cards with brand info */}
-                                            {brand && brand !== 'Unknown' && (
-                                                <div className="absolute -right-2 -top-2 opacity-[0.03] pointer-events-none rotate-12">
-                                                    <Car className="w-16 h-16 text-white" />
+                                        <div key={plate} className="group p-4 rounded-lg border border-neutral-800 bg-black/40 hover:bg-neutral-900 hover:border-neutral-700 transition-all flex flex-col h-28 justify-between relative overflow-hidden">
+
+                                            {/* Vehicle Background Decoration */}
+                                            {localDetailMap[plate]?.hasVehicle && (
+                                                <div className="absolute right-[-10%] bottom-[-20%] opacity-[0.03] group-hover:opacity-[0.06] transition-opacity pointer-events-none rotate-[-10deg]">
+                                                    <Car className="w-24 h-24 text-white" />
                                                 </div>
                                             )}
 
                                             <div>
                                                 <div className="flex items-center justify-between mb-2">
                                                     <div className="flex gap-1.5">
-                                                        <Badge className={cn(
-                                                            "text-[7px] px-1.5 py-0.5 rounded-md font-black border-none",
-                                                            inLocal ? "bg-emerald-500/10 text-emerald-400" : "bg-orange-500/10 text-orange-400 shadow-[0_0_8px_rgba(249,115,22,0.1)]"
-                                                        )}>
-                                                            {inLocal ? "EN BBDD" : "FALTA EN BBDD"}
-                                                        </Badge>
-                                                        {inCamera && (
-                                                            <Badge className="bg-blue-500/10 text-blue-400 text-[7px] px-1.5 py-0.5 rounded-md font-black border-none">
-                                                                HARDWARE
-                                                            </Badge>
-                                                        )}
+                                                        <TooltipProvider>
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <div className={cn(
+                                                                        "w-2 h-2 rounded-full",
+                                                                        inLocal ? "bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]" : "bg-neutral-800 border border-neutral-700"
+                                                                    )} />
+                                                                </TooltipTrigger>
+                                                                <TooltipContent className="text-[10px] font-black uppercase">
+                                                                    {inLocal ? "Registrado en Sistema" : "No registrado en Sistema"}
+                                                                </TooltipContent>
+                                                            </Tooltip>
+                                                        </TooltipProvider>
+
+                                                        <TooltipProvider>
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <div className={cn(
+                                                                        "w-2 h-2 rounded-full",
+                                                                        inCamera ? "bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,0.5)]" : "bg-neutral-800 border border-neutral-700"
+                                                                    )} />
+                                                                </TooltipTrigger>
+                                                                <TooltipContent className="text-[10px] font-black uppercase">
+                                                                    {inCamera ? "Presente en Cámara" : "Falta en Cámara"}
+                                                                </TooltipContent>
+                                                            </Tooltip>
+                                                        </TooltipProvider>
                                                     </div>
+
                                                     {inCamera && (
-                                                        <Trash2
-                                                            className="w-3.5 h-3.5 text-neutral-800 hover:text-red-500 cursor-pointer transition-colors opacity-0 group-hover:opacity-100"
-                                                            onClick={(e) => { e.stopPropagation(); handleDelete(plate); }}
-                                                        />
+                                                        <TooltipProvider>
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <button
+                                                                        className="text-neutral-700 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                                                                        onClick={(e) => { e.stopPropagation(); handleDelete(plate); }}
+                                                                    >
+                                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent><p className="text-[10px] uppercase font-bold text-red-400">Eliminar de Cámara</p></TooltipContent>
+                                                            </Tooltip>
+                                                        </TooltipProvider>
                                                     )}
                                                 </div>
-                                                <div className="text-lg font-black font-mono text-neutral-100 tracking-tight leading-none uppercase">{plate}</div>
-                                            </div>
-                                            <div className="space-y-1">
-                                                <div className="text-[10px] font-bold text-neutral-400 truncate uppercase tracking-tight">
-                                                    {residentName || "Sin Residente"}
+                                                <div className="text-xl font-black font-mono text-neutral-200 tracking-wider leading-none uppercase select-all group-hover:text-white transition-colors">
+                                                    {plate}
                                                 </div>
-                                                {(brand || color) && (
-                                                    <div className="flex gap-2 text-[8px] font-black uppercase tracking-widest">
-                                                        <span className={cn(brand && brand !== 'Unknown' ? "text-indigo-400" : "text-neutral-700")}>
-                                                            {brand && brand !== 'Unknown' ? brand : "Vehículo n/a"}
-                                                        </span>
-                                                        <span className="text-neutral-700">•</span>
-                                                        <span className={cn(color && color !== 'Unknown' ? "text-indigo-400" : "text-neutral-700")}>
-                                                            {color && color !== 'Unknown' ? color : "Color n/a"}
-                                                        </span>
-                                                    </div>
-                                                )}
+                                            </div>
+
+                                            <div className="relative z-10">
+                                                <div className="text-[10px] font-black text-neutral-500 group-hover:text-neutral-400 truncate uppercase tracking-tight mb-0.5">
+                                                    {residentName || "NO ASIGNADO"}
+                                                </div>
+                                                <div className="flex gap-2 text-[9px] font-medium uppercase tracking-wide">
+                                                    <span className={cn("font-bold", brand && brand !== 'Unknown' ? "text-indigo-400" : "text-neutral-600")}>
+                                                        {brand && brand !== 'Unknown' ? brand : "---"}
+                                                    </span>
+                                                    <span className="text-neutral-700">|</span>
+                                                    <span className={cn(color && color !== 'Unknown' ? "text-neutral-400" : "text-neutral-600")}>
+                                                        {color && color !== 'Unknown' ? color : "---"}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
                                     ))}
@@ -466,7 +559,7 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
 
                         {/* Pagination Bar */}
                         {allFilteredPlates.length > ITEMS_PER_PAGE && (
-                            <div className="pt-6 mt-4 border-t border-neutral-900/50 flex items-center justify-center gap-6 shrink-0">
+                            <div className="p-3 border-t border-neutral-800 bg-neutral-900/50 flex items-center justify-center gap-6 shrink-0">
                                 <Button
                                     variant="ghost"
                                     size="icon"
@@ -477,9 +570,9 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                                     <ChevronLeft className="w-5 h-5" />
                                 </Button>
                                 <div className="flex items-center gap-2">
-                                    <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">Página</span>
-                                    <span className="text-xs font-black text-white bg-white/5 w-6 h-6 flex items-center justify-center rounded-md">{currentPage}</span>
-                                    <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">de {totalPages}</span>
+                                    <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">Pág</span>
+                                    <span className="text-[10px] font-black text-white bg-white/5 w-6 h-6 flex items-center justify-center rounded border border-white/5">{currentPage}</span>
+                                    <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">de {totalPages}</span>
                                 </div>
                                 <Button
                                     variant="ghost"
@@ -495,21 +588,20 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                     </div>
                 </div>
 
-                {/* Status Footer */}
-                <div className="p-4 border-t border-neutral-900 bg-neutral-900/40 flex justify-center items-center text-[9px] font-black uppercase tracking-[0.3em] text-neutral-700 shrink-0">
-                    <div className="flex gap-8">
+                {/* Status Footer - Concise */}
+                <div className="px-6 py-3 border-t border-neutral-900 bg-neutral-950 flex justify-between items-center shrink-0">
+                    <div className="flex gap-6 text-[9px] font-black uppercase tracking-widest text-neutral-600">
                         <div className="flex items-center gap-2">
-                            <Circle className="w-1.5 h-1.5 fill-blue-500 text-blue-500 border-none" />
-                            <span>Memoria Hardware</span>
+                            <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_6px_rgba(59,130,246,0.4)]" />
+                            <span>En Cámara</span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <Circle className="w-1.5 h-1.5 fill-emerald-500 text-emerald-400 border-none" />
-                            <span>Sincronizado BBDD</span>
+                            <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]" />
+                            <span>En App</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <Circle className="w-1.5 h-1.5 fill-orange-500 text-orange-400 border-none animate-pulse" />
-                            <span>Sin Registro Local</span>
-                        </div>
+                    </div>
+                    <div className="text-[9px] font-mono text-neutral-700 uppercase">
+                        Total Mostrado: {allFilteredPlates.length}
                     </div>
                 </div>
             </DialogContent>

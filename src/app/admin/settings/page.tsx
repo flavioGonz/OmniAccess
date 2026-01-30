@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
     Settings,
     Users,
@@ -29,7 +29,8 @@ import {
     Check,
     MessageSquare,
     Smartphone,
-    Bot
+    Bot,
+    ArrowRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SystemFlow from "@/components/dashboard/SystemFlow";
@@ -38,9 +39,18 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { DriverDetailsDialog } from "@/components/DriverDetailsDialog";
 import { DRIVER_MODELS, type DeviceBrand } from "@/lib/driver-models";
-import { updateSetting, getSetting, testS3Connection, getBucketLifecycle, updateBucketLifecycle, testDbConnection, getBucketStats, getDbStats, downloadBackup, testWahaConnection } from "@/app/actions/settings";
+import { updateSetting, getSetting, testS3Connection, getBucketLifecycle, updateBucketLifecycle, testDbConnection, getBucketStats, getDbStats, downloadBackup, restoreBackup, populateDatabase, testWahaConnection, getWahaHistory, testExternalDbConnection, updateDatabaseUrl, runDatabaseMigrations } from "@/app/actions/settings";
 import { useEffect } from "react";
 import { toast } from "sonner";
+import { Switch } from "@/components/ui/switch";
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
 
 const SETTINGS_SECTIONS = [
     {
@@ -109,8 +119,8 @@ const SETTINGS_SECTIONS = [
 ];
 
 const DRIVERS = [
-    { brand: "Hikvision", tech: "ISAPI/Event", active: true, color: "red" },
-    { brand: "Akuvox", tech: "HTTP/Webhook", active: true, color: "blue" },
+    { brand: "Hikvision", tech: "ISAPI/Event", active: true, color: "red", logo: "/logos/hikvision.png" },
+    { brand: "Akuvox", tech: "HTTP/Webhook", active: true, color: "blue", logo: "/logos/akuvox.png" },
     { brand: "Dahua", tech: "CGI/HTTP", active: false, color: "red" },
     { brand: "ZKTeco", tech: "Push HTTP", active: false, color: "blue" },
     { brand: "Axis", tech: "Vapix API", active: false, color: "orange" },
@@ -126,58 +136,47 @@ export default function SettingsPage() {
 
     return (
         <div className="h-full overflow-y-auto p-6 space-y-8 animate-in fade-in duration-700 custom-scrollbar">
-            {/* Header */}
-            <div className="mb-8">
-                <div className="flex items-center gap-4 mb-2">
-                    <div className="p-3 bg-blue-500/10 rounded-xl border border-blue-500/20">
-                        <Settings className="text-blue-400" size={28} />
-                    </div>
-                    <div>
-                        <h1 className="text-4xl font-black text-white tracking-tight">Configuración</h1>
-                        <p className="text-sm text-neutral-500 font-medium">Panel de control del sistema</p>
-                    </div>
+
+
+            {/* Tabs Navigation */}
+            <div className="sticky top-0 z-40 bg-[#09090b]/80 backdrop-blur-md border-b border-white/5 mb-8 -mx-6 px-6 pt-2">
+                <div className="flex items-center justify-center gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden">
+                    {SETTINGS_SECTIONS.map((section) => {
+                        const Icon = section.icon;
+                        const isActive = activeSection === section.id;
+                        return (
+                            <button
+                                key={section.id}
+                                onClick={() => setActiveSection(section.id)}
+                                className={cn(
+                                    "flex items-center gap-2 px-4 py-3 text-sm font-medium transition-all relative whitespace-nowrap rounded-lg",
+                                    isActive
+                                        ? "text-white"
+                                        : "text-neutral-500 hover:text-neutral-300 hover:bg-white/5"
+                                )}
+                            >
+                                <Icon size={16} className={cn(
+                                    "transition-colors",
+                                    isActive ? `text-${section.color}-400` : "text-neutral-600 group-hover:text-neutral-400"
+                                )} />
+                                {section.label}
+
+                                {/* Active Indicator line */}
+                                {isActive && (
+                                    <div className={cn(
+                                        "absolute bottom-0 left-0 right-0 h-[2px] rounded-t-full shadow-[0_-2px_10px_rgba(0,0,0,0.5)]",
+                                        `bg-${section.color}-500 shadow-${section.color}-500/50`
+                                    )} />
+                                )}
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
 
-            <div className="grid grid-cols-12 gap-6">
-                {/* Sidebar Navigation - Compacto */}
-                <div className="col-span-12 lg:col-span-2">
-                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-xl p-1.5 sticky top-8">
-                        <nav className="space-y-0.5">
-                            {SETTINGS_SECTIONS.map((section) => {
-                                const Icon = section.icon;
-                                const isActive = activeSection === section.id;
-
-                                return (
-                                    <button
-                                        key={section.id}
-                                        onClick={() => setActiveSection(section.id)}
-                                        className={cn(
-                                            "w-full flex items-center gap-2 px-3 py-2.5 rounded-lg transition-all group",
-                                            isActive
-                                                ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
-                                                : "text-neutral-400 hover:bg-white/5 hover:text-white"
-                                        )}
-                                    >
-                                        <Icon size={16} className={cn(
-                                            "transition-transform shrink-0",
-                                            isActive && "scale-110"
-                                        )} />
-                                        <div className="flex-1 text-left">
-                                            <div className="text-[11px] font-bold leading-tight">{section.label}</div>
-                                        </div>
-                                        {isActive && (
-                                            <ChevronRight size={12} className="animate-pulse" />
-                                        )}
-                                    </button>
-                                );
-                            })}
-                        </nav>
-                    </div>
-                </div>
-
-                {/* Main Content */}
-                <div className="col-span-12 lg:col-span-10">
+            {/* Main Content */}
+            <div className="w-full space-y-6">
+                <div key={activeSection} className="animate-in fade-in slide-in-from-bottom-2 duration-500 ease-out">
                     {/* Mode Face Section */}
                     {activeSection === "mode_face" && (
                         <ModeConfiguration
@@ -242,10 +241,14 @@ export default function SettingsPage() {
 
                                             <div className="flex flex-col items-center gap-3">
                                                 <div className={cn(
-                                                    "w-12 h-12 rounded-xl flex items-center justify-center",
-                                                    driver.active ? "bg-blue-500/10" : "bg-neutral-800/50"
+                                                    "w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden transition-all",
+                                                    (driver as { logo?: string }).logo ? "bg-white p-1" : (driver.active ? "bg-blue-500/10" : "bg-neutral-800/50")
                                                 )}>
-                                                    <Camera size={24} className={driver.active ? "text-blue-400" : "text-neutral-600"} />
+                                                    {(driver as { logo?: string }).logo ? (
+                                                        <img src={(driver as { logo?: string }).logo} alt={driver.brand} className="w-full h-full object-contain" />
+                                                    ) : (
+                                                        <Camera size={24} className={driver.active ? "text-blue-400" : "text-neutral-600"} />
+                                                    )}
                                                 </div>
 
                                                 <div className="text-center">
@@ -305,17 +308,21 @@ export default function SettingsPage() {
                                     <Activity className="text-indigo-400" size={24} />
                                 </div>
                             </div>
-                            <div className="h-[600px] rounded-xl overflow-hidden">
+                            <div className="h-[calc(100vh-220px)] rounded-xl overflow-hidden border border-white/5 bg-neutral-900/50 backdrop-blur-3xl shadow-2xl relative group">
+                                <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none" />
                                 <SystemFlow />
                             </div>
                         </div>
                     )}
+
+
 
                     {activeSection === "whatsapp" && (
                         <WhatsAppSection />
                     )}
                 </div>
             </div>
+
 
             {/* Driver Details Dialog */}
             <DriverDetailsDialog
@@ -329,9 +336,21 @@ export default function SettingsPage() {
 
 function DatabaseSection() {
     const [testing, setTesting] = useState(false);
-    const [stats, setStats] = useState<{ totalSize: string, tables: any[], host?: string, port?: string } | null>(null);
+    const [stats, setStats] = useState<{
+        totalSize: string,
+        tables: { table_name: string, row_count: number, total_size: string }[],
+        host?: string,
+        port?: string
+    } | null>(null);
     const [loadingStats, setLoadingStats] = useState(true);
     const [backingUp, setBackingUp] = useState(false);
+
+    // New state for switching DB
+    const [showSwitchDb, setShowSwitchDb] = useState(false);
+    const [newDbUrl, setNewDbUrl] = useState("");
+    const [testingExternal, setTestingExternal] = useState(false);
+    const [externalStatus, setExternalStatus] = useState<{ success: boolean, message: string, isVirgin?: boolean } | null>(null);
+    const [migrating, setMigrating] = useState(false);
 
     useEffect(() => {
         loadStats();
@@ -373,6 +392,57 @@ function DatabaseSection() {
         }
     };
 
+    const handleTestExternal = async () => {
+        if (!newDbUrl) return toast.error("Por favor ingresa una URL de conexión");
+        setTestingExternal(true);
+        setExternalStatus(null);
+        try {
+            const res = await testExternalDbConnection(newDbUrl);
+            setExternalStatus(res);
+            if (res.success) {
+                toast.success(res.isVirgin ? "Conexión exitosa. Base de datos virgen detectada." : "Conexión exitosa con base de datos existente.");
+            } else {
+                toast.error("Error de conexión externa: " + res.message);
+            }
+        } catch (err) {
+            toast.error("Error al testear base de datos externa");
+        } finally {
+            setTestingExternal(false);
+        }
+    };
+
+    const handleApplyExternal = async () => {
+        if (!externalStatus?.success) return;
+
+        if (confirm("¿Estás seguro de cambiar la base de datos? La aplicación se reiniciará.")) {
+            const res = await updateDatabaseUrl(newDbUrl);
+            if (res.success) {
+                toast.success("Configuración actualizada. Reiniciando...");
+                setTimeout(() => window.location.reload(), 3000);
+            } else {
+                toast.error("Error al actualizar: " + res.message);
+            }
+        }
+    };
+
+    const handleRunMigrations = async () => {
+        setMigrating(true);
+        try {
+            const res = await runDatabaseMigrations();
+            if (res.success) {
+                toast.success("Migraciones completadas correctamente");
+                loadStats();
+                setExternalStatus(prev => prev ? { ...prev, isVirgin: false } : null);
+            } else {
+                toast.error("Error en migraciones: " + res.message);
+            }
+        } catch (err) {
+            toast.error("Error crítico en migraciones");
+        } finally {
+            setMigrating(false);
+        }
+    };
+
     const handleBackup = async () => {
         setBackingUp(true);
         try {
@@ -398,6 +468,90 @@ function DatabaseSection() {
         }
     };
 
+    const [importing, setImporting] = useState(false);
+    const [populating, setPopulating] = useState(false);
+    const [pendingAction, setPendingAction] = useState<{
+        type: 'IMPORT' | 'POPULATE',
+        file?: File,
+        analysis?: {
+            users: number,
+            vehicles: number,
+            devices: number,
+            events: number,
+            units: number
+        }
+    } | null>(null);
+    const [mergeMode, setMergeMode] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const triggerImport = () => {
+        fileInputRef.current?.click();
+        if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+
+    const onFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            try {
+                const text = await file.text();
+                const json = JSON.parse(text);
+                const analysis = {
+                    users: json.data?.users?.length || 0,
+                    vehicles: json.data?.vehicles?.length || 0,
+                    devices: json.data?.devices?.length || 0,
+                    events: json.data?.events?.length || 0,
+                    units: json.data?.units?.length || 0
+                };
+                setMergeMode(false); // Reset to default (Replace)
+                setPendingAction({ type: 'IMPORT', file, analysis });
+            } catch (err) {
+                toast.error("Archivo de respaldo inválido");
+            }
+        }
+    };
+
+    const confirmAction = async () => {
+        if (!pendingAction) return;
+
+        if (pendingAction.type === 'IMPORT') {
+            setImporting(true);
+            try {
+                if (!pendingAction.file) return;
+                const text = await pendingAction.file.text();
+                const json = JSON.parse(text);
+
+                const res = await restoreBackup(json, mergeMode);
+                if (res.success) {
+                    toast.success(`Base de datos restaurada correctamente`);
+                    loadStats();
+                } else {
+                    toast.error("Error al restaurar: " + res.message);
+                }
+            } catch (error) {
+                console.error(error);
+                toast.error("Error al procesar el archivo de respaldo");
+            } finally {
+                setImporting(false);
+            }
+        } else if (pendingAction.type === 'POPULATE') {
+            setPopulating(true);
+            try {
+                const res = await populateDatabase();
+                if (res.success) {
+                    toast.success(res.message || "Base de datos inicializada con datos de prueba");
+                    loadStats();
+                } else {
+                    toast.error("Error al poblar: " + res.message);
+                }
+            } catch (error) {
+                toast.error("Error al poblar la base de datos");
+            } finally {
+                setPopulating(false);
+            }
+        }
+        setPendingAction(null);
+    };
+
     return (
         <div className="space-y-6">
             <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-8">
@@ -406,15 +560,101 @@ function DatabaseSection() {
                         <h2 className="text-2xl font-black text-white tracking-tight">PostgreSQL Database</h2>
                         <p className="text-sm text-neutral-500 mt-1">Gestión avanzada y salud del motor de datos</p>
                     </div>
-                    <div className="flex flex-col items-end">
-                        <div className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg mb-1">
-                            <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Peso Total DB</span>
+                    <div className="flex items-center gap-4">
+                        <Button
+                            onClick={() => setShowSwitchDb(!showSwitchDb)}
+                            variant="outline"
+                            className="bg-neutral-950 border-white/5 text-neutral-400 hover:text-white hover:bg-white/5"
+                        >
+                            <Settings size={16} className="mr-2" />
+                            {showSwitchDb ? "Cerrar Config" : "Cambiar Base de Datos"}
+                        </Button>
+                        <div className="flex flex-col items-end">
+                            <div className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg mb-1">
+                                <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Peso Total DB</span>
+                            </div>
+                            <span className="text-xl font-mono font-black text-white">
+                                {loadingStats ? "..." : stats?.totalSize || "N/A"}
+                            </span>
                         </div>
-                        <span className="text-xl font-mono font-black text-white">
-                            {loadingStats ? "..." : stats?.totalSize || "N/A"}
-                        </span>
                     </div>
                 </div>
+
+                {showSwitchDb && (
+                    <div className="mb-8 p-6 bg-blue-500/5 border border-blue-500/10 rounded-xl animate-in fade-in slide-in-from-top-4 duration-300">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="p-2 bg-blue-500/20 rounded-lg">
+                                <Database className="text-blue-400" size={20} />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-black text-white uppercase tracking-tight">Configurar Nueva Conexión</h3>
+                                <p className="text-[10px] text-neutral-500 uppercase font-bold">Cambia la base de datos sin afectar la actual</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <div className="md:col-span-3">
+                                    <Label className="text-[10px] uppercase font-black text-neutral-500 mb-2 block">String de Conexión (DATABASE_URL)</Label>
+                                    <Input
+                                        value={newDbUrl}
+                                        onChange={(e) => setNewDbUrl(e.target.value)}
+                                        placeholder="postgresql://user:pass@host:5432/dbname?schema=public"
+                                        className="bg-black/40 border-white/10 h-10 font-mono text-xs"
+                                    />
+                                </div>
+                                <div className="flex items-end">
+                                    <Button
+                                        onClick={handleTestExternal}
+                                        disabled={testingExternal || !newDbUrl}
+                                        className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black h-10 text-[10px] uppercase tracking-widest"
+                                    >
+                                        {testingExternal ? <RefreshCcw className="animate-spin mr-2" size={12} /> : <Activity className="mr-2" size={12} />}
+                                        Testear
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {externalStatus && (
+                                <div className={cn(
+                                    "p-4 rounded-lg flex items-center justify-between animate-in zoom-in-95",
+                                    externalStatus.success ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-red-500/10 border border-red-500/20"
+                                )}>
+                                    <div className="flex items-center gap-3">
+                                        {externalStatus.success ? <Check className="text-emerald-400" size={18} /> : <X className="text-red-400" size={18} />}
+                                        <div>
+                                            <p className={cn("text-xs font-bold", externalStatus.success ? "text-emerald-400" : "text-red-400")}>
+                                                {externalStatus.success ? "Conexión Exitosa" : "Error de Conexión"}
+                                            </p>
+                                            <p className="text-[10px] text-neutral-500">{externalStatus.message}</p>
+                                        </div>
+                                    </div>
+
+                                    {externalStatus.success && (
+                                        <div className="flex gap-2">
+                                            {externalStatus.isVirgin && (
+                                                <Button
+                                                    onClick={handleRunMigrations}
+                                                    disabled={migrating}
+                                                    className="bg-amber-600 hover:bg-amber-500 text-white font-black h-8 text-[9px] uppercase tracking-widest"
+                                                >
+                                                    {migrating ? <RefreshCcw className="animate-spin mr-2" size={10} /> : <FileText className="mr-2" size={10} />}
+                                                    Poblar Tablas (Prisma)
+                                                </Button>
+                                            )}
+                                            <Button
+                                                onClick={handleApplyExternal}
+                                                className="bg-emerald-600 hover:bg-emerald-500 text-white font-black h-8 text-[9px] uppercase tracking-widest"
+                                            >
+                                                Aplicar Cambio
+                                            </Button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Connection Health */}
@@ -507,26 +747,150 @@ function DatabaseSection() {
                         </Button>
                     </div>
 
-                    <div className="bg-neutral-900 border border-white/5 p-6 rounded-xl flex items-center justify-between group opacity-50 cursor-not-allowed">
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500 border border-blue-500/20">
-                                <Upload size={24} />
+                    {/* Database Actions Grid */}
+                    <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* Backup */}
+                        <div className="bg-neutral-900 border border-white/5 p-5 rounded-xl flex flex-col justify-between group h-full">
+                            <div className="mb-4">
+                                <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-500 mb-3 border border-amber-500/10">
+                                    <Download size={20} />
+                                </div>
+                                <h3 className="text-white font-black uppercase text-xs mb-1">Respaldo</h3>
+                                <p className="text-[10px] text-neutral-500">Descargar copia completa JSON</p>
                             </div>
-                            <div>
-                                <p className="text-white font-black uppercase tracking-tight text-xs">Importar Datos</p>
-                                <p className="text-[10px] text-neutral-500 font-medium">Restaurar sistema desde un archivo de respaldo</p>
+                            <Button
+                                onClick={handleBackup}
+                                disabled={backingUp}
+                                className="w-full bg-neutral-800 hover:bg-amber-600 text-neutral-300 hover:text-white font-black text-[9px] uppercase tracking-widest h-8"
+                            >
+                                {backingUp ? "Exportando..." : "Exportar"}
+                            </Button>
+                        </div>
+
+                        {/* Import */}
+                        <div className="bg-neutral-900 border border-white/5 p-5 rounded-xl flex flex-col justify-between group h-full">
+                            <div className="mb-4">
+                                <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 mb-3 border border-blue-500/10">
+                                    <Upload size={20} />
+                                </div>
+                                <h3 className="text-white font-black uppercase text-xs mb-1">Restaurar</h3>
+                                <p className="text-[10px] text-neutral-500">Importar backup existente</p>
+                            </div>
+                            <div className="relative">
+                                <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    onChange={onFileSelected}
+                                    className="hidden"
+                                    accept=".json"
+                                />
+                                <Button
+                                    onClick={triggerImport}
+                                    disabled={importing}
+                                    className="w-full bg-neutral-800 hover:bg-blue-600 text-neutral-400 hover:text-white font-black text-[9px] uppercase tracking-widest h-8 border border-white/5"
+                                >
+                                    {importing ? "Restaurando..." : "Seleccionar Archivo"}
+                                </Button>
                             </div>
                         </div>
-                        <Button
-                            disabled
-                            className="bg-neutral-800 text-neutral-500 font-black text-[9px] uppercase tracking-widest px-4 h-9"
-                        >
-                            <Upload size={12} className="mr-2" />
-                            IMPORTAR
-                        </Button>
+
+                        {/* Populate / Init */}
+                        <div className="bg-neutral-900 border border-white/5 p-5 rounded-xl flex flex-col justify-between group h-full">
+                            <div className="mb-4">
+                                <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500 mb-3 border border-purple-500/10">
+                                    <Database size={20} />
+                                </div>
+                                <h3 className="text-white font-black uppercase text-xs mb-1">Inicializar</h3>
+                                <p className="text-[10px] text-neutral-500">Poblar nueva DB o Resetear</p>
+                            </div>
+                            <Button
+                                onClick={() => setPendingAction({ type: 'POPULATE' })}
+                                disabled={populating}
+                                className="w-full bg-neutral-800 hover:bg-purple-600 text-neutral-400 hover:text-white font-black text-[9px] uppercase tracking-widest h-8 border border-white/5"
+                            >
+                                {populating ? "Poblando..." : "Poblar Datos"}
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </div>
+
+            {/* Confirmation Modal for Database Actions */}
+            {/* Confirmation Modal for Database Actions */}
+            {pendingAction && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setPendingAction(null)}>
+                    <div className="bg-neutral-900 border border-white/10 rounded-xl max-w-lg w-full mx-4 overflow-hidden shadow-2xl p-6" onClick={(e) => e.stopPropagation()}>
+                        <div className="text-center mb-6">
+                            <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto mb-4 border border-red-500/20">
+                                <ShieldAlert size={32} />
+                            </div>
+                            <h3 className="text-lg font-black text-white mb-2">
+                                {pendingAction.type === 'IMPORT' ? 'Análisis de Restauración' : '¿Reiniciar Base de Datos?'}
+                            </h3>
+
+                            {pendingAction.type === 'IMPORT' && pendingAction.analysis ? (
+                                <div className="text-left mt-4 mb-6">
+                                    <div className="flex items-center justify-center gap-4 mb-6 bg-neutral-950 p-3 rounded-lg border border-white/5">
+                                        <span className={cn("text-xs font-bold", !mergeMode ? "text-red-400" : "text-neutral-500")}>REEMPLAZAR TODO</span>
+                                        <Switch checked={mergeMode} onCheckedChange={setMergeMode} />
+                                        <span className={cn("text-xs font-bold", mergeMode ? "text-blue-400" : "text-neutral-500")}>FUSIONAR (MERGE)</span>
+                                    </div>
+
+                                    <div className="bg-neutral-950 rounded-lg border border-white/5 overflow-hidden">
+                                        <table className="w-full text-[10px]">
+                                            <thead className="bg-white/5 text-neutral-400 font-bold uppercase tracking-wider">
+                                                <tr>
+                                                    <th className="px-3 py-2 text-left">Tabla</th>
+                                                    <th className="px-3 py-2 text-center">Datos Nuevos</th>
+                                                    <th className="px-3 py-2 text-center text-white">Acción</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-white/5 text-neutral-300">
+                                                {[
+                                                    { label: "Usuarios", count: pendingAction.analysis.users },
+                                                    { label: "Vehículos", count: pendingAction.analysis.vehicles },
+                                                    { label: "Unidades", count: pendingAction.analysis.units },
+                                                    { label: "Eventos", count: pendingAction.analysis.events },
+                                                ].map((row, i) => (
+                                                    <tr key={i}>
+                                                        <td className="px-3 py-2 font-bold">{row.label}</td>
+                                                        <td className="px-3 py-2 text-center font-mono">{row.count}</td>
+                                                        <td className="px-3 py-2 text-center">
+                                                            <span className={cn(
+                                                                "px-2 py-0.5 rounded font-black uppercase text-[9px]",
+                                                                mergeMode ? "bg-blue-500/20 text-blue-400" : "bg-red-500/20 text-red-400"
+                                                            )}>
+                                                                {mergeMode ? "+ AGREGAR" : "SOBREESCRIBIR"}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <p className="text-[10px] text-neutral-500 mt-4 text-center">
+                                        {mergeMode
+                                            ? "Se agregarán los registros nuevos. Los existentes se mantendrán."
+                                            : "ADVERTENCIA: Se BORRARÁN todos los datos actuales antes de importar."}
+                                    </p>
+                                </div>
+                            ) : (
+                                <p className="text-xs text-neutral-400 leading-relaxed">
+                                    Esta acción borrará los datos actuales y poblará la base de datos con información inicial/de prueba. ¿Estás seguro?
+                                </p>
+                            )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Button onClick={() => setPendingAction(null)} variant="ghost" className="h-10 text-neutral-400 hover:bg-white/5 hover:text-white font-bold rounded-lg border border-white/5">
+                                Cancelar
+                            </Button>
+                            <Button onClick={confirmAction} className={cn("h-10 text-white font-black rounded-lg", mergeMode ? "bg-blue-600 hover:bg-blue-500" : "bg-red-600 hover:bg-red-500")}>
+                                {pendingAction.type === 'IMPORT' ? (mergeMode ? 'Confirmar Fusión' : 'Confirmar Reemplazo') : 'Sí, Inicializar'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -551,6 +915,139 @@ function StorageSection() {
         lpr: { size: 0, count: 0, loading: true },
         face: { size: 0, count: 0, loading: true }
     });
+    const [importingConfig, setImportingConfig] = useState(false);
+    const configFileRef = useRef<HTMLInputElement>(null);
+
+    const loadConfig = async () => {
+        setLoading(true);
+        try {
+            const [e, ak, sk, bl, bf] = await Promise.all([
+                getSetting("S3_ENDPOINT"),
+                getSetting("S3_ACCESS_KEY"),
+                getSetting("S3_SECRET_KEY"),
+                getSetting("S3_BUCKET_LPR"),
+                getSetting("S3_BUCKET_FACE")
+            ]);
+            setConfig({
+                endpoint: e?.value || "",
+                accessKey: ak?.value || "",
+                secretKey: sk?.value || "",
+                bucketLpr: bl?.value || "lpr",
+                bucketFace: bf?.value || "face"
+            });
+
+            // Load stats
+            const [statsLpr, statsFace] = await Promise.all([
+                getBucketStats(bl?.value || "lpr"),
+                getBucketStats(bf?.value || "face")
+            ]);
+
+            setStats({
+                lpr: {
+                    size: statsLpr.success ? (statsLpr.size ?? 0) : 0,
+                    count: statsLpr.success ? (statsLpr.count ?? 0) : 0,
+                    loading: false
+                },
+                face: {
+                    size: statsFace.success ? (statsFace.size ?? 0) : 0,
+                    count: statsFace.success ? (statsFace.count ?? 0) : 0,
+                    loading: false
+                }
+            });
+        } catch (err) {
+            console.error("Error loading S3 settings:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const loadLifecycles = async () => {
+        try {
+            const [lcLpr, lcFace] = await Promise.all([
+                getBucketLifecycle(config.bucketLpr || "lpr"),
+                getBucketLifecycle(config.bucketFace || "face")
+            ]);
+
+            setLifecycles({
+                lpr: lcLpr.success ? lcLpr.days || 0 : 0,
+                face: lcFace.success ? lcFace.days || 0 : 0
+            });
+        } catch (err) {
+            console.error("Error loading S3 lifecycles:", err);
+        }
+    };
+
+    useEffect(() => {
+        loadConfig();
+        loadLifecycles();
+    }, []);
+
+    const handleExportConfig = () => {
+        const exportData = {
+            version: "1.0",
+            timestamp: new Date().toISOString(),
+            type: "storage_config",
+            config: {
+                s3: config,
+                lifecycle: lifecycles
+            }
+        };
+
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `omniaccess-storage-config-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success("Configuración exportada con éxito");
+    };
+
+    const triggerImportConfig = () => {
+        configFileRef.current?.click();
+    };
+
+    const handleImportConfig = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setImportingConfig(true);
+        try {
+            const text = await file.text();
+            const json = JSON.parse(text);
+
+            if (json.type !== "storage_config" || !json.config) {
+                throw new Error("Archivo de configuración inválido");
+            }
+
+            const { s3, lifecycle } = json.config;
+
+            // Update S3 Settings
+            await Promise.all([
+                updateSetting("S3_ENDPOINT", s3.endpoint),
+                updateSetting("S3_ACCESS_KEY", s3.accessKey),
+                updateSetting("S3_SECRET_KEY", s3.secretKey),
+                updateSetting("S3_BUCKET_LPR", s3.bucketLpr),
+                updateSetting("S3_BUCKET_FACE", s3.bucketFace),
+                updateBucketLifecycle(s3.bucketLpr, lifecycle.lpr),
+                updateBucketLifecycle(s3.bucketFace, lifecycle.face)
+            ]);
+
+            toast.success("Configuración importada y aplicada correctamente");
+            // Reload local state
+            loadConfig();
+            loadLifecycles();
+
+        } catch (error: any) {
+            console.error(error);
+            toast.error("Error al importar configuración: " + error.message);
+        } finally {
+            setImportingConfig(false);
+            if (configFileRef.current) configFileRef.current.value = "";
+        }
+    };
 
     const formatSize = (bytes: number) => {
         if (bytes === 0) return "0 B";
@@ -559,62 +1056,6 @@ function StorageSection() {
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
     };
-
-    useEffect(() => {
-        async function load() {
-            setLoading(true);
-            try {
-                const [e, ak, sk, bl, bf] = await Promise.all([
-                    getSetting("S3_ENDPOINT"),
-                    getSetting("S3_ACCESS_KEY"),
-                    getSetting("S3_SECRET_KEY"),
-                    getSetting("S3_BUCKET_LPR"),
-                    getSetting("S3_BUCKET_FACE")
-                ]);
-                setConfig({
-                    endpoint: e?.value || "",
-                    accessKey: ak?.value || "",
-                    secretKey: sk?.value || "",
-                    bucketLpr: bl?.value || "lpr",
-                    bucketFace: bf?.value || "face"
-                });
-                // Load lifecycles
-                const [lcLpr, lcFace] = await Promise.all([
-                    getBucketLifecycle(bl?.value || "lpr"),
-                    getBucketLifecycle(bf?.value || "face")
-                ]);
-
-                setLifecycles({
-                    lpr: lcLpr.success ? lcLpr.days || 0 : 0,
-                    face: lcFace.success ? lcFace.days || 0 : 0
-                });
-
-                // Load stats
-                const [statsLpr, statsFace] = await Promise.all([
-                    getBucketStats(bl?.value || "lpr"),
-                    getBucketStats(bf?.value || "face")
-                ]);
-
-                setStats({
-                    lpr: {
-                        size: statsLpr.success ? (statsLpr.size ?? 0) : 0,
-                        count: statsLpr.success ? (statsLpr.count ?? 0) : 0,
-                        loading: false
-                    },
-                    face: {
-                        size: statsFace.success ? (statsFace.size ?? 0) : 0,
-                        count: statsFace.success ? (statsFace.count ?? 0) : 0,
-                        loading: false
-                    }
-                });
-            } catch (err) {
-                console.error("Error loading S3 settings:", err);
-            } finally {
-                setLoading(false);
-            }
-        }
-        load();
-    }, []);
 
     const handleSave = async () => {
         setSaving(true);
@@ -684,436 +1125,175 @@ function StorageSection() {
             <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-8">
                 <div className="flex items-center justify-between mb-8">
                     <div>
-                        <h2 className="text-2xl font-black text-white tracking-tight">Configuración S3 / MinIO</h2>
-                        <p className="text-sm text-neutral-500 mt-1">Define dónde se guardarán físicamente todas las evidencias capturadas</p>
+                        <h2 className="text-2xl font-black text-white tracking-tight">Almacenamiento (Lifecycle & S3)</h2>
+                        <p className="text-sm text-neutral-500 mt-1">Gestión de retención de datos y conexión con Object Storage</p>
                     </div>
-                    <div className="p-2 bg-blue-500/10 rounded-xl border border-blue-500/20">
-                        <Cloud className="text-blue-400" size={24} />
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="space-y-4">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Info size={14} className="text-blue-400" />
-                            <h3 className="text-xs font-black text-neutral-400 uppercase tracking-widest">Servidor & Credenciales</h3>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-neutral-500 ml-1">Endpoint (API)</Label>
-                            <Input
-                                placeholder="http://192.168.99.108:9000"
-                                value={config.endpoint}
-                                onChange={e => setConfig({ ...config, endpoint: e.target.value })}
-                                className="bg-black/40 border-white/5 h-11 text-sm font-mono"
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-neutral-500 ml-1">Access Key</Label>
-                                <Input
-                                    placeholder="root"
-                                    value={config.accessKey}
-                                    onChange={e => setConfig({ ...config, accessKey: e.target.value })}
-                                    className="bg-black/40 border-white/5 h-11 text-sm font-mono"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-neutral-500 ml-1">Secret Key</Label>
-                                <Input
-                                    type="password"
-                                    placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
-                                    value={config.secretKey}
-                                    onChange={e => setConfig({ ...config, secretKey: e.target.value })}
-                                    className="bg-black/40 border-white/5 h-11 text-sm font-mono"
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="space-y-4">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Database size={14} className="text-purple-400" />
-                            <h3 className="text-xs font-black text-neutral-400 uppercase tracking-widest">Estructura de Buckets</h3>
-                        </div>
-
-                        <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-xl flex items-start gap-3 mb-4">
-                            <ShieldAlert className="text-amber-500 shrink-0" size={18} />
-                            <p className="text-[10px] text-amber-200/60 leading-relaxed font-medium">
-                                AsegÃºrate de que los buckets existan en tu servidor MinIO antes de guardar.
-                                La aplicación NO los creará automáticamente.
-                            </p>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-neutral-500 ml-1">Bucket LPR</Label>
-                            <Input
-                                placeholder="lpr"
-                                value={config.bucketLpr}
-                                onChange={e => setConfig({ ...config, bucketLpr: e.target.value })}
-                                className="bg-black/40 border-white/5 h-11 text-sm font-mono"
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-neutral-500 ml-1">Bucket Face</Label>
-                            <Input
-                                placeholder="face"
-                                value={config.bucketFace}
-                                onChange={e => setConfig({ ...config, bucketFace: e.target.value })}
-                                className="bg-black/40 border-white/5 h-11 text-sm font-mono"
-                            />
-                        </div>
+                    <div className="flex bg-neutral-900 border border-white/10 rounded-lg p-1">
+                        <Button onClick={handleExportConfig} variant="ghost" size="sm" className="h-8 text-[10px] font-bold text-neutral-400 hover:text-white hover:bg-white/5 uppercase">
+                            <Download size={14} className="mr-2" />
+                            Exportar Config
+                        </Button>
+                        <div className="w-px bg-white/10 my-1 mx-1"></div>
+                        <input
+                            type="file"
+                            ref={configFileRef}
+                            onChange={handleImportConfig}
+                            className="hidden"
+                            accept=".json"
+                        />
+                        <Button onClick={triggerImportConfig} disabled={importingConfig} variant="ghost" size="sm" className="h-8 text-[10px] font-bold text-neutral-400 hover:text-white hover:bg-white/5 uppercase">
+                            {importingConfig ? <RefreshCcw size={14} className="animate-spin mr-2" /> : <Upload size={14} className="mr-2" />}
+                            Importar Config
+                        </Button>
                     </div>
                 </div>
 
-                {/* Lifecycle Management Section */}
-                <div className="mt-12 pt-8 border-t border-white/5">
-                    <div className="flex items-center gap-3 mb-6">
-                        <Activity size={20} className="text-amber-400" />
-                        <div>
-                            <h3 className="text-lg font-bold text-white">Políticas de Retención (Lifecycle)</h3>
-                            <p className="text-xs text-neutral-500 font-medium">Configura el ciclo de vida de los datos para limpieza automática en MinIO</p>
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    {/* Left Column: Lifecycle Policies (First priority) */}
+                    <div className="lg:col-span-5 space-y-6">
+                        <div className="flex items-center gap-2 mb-4">
+                            <Activity size={18} className="text-amber-400" />
+                            <h3 className="text-lg font-bold text-white">Políticas de Retención</h3>
                         </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         {/* LPR Retention */}
-                        <div className="bg-neutral-950/40 border border-white/5 rounded-2xl p-6 relative overflow-hidden group">
-                            <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                                <Activity size={80} />
-                            </div>
-                            <div className="flex items-center justify-between mb-4">
-                                <Label className="text-sm font-black text-white uppercase tracking-tight">Vencimiento Bucket LPR</Label>
-                                <div className="px-2 py-1 bg-blue-500/10 rounded text-[10px] font-bold text-blue-400">
-                                    {lifecycles.lpr === 0 ? "SIN LIMpieza" : `${lifecycles.lpr} DÃAS`}
+                        <div className="bg-neutral-950/40 border border-white/5 rounded-xl p-5 relative overflow-hidden group">
+                            <div className="flex items-center justify-between mb-3">
+                                <Label className="text-xs font-black text-white uppercase tracking-tight">Bucket LPR</Label>
+                                <div className="px-2 py-0.5 bg-blue-500/10 rounded text-[10px] font-bold text-blue-400">
+                                    {lifecycles.lpr === 0 ? "INFINITO" : `${lifecycles.lpr} DÍAS`}
                                 </div>
                             </div>
-                            <div className="space-y-4">
-                                <p className="text-[10px] text-neutral-500 leading-relaxed">
-                                    Las imágenes de las capturas se eliminarán permanentemente de MinIO despuÃ©s de transcurrido este tiempo. Use <span className="text-white">0</span> para desactivar.
-                                </p>
-                                <div className="flex items-center gap-4">
-                                    <Input
-                                        type="number"
-                                        value={lifecycles.lpr}
-                                        onChange={e => setLifecycles({ ...lifecycles, lpr: parseInt(e.target.value) || 0 })}
-                                        className="bg-black/60 border-white/10 h-10 w-24 text-center font-bold text-blue-400"
-                                    />
-                                    <span className="text-xs text-neutral-400 font-medium">Días de retención</span>
-                                </div>
+                            <div className="flex items-center gap-4 mb-4">
+                                <Input
+                                    type="number"
+                                    value={lifecycles.lpr}
+                                    onChange={e => setLifecycles({ ...lifecycles, lpr: parseInt(e.target.value) || 0 })}
+                                    className="bg-black/60 border-white/10 h-9 w-20 text-center font-bold text-blue-400 text-sm"
+                                />
+                                <span className="text-[10px] text-neutral-400 leading-tight">Días de retención antes de borrar. (0 = nunca)</span>
+                            </div>
 
-                                {/* Stats LPR */}
-                                <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-2 gap-4">
-                                    <div className="space-y-1">
-                                        <p className="text-[9px] text-neutral-600 font-black uppercase tracking-widest">Archivos</p>
-                                        <div className="flex items-center gap-2">
-                                            <FileText size={12} className="text-blue-500/50" />
-                                            <span className="text-xs font-mono font-bold text-neutral-300">
-                                                {stats.lpr.loading ? "..." : stats.lpr.count.toLocaleString()}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[9px] text-neutral-600 font-black uppercase tracking-widest">Peso Total</p>
-                                        <div className="flex items-center gap-2">
-                                            <HardDrive size={12} className="text-blue-500/50" />
-                                            <span className="text-xs font-mono font-bold text-neutral-300">
-                                                {stats.lpr.loading ? "..." : formatSize(stats.lpr.size)}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
+                            {/* Stats Mini */}
+                            <div className="pt-3 border-t border-white/5 flex justify-between items-center text-[10px] text-neutral-500 font-mono">
+                                <span>{stats.lpr.loading ? "..." : stats.lpr.count.toLocaleString()} archivos</span>
+                                <span>{stats.lpr.loading ? "..." : formatSize(stats.lpr.size)}</span>
                             </div>
                         </div>
 
-                        {/* Face Retention */}
-                        <div className="bg-neutral-950/40 border border-white/5 rounded-2xl p-6 relative overflow-hidden group">
-                            <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                                <Activity size={80} />
-                            </div>
-                            <div className="flex items-center justify-between mb-4">
-                                <Label className="text-sm font-black text-white uppercase tracking-tight">Vencimiento Bucket FACE</Label>
-                                <div className="px-2 py-1 bg-purple-500/10 rounded text-[10px] font-bold text-purple-400">
-                                    {lifecycles.face === 0 ? "SIN LIMpieza" : `${lifecycles.face} DÃAS`}
+                        {/* FACE Retention */}
+                        <div className="bg-neutral-950/40 border border-white/5 rounded-xl p-5 relative overflow-hidden group">
+                            <div className="flex items-center justify-between mb-3">
+                                <Label className="text-xs font-black text-white uppercase tracking-tight">Bucket FACE</Label>
+                                <div className="px-2 py-0.5 bg-purple-500/10 rounded text-[10px] font-bold text-purple-400">
+                                    {lifecycles.face === 0 ? "INFINITO" : `${lifecycles.face} DÍAS`}
                                 </div>
                             </div>
-                            <div className="space-y-4">
-                                <p className="text-[10px] text-neutral-500 leading-relaxed">
-                                    Las fotos de perfil y rostros detectados se eliminarán despuÃ©s de este periodo. Se recomienda un tiempo mayor que LPR.
-                                </p>
-                                <div className="flex items-center gap-4">
-                                    <Input
-                                        type="number"
-                                        value={lifecycles.face}
-                                        onChange={e => setLifecycles({ ...lifecycles, face: parseInt(e.target.value) || 0 })}
-                                        className="bg-black/60 border-white/10 h-10 w-24 text-center font-bold text-purple-400"
-                                    />
-                                    <span className="text-xs text-neutral-400 font-medium">Días de retención</span>
-                                </div>
+                            <div className="flex items-center gap-4 mb-4">
+                                <Input
+                                    type="number"
+                                    value={lifecycles.face}
+                                    onChange={e => setLifecycles({ ...lifecycles, face: parseInt(e.target.value) || 0 })}
+                                    className="bg-black/60 border-white/10 h-9 w-20 text-center font-bold text-purple-400 text-sm"
+                                />
+                                <span className="text-[10px] text-neutral-400 leading-tight">Días de retención antes de borrar. (0 = nunca)</span>
+                            </div>
 
-                                {/* Stats FACE */}
-                                <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-2 gap-4">
-                                    <div className="space-y-1">
-                                        <p className="text-[9px] text-neutral-600 font-black uppercase tracking-widest">Archivos</p>
-                                        <div className="flex items-center gap-2">
-                                            <FileText size={12} className="text-purple-500/50" />
-                                            <span className="text-xs font-mono font-bold text-neutral-300">
-                                                {stats.face.loading ? "..." : stats.face.count.toLocaleString()}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[9px] text-neutral-600 font-black uppercase tracking-widest">Peso Total</p>
-                                        <div className="flex items-center gap-2">
-                                            <HardDrive size={12} className="text-purple-500/50" />
-                                            <span className="text-xs font-mono font-bold text-neutral-300">
-                                                {stats.face.loading ? "..." : formatSize(stats.face.size)}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
+                            {/* Stats Mini */}
+                            <div className="pt-3 border-t border-white/5 flex justify-between items-center text-[10px] text-neutral-500 font-mono">
+                                <span>{stats.face.loading ? "..." : stats.face.count.toLocaleString()} archivos</span>
+                                <span>{stats.face.loading ? "..." : formatSize(stats.face.size)}</span>
                             </div>
                         </div>
-                    </div>
 
-                    <div className="mt-6 flex justify-end">
                         <Button
-                            variant="outline"
                             onClick={handleSaveLifecycle}
                             disabled={savingLifecycle || loading}
-                            className="bg-amber-500/10 border-amber-500/20 text-amber-500 hover:bg-amber-500 hover:text-white font-black px-6 h-10 rounded-xl transition-all"
+                            className="w-full bg-amber-600/10 hover:bg-amber-600 text-amber-500 hover:text-white font-black text-[10px] uppercase tracking-widest h-10 border border-amber-600/20"
                         >
-                            {savingLifecycle ? <RefreshCcw className="animate-spin mr-2" size={14} /> : <Activity className="mr-2" size={14} />}
-                            APLICAR POLÃTICAS DE RETENCIÃ“N
+                            {savingLifecycle ? <RefreshCcw className="animate-spin mr-2" size={12} /> : <Save className="mr-2" size={12} />}
+                            GUARDAR POLÍTICAS
                         </Button>
                     </div>
-                </div>
 
-                <div className="mt-8 pt-6 border-t border-white/5 flex justify-end gap-3">
-                    <Button
-                        variant="ghost"
-                        onClick={handleTest}
-                        disabled={testing || saving}
-                        className="text-neutral-400 hover:text-white hover:bg-white/5 font-bold px-6 h-12 rounded-xl border border-white/5"
-                    >
-                        {testing ? <RefreshCcw className="animate-spin mr-2" size={16} /> : <Activity className="mr-2" size={16} />}
-                        PROBAR CONEXIÃ“N
-                    </Button>
-                    <Button
-                        onClick={handleSave}
-                        disabled={saving || testing}
-                        className="bg-blue-600 hover:bg-blue-500 text-white font-black px-8 h-12 rounded-xl shadow-xl shadow-blue-600/20"
-                    >
-                        {saving ? <RefreshCcw className="animate-spin mr-2" size={16} /> : <Save className="mr-2" size={16} />}
-                        GUARDAR CONFIGURACIÃ“N
-                    </Button>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-function WhatsAppSection() {
-    const [config, setConfig] = useState({ url: "", apiKey: "" });
-    const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [testing, setTesting] = useState(false);
-    const [sessions, setSessions] = useState<any[]>([]);
-
-    useEffect(() => {
-        loadConfig();
-    }, []);
-
-    const loadConfig = async () => {
-        setLoading(true);
-        try {
-            const [url, apiKey] = await Promise.all([
-                getSetting("WAHA_URL"),
-                getSetting("WAHA_API_KEY")
-            ]);
-            setConfig({
-                url: url?.value || "",
-                apiKey: apiKey?.value || ""
-            });
-        } catch (err) {
-            console.error("Error loading WAHA config:", err);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleSave = async () => {
-        setSaving(true);
-        try {
-            await Promise.all([
-                updateSetting("WAHA_URL", config.url),
-                updateSetting("WAHA_API_KEY", config.apiKey)
-            ]);
-            toast.success("Configuración de WAHA guardada");
-        } catch (err) {
-            toast.error("Error al guardar la configuración");
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const handleTest = async () => {
-        if (!config.url) {
-            toast.error("Por favor ingresa la URL de WAHA");
-            return;
-        }
-
-        setTesting(true);
-        try {
-            const result = await testWahaConnection(config.url, config.apiKey);
-            if (result.success) {
-                toast.success(result.message);
-                setSessions(result.sessions || []);
-            } else {
-                toast.error(result.message);
-            }
-        } catch (err) {
-            toast.error("Error crítico al conectar con WAHA");
-        } finally {
-            setTesting(false);
-        }
-    };
-
-    if (loading) {
-        return (
-            <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-8">
-                <div className="flex items-center justify-center py-12">
-                    <RefreshCcw className="animate-spin text-emerald-500" size={32} />
-                </div>
-            </div>
-        );
-    }
-
-    return (
-        <div className="space-y-6 animate-in zoom-in-95 duration-500">
-            <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-8">
-                <div className="flex items-center justify-between mb-8">
-                    <div>
-                        <h2 className="text-2xl font-black text-white tracking-tight">Chatbot WhatsApp (WAHA)</h2>
-                        <p className="text-sm text-neutral-500 mt-1">Configura notificaciones inteligentes y asistente IA por WhatsApp</p>
-                    </div>
-                    <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
-                        <MessageSquare className="text-emerald-400" size={24} />
-                    </div>
-                </div>
-
-                <div className="space-y-6">
-                    {/* URL Configuration */}
-                    <div className="space-y-2">
-                        <Label className="text-xs font-black text-neutral-400 uppercase tracking-widest">URL del Servidor WAHA</Label>
-                        <Input
-                            value={config.url}
-                            onChange={(e) => setConfig({ ...config, url: e.target.value })}
-                            placeholder="http://localhost:3000"
-                            className="bg-black/40 border-white/10 text-white h-12 rounded-xl font-mono"
-                        />
-                        <p className="text-[10px] text-neutral-600">Ejemplo: http://waha:3000 o http://192.168.1.100:3000</p>
-                    </div>
-
-                    {/* Webhook URL Info */}
-                    <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl">
-                        <div className="flex items-start gap-3">
-                            <Info className="text-blue-400 shrink-0 mt-0.5" size={16} />
-                            <div className="flex-1">
-                                <h4 className="text-xs font-black text-white uppercase tracking-tight mb-1">URL del Webhook para WAHA</h4>
-                                <p className="text-[10px] text-neutral-400 mb-2">Configura esta URL en WAHA para recibir mensajes:</p>
-                                <code className="block p-2 bg-black/40 rounded text-[10px] font-mono text-blue-400 border border-blue-500/20">
-                                    http://TU_SERVIDOR:10000/api/waha/webhook
-                                </code>
-                                <p className="text-[9px] text-neutral-500 mt-2">
-                                    Ver <a href="/WAHA_INTEGRATION.md" target="_blank" className="text-blue-400 underline">documentación completa</a>
-                                </p>
-                            </div>
+                    {/* Right Column: S3 Configuration */}
+                    <div className="lg:col-span-7 space-y-6">
+                        <div className="flex items-center gap-2 mb-4">
+                            <Cloud size={18} className="text-blue-400" />
+                            <h3 className="text-lg font-bold text-white">Configuración S3 / MinIO</h3>
                         </div>
-                    </div>
 
-                    {/* API Key */}
-                    <div className="space-y-2">
-                        <Label className="text-xs font-black text-neutral-400 uppercase tracking-widest">API Key (Opcional)</Label>
-                        <Input
-                            value={config.apiKey}
-                            onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
-                            placeholder="tu-api-key-segura"
-                            type="password"
-                            className="bg-black/40 border-white/10 text-white h-12 rounded-xl font-mono"
-                        />
-                        <p className="text-[10px] text-neutral-600">Deja vacío si WAHA no requiere autenticación</p>
-                    </div>
-
-                    {/* Sessions Display */}
-                    {sessions.length > 0 && (
-                        <div className="mt-6 p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-xl">
-                            <div className="flex items-center gap-2 mb-3">
-                                <Smartphone className="text-emerald-400" size={16} />
-                                <h3 className="text-sm font-black text-white uppercase tracking-tight">Sesiones Activas</h3>
-                            </div>
+                        <div className="bg-neutral-950/20 rounded-xl p-6 border border-white/5 space-y-4">
                             <div className="space-y-2">
-                                {sessions.map((session: any, i: number) => (
-                                    <div key={i} className="flex items-center justify-between p-3 bg-black/40 rounded-lg">
-                                        <div className="flex items-center gap-3">
-                                            <div className={cn(
-                                                "w-2 h-2 rounded-full",
-                                                session.status === 'WORKING' ? "bg-emerald-500 animate-pulse" : "bg-neutral-500"
-                                            )} />
-                                            <span className="text-sm font-mono text-white">{session.name}</span>
-                                        </div>
-                                        <span className={cn(
-                                            "text-xs font-bold uppercase px-2 py-1 rounded",
-                                            session.status === 'WORKING' ? "bg-emerald-500/20 text-emerald-400" : "bg-neutral-500/20 text-neutral-400"
-                                        )}>
-                                            {session.status}
-                                        </span>
-                                    </div>
-                                ))}
+                                <Label className="text-[10px] font-black uppercase text-neutral-500 ml-1">Endpoint (API)</Label>
+                                <Input
+                                    placeholder="http://192.168.99.108:9000"
+                                    value={config.endpoint}
+                                    onChange={e => setConfig({ ...config, endpoint: e.target.value })}
+                                    className="bg-black/40 border-white/5 h-10 text-sm font-mono"
+                                />
                             </div>
-                        </div>
-                    )}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-black uppercase text-neutral-500 ml-1">Access Key</Label>
+                                    <Input
+                                        placeholder="root"
+                                        value={config.accessKey}
+                                        onChange={e => setConfig({ ...config, accessKey: e.target.value })}
+                                        className="bg-black/40 border-white/5 h-10 text-sm font-mono"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-black uppercase text-neutral-500 ml-1">Secret Key</Label>
+                                    <Input
+                                        type="password"
+                                        placeholder="••••••••"
+                                        value={config.secretKey}
+                                        onChange={e => setConfig({ ...config, secretKey: e.target.value })}
+                                        className="bg-black/40 border-white/5 h-10 text-sm font-mono"
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-black uppercase text-neutral-500 ml-1">Bucket LPR</Label>
+                                    <Input
+                                        placeholder="lpr"
+                                        value={config.bucketLpr}
+                                        onChange={e => setConfig({ ...config, bucketLpr: e.target.value })}
+                                        className="bg-black/40 border-white/5 h-10 text-sm font-mono"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-black uppercase text-neutral-500 ml-1">Bucket Face</Label>
+                                    <Input
+                                        placeholder="face"
+                                        value={config.bucketFace}
+                                        onChange={e => setConfig({ ...config, bucketFace: e.target.value })}
+                                        className="bg-black/40 border-white/5 h-10 text-sm font-mono"
+                                    />
+                                </div>
+                            </div>
 
-                    {/* Action Buttons */}
-                    <div className="flex justify-end gap-3 pt-4">
-                        <Button
-                            variant="ghost"
-                            onClick={handleTest}
-                            disabled={testing || saving}
-                            className="text-neutral-400 hover:text-white hover:bg-white/5 font-bold px-6 h-12 rounded-xl border border-white/5"
-                        >
-                            {testing ? <RefreshCcw className="animate-spin mr-2" size={16} /> : <Activity className="mr-2" size={16} />}
-                            PROBAR CONEXIÃ“N
-                        </Button>
-                        <Button
-                            onClick={handleSave}
-                            disabled={saving || testing}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-black px-8 h-12 rounded-xl shadow-xl shadow-emerald-600/20"
-                        >
-                            {saving ? <RefreshCcw className="animate-spin mr-2" size={16} /> : <Save className="mr-2" size={16} />}
-                            GUARDAR CONFIGURACIÃ“N
-                        </Button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Info Card */}
-            <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border border-emerald-500/20 rounded-2xl p-6">
-                <div className="flex items-start gap-4">
-                    <div className="p-3 bg-emerald-500/20 rounded-xl">
-                        <Bot className="text-emerald-400" size={24} />
-                    </div>
-                    <div className="flex-1">
-                        <h3 className="text-lg font-black text-white mb-2">Â¿QuÃ© es WAHA?</h3>
-                        <p className="text-sm text-neutral-400 leading-relaxed">
-                            WAHA (WhatsApp HTTP API) es un servidor que permite enviar y recibir mensajes de WhatsApp mediante API REST.
-                            Ideal para notificaciones automáticas de eventos de acceso, alertas de seguridad y asistente virtual inteligente.
-                        </p>
-                        <div className="mt-4 flex items-center gap-2 text-xs text-emerald-400">
-                            <Info size={14} />
-                            <span>Requiere instancia de WAHA ejecutándose externamente</span>
+                            <div className="pt-4 flex gap-3">
+                                <Button
+                                    variant="ghost"
+                                    onClick={handleTest}
+                                    disabled={testing || saving}
+                                    className="flex-1 text-neutral-400 hover:text-white hover:bg-white/5 font-bold h-10 border border-white/5 text-[10px] uppercase"
+                                >
+                                    {testing ? <RefreshCcw className="animate-spin mr-2" size={12} /> : <Activity className="mr-2" size={12} />}
+                                    PROBAR CONEXIÓN
+                                </Button>
+                                <Button
+                                    onClick={handleSave}
+                                    disabled={saving || testing}
+                                    className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-black h-10 text-[10px] uppercase shadow-lg shadow-blue-600/20"
+                                >
+                                    {saving ? <RefreshCcw className="animate-spin mr-2" size={12} /> : <Save className="mr-2" size={12} />}
+                                    GUARDAR
+                                </Button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1121,6 +1301,8 @@ function WhatsAppSection() {
         </div>
     );
 }
+
+
 
 function ModeConfiguration({ title, description, settingKey, options }: {
     title: string,
@@ -1218,6 +1400,31 @@ function ModeConfiguration({ title, description, settingKey, options }: {
 
     const getPendingOption = () => options.find(o => o.id === pendingMode);
 
+    function loadModeExplanation(mode: string | null, isFace: boolean) {
+        if (!mode) return [];
+        if (isFace) {
+            if (mode === 'BLACKLIST') return [
+                { icon: ShieldAlert, title: "Bloqueo Activo", text: "El sistema denegará automáticamente el acceso a cualquier rostro identificado en la base de datos.", color: "red" },
+                { icon: Users, title: "Gestión de Personal", text: "Ideal para bloquear ex-empleados o personas no gratas.", color: "amber" }
+            ];
+            if (mode === 'WHITELIST') return [
+                { icon: ShieldCheck, title: "Acceso Restringido", text: "Solo los rostros registrados explícitamente tendrán acceso. El resto es ignorado.", color: "emerald" },
+                { icon: Users, title: "Alta Seguridad", text: "Garantiza que nadie desconocido pueda ingresar.", color: "blue" }
+            ];
+        } else {
+            if (mode === 'BLACKLIST') return [
+                { icon: ShieldAlert, title: "Bloqueo de Vehículos", text: "Las matrículas en la lista negra activarán alertas y bloqueo de barrera.", color: "red" },
+            ];
+            if (mode === 'WHITELIST') return [
+                { icon: ShieldCheck, title: "Acceso Residencial", text: "Solo los vehículos de residentes registrados abren la barrera.", color: "emerald" },
+            ];
+            if (mode === 'LEARNING') return [
+                { icon: Database, title: "Auto-Aprendizaje", text: "Cada vehículo nuevo se registra automáticamente en el sistema.", color: "purple" }
+            ];
+        }
+        return [];
+    }
+
     return (
         <>
             <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-8 space-y-8 animate-in slide-in-from-bottom-5 duration-500">
@@ -1226,535 +1433,412 @@ function ModeConfiguration({ title, description, settingKey, options }: {
                         <h2 className="text-2xl font-black text-white">{title}</h2>
                         <p className="text-sm text-neutral-500 mt-1">{description}</p>
                     </div>
-                    <div className="flex items-center gap-3">
-                        {loading && <RefreshCcw className="animate-spin text-blue-500" size={20} />}
-                        <button
-                            onClick={() => setShowHelp(true)}
-                            className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20 hover:text-blue-300 transition-all"
-                            title="Ver explicación detallada"
-                        >
-                            <Eye size={18} />
-                        </button>
-                    </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {options.map((option) => {
-                        const Icon = option.icon;
-                        const isSelected = currentMode === option.id;
-                        const isDisabled = option.disabled || loading || saving;
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    {/* Left: Options Stack */}
+                    <div className="lg:col-span-5 space-y-4">
+                        {options.map((option) => {
+                            const Icon = option.icon;
+                            const isSelected = currentMode === option.id;
+                            const isDisabled = option.disabled || loading || saving;
 
-                        return (
-                            <button
-                                key={option.id}
-                                onClick={() => !isDisabled && handleSelect(option.id)}
-                                disabled={isDisabled}
-                                className={cn(
-                                    "relative p-6 rounded-2xl border text-left transition-all duration-300 group",
-                                    isSelected
-                                        ? `bg-${option.color}-500/10 border-${option.color}-500/50 ring-1 ring-${option.color}-500/50 shadow-xl shadow-${option.color}-900/20`
-                                        : isDisabled
-                                            ? "bg-neutral-900/20 border-white/5 opacity-50 cursor-not-allowed"
-                                            : "bg-neutral-900/40 border-white/5 hover:bg-neutral-900/60 hover:border-white/10 hover:scale-[1.02]"
-                                )}
-                            >
-                                {isSelected && (
-                                    <div className={`absolute top-4 right-4 w-3 h-3 rounded-full bg-${option.color}-500 shadow-[0_0_10px_currentColor] animate-pulse`} />
-                                )}
-
-                                <div className={cn(
-                                    "w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors",
-                                    isSelected ? `bg-${option.color}-500/20 text-${option.color}-400` : "bg-white/5 text-neutral-500 group-hover:bg-white/10 group-hover:text-neutral-300"
-                                )}>
-                                    <Icon size={24} />
-                                </div>
-
-                                <h3 className={cn(
-                                    "text-lg font-black mb-2",
-                                    isSelected ? "text-white" : "text-neutral-300"
-                                )}>
-                                    {option.label}
-                                </h3>
-
-                                <p className="text-xs text-neutral-500 font-medium leading-relaxed">
-                                    {option.desc}
-                                </p>
-
-                                {option.disabled && (
-                                    <div className="mt-4 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-500 border border-amber-500/20">
-                                        <Info size={10} />
-                                        <span className="text-[9px] font-black uppercase tracking-wider">En Desarrollo</span>
+                            return (
+                                <button
+                                    key={option.id}
+                                    onClick={() => !isDisabled && handleSelect(option.id)}
+                                    disabled={isDisabled}
+                                    className={cn(
+                                        "w-full relative p-4 rounded-xl border text-left transition-all duration-300 group flex items-center gap-4",
+                                        isSelected
+                                            ? `bg-${option.color}-500/10 border-${option.color}-500/50 shadow-lg shadow-${option.color}-900/10`
+                                            : isDisabled
+                                                ? "bg-neutral-900/20 border-white/5 opacity-50 cursor-not-allowed"
+                                                : "bg-neutral-900/40 border-white/5 hover:bg-neutral-900/60 hover:border-white/10"
+                                    )}
+                                >
+                                    <div className={cn(
+                                        "w-10 h-10 rounded-lg flex items-center justify-center transition-colors shrink-0",
+                                        isSelected ? `bg-${option.color}-500/20 text-${option.color}-400` : "bg-white/5 text-neutral-500 group-hover:bg-white/10 group-hover:text-neutral-300"
+                                    )}>
+                                        <Icon size={20} />
                                     </div>
+                                    <div>
+                                        <h3 className={cn(
+                                            "font-black text-sm",
+                                            isSelected ? "text-white" : "text-neutral-300"
+                                        )}>
+                                            {option.label}
+                                        </h3>
+                                        <p className="text-[10px] text-neutral-500 font-medium leading-tight mt-0.5">
+                                            {option.desc}
+                                        </p>
+                                    </div>
+                                    {isSelected && (
+                                        <div className={`ml-auto w-2 h-2 rounded-full bg-${option.color}-500 shadow-[0_0_8px_currentColor] animate-pulse`} />
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* Right: Explanation */}
+                    <div className="lg:col-span-7">
+                        <div className="bg-neutral-950/30 border border-white/5 rounded-xl p-6 h-full">
+                            <div className="flex items-center gap-2 mb-4">
+                                <Info size={16} className="text-neutral-400" />
+                                <h3 className="text-xs font-black text-white uppercase tracking-widest">¿CÓMO FUNCIONA ESTE MODO?</h3>
+                            </div>
+
+                            <div className="space-y-4">
+                                {loadModeExplanation(currentMode, isFaceMode).map((item, i) => (
+                                    <div key={i} className={`flex items-start gap-4 p-4 rounded-lg bg-${item.color}-500/5 border border-${item.color}-500/10`}>
+                                        <div className={`p-2 rounded bg-${item.color}-500/10 text-${item.color}-400 shrink-0`}>
+                                            <item.icon size={16} />
+                                        </div>
+                                        <div>
+                                            <h4 className={`text-xs font-black text-${item.color}-400 mb-1 uppercase`}>{item.title}</h4>
+                                            <p className="text-[11px] text-neutral-400 leading-relaxed">{item.text}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                                {loadModeExplanation(currentMode, isFaceMode).length === 0 && (
+                                    <p className="text-xs text-neutral-500 italic">Selecciona un modo para ver los detalles.</p>
                                 )}
-                            </button>
-                        );
-                    })}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             {/* Confirmation Modal */}
             {pendingMode && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setPendingMode(null)}>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setPendingMode(null)}>
                     <div
-                        className="bg-neutral-900 border border-white/10 rounded-3xl max-w-lg w-full mx-4 overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300"
+                        className="bg-[#0f0f10] border border-white/10 rounded-xl max-w-sm w-full mx-4 overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        {/* Header */}
-                        <div className={`p-6 bg-gradient-to-r from-amber-600/20 to-orange-600/20 border-b border-white/5`}>
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 rounded-xl bg-amber-500/20 text-amber-400">
-                                    <ShieldAlert size={28} />
-                                </div>
-                                <div>
-                                    <h3 className="text-xl font-black text-white">Confirmar Cambio de Modo</h3>
-                                    <p className="text-xs text-neutral-400 mt-0.5">Esta acción afectará el comportamiento del sistema</p>
-                                </div>
+                        <div className="p-6 text-center">
+                            <div className="w-16 h-16 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto mb-4 border border-amber-500/20">
+                                <ShieldAlert size={32} />
                             </div>
-                        </div>
+                            <h3 className="text-lg font-black text-white mb-2">¿Confirmar Cambio?</h3>
+                            <p className="text-xs text-neutral-400 leading-relaxed mb-6">
+                                Estás a punto de cambiar a
+                                <span className={`font-black text-${getPendingOption()?.color}-400 mx-1`}>
+                                    {getPendingOption()?.label}
+                                </span>.
+                                Esta acción modificará inmediatamente como el sistema procesa los eventos.
+                            </p>
 
-                        {/* Content */}
-                        <div className="p-6 space-y-4">
-                            <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-                                <div className="flex items-center gap-3 mb-3">
-                                    {(() => {
-                                        const opt = getPendingOption();
-                                        const Icon = opt?.icon || ShieldCheck;
-                                        return <Icon size={20} className={`text-${opt?.color || 'blue'}-400`} />;
-                                    })()}
-                                    <span className="font-black text-white">Cambiar a: {getPendingOption()?.label}</span>
-                                </div>
-                                <p className="text-xs text-neutral-400">{getPendingOption()?.desc}</p>
+                            <div className="grid grid-cols-2 gap-3">
+                                <Button onClick={() => setPendingMode(null)} variant="ghost" className="h-10 text-neutral-400 hover:bg-white/5 hover:text-white font-bold rounded-lg border border-white/5">
+                                    Cancelar
+                                </Button>
+                                <Button onClick={confirmModeChange} className="h-10 bg-white text-black hover:bg-neutral-200 font-black rounded-lg">
+                                    {saving ? <RefreshCcw className="animate-spin mr-2" size={14} /> : <Check size={14} className="mr-2" />}
+                                    Confirmar
+                                </Button>
                             </div>
-
-                            <div className="space-y-2">
-                                <p className="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">Efectos del cambio:</p>
-                                {getModeWarnings(pendingMode).map((warning, i) => {
-                                    const Icon = warning.icon;
-                                    return (
-                                        <div key={i} className={`flex items-center gap-3 p-3 rounded-lg bg-${warning.color}-500/10 border border-${warning.color}-500/20`}>
-                                            <Icon size={16} className={`text-${warning.color}-400 shrink-0`} />
-                                            <span className="text-xs text-neutral-300">{warning.text}</span>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        {/* Footer */}
-                        <div className="p-4 bg-white/5 border-t border-white/5 flex gap-3">
-                            <Button onClick={() => setPendingMode(null)} variant="ghost" className="flex-1 h-10 text-neutral-400 hover:text-white">
-                                Cancelar
-                            </Button>
-                            <Button onClick={confirmModeChange} className="flex-1 h-10 bg-amber-600 hover:bg-amber-500 text-white font-bold">
-                                {saving ? <RefreshCcw className="animate-spin mr-2" size={14} /> : <ShieldCheck size={14} className="mr-2" />}
-                                Confirmar Cambio
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Explanation Modal - Two Columns */}
-            {showHelp && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setShowHelp(false)}>
-                    <div
-                        className="bg-neutral-900 border border-white/10 rounded-3xl max-w-4xl w-full mx-4 overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        {/* Header */}
-                        <div className={`p-6 bg-gradient-to-r ${isFaceMode ? 'from-teal-600/20 to-purple-600/20' : 'from-amber-600/20 to-orange-600/20'} border-b border-white/5`}>
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-4">
-                                    <div className={`p-3 rounded-xl ${isFaceMode ? 'bg-teal-500/20 text-teal-400' : 'bg-amber-500/20 text-amber-400'}`}>
-                                        {isFaceMode ? <ScanFace size={28} /> : <Car size={28} />}
-                                    </div>
-                                    <div>
-                                        <h3 className="text-xl font-black text-white">{title}</h3>
-                                        <p className="text-xs text-neutral-400 mt-0.5">Explicación detallada del funcionamiento</p>
-                                    </div>
-                                </div>
-                                <button onClick={() => setShowHelp(false)} className="p-2 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white transition-all">
-                                    <X size={20} />
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Content */}
-                        <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
-                            {/* Who makes decisions */}
-                            <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
-                                <div className="flex items-center gap-3 mb-3">
-                                    <Camera size={18} className="text-blue-400" />
-                                    <h4 className="font-black text-white text-sm uppercase tracking-wide">Â¿QuiÃ©n toma las decisiones?</h4>
-                                </div>
-                                <p className="text-xs text-neutral-300 leading-relaxed">
-                                    <span className="text-blue-400 font-bold">Las cámaras toman la decisión de apertura en tiempo real.</span> El servidor recibe los eventos vía webhook y registra la decisión tomada por la cámara. Esta configuración define cómo el <span className="text-white font-bold">servidor interpreta y registra</span> los eventos cuando la cámara detecta una coincidencia con su lista interna.
-                                </p>
-                            </div>
-
-                            {/* Two Column Layout - Whitelist (Left) and Blacklist (Right) */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {/* Whitelist - Left Column */}
-                                <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-5">
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <div className="p-2.5 rounded-lg bg-emerald-500/20 text-emerald-400">
-                                            <ShieldCheck size={22} />
-                                        </div>
-                                        <h5 className="font-black text-emerald-400 text-base">LISTA BLANCA</h5>
-                                    </div>
-                                    <p className="text-xs text-neutral-400 leading-relaxed mb-4">
-                                        {isFaceMode
-                                            ? "Los rostros que coinciden con usuarios registrados en la base de datos son marcados como PERMITIDOS. Si el rostro no coincide con nadie, el evento se ignora."
-                                            : "Las matrículas que están registradas en la base de datos son marcadas como PERMITIDAS. Las matrículas desconocidas son DENEGADAS."
-                                        }
-                                    </p>
-                                    <div className="space-y-2">
-                                        <div className="flex items-center gap-2 p-2 bg-emerald-500/10 rounded-lg">
-                                            <Check size={14} className="text-emerald-400" />
-                                            <span className="text-[11px] text-emerald-300 font-bold">En lista = PERMITIDO</span>
-                                        </div>
-                                        <div className="flex items-center gap-2 p-2 bg-red-500/10 rounded-lg">
-                                            <X size={14} className="text-red-400" />
-                                            <span className="text-[11px] text-red-300 font-bold">No en lista = DENEGADO</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Blacklist - Right Column */}
-                                <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-5">
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <div className="p-2.5 rounded-lg bg-red-500/20 text-red-400">
-                                            <ShieldAlert size={22} />
-                                        </div>
-                                        <h5 className="font-black text-red-400 text-base">LISTA NEGRA</h5>
-                                    </div>
-                                    <p className="text-xs text-neutral-400 leading-relaxed mb-4">
-                                        {isFaceMode
-                                            ? "Los rostros que coinciden con usuarios registrados son marcados como DENEGADOS. Ãštil para bloquear personas específicas."
-                                            : "Las matrículas que están en la base de datos son marcadas como DENEGADAS. Ãštil para bloquear vehículos no deseados."
-                                        }
-                                    </p>
-                                    <div className="space-y-2">
-                                        <div className="flex items-center gap-2 p-2 bg-red-500/10 rounded-lg">
-                                            <X size={14} className="text-red-400" />
-                                            <span className="text-[11px] text-red-300 font-bold">En lista = DENEGADO</span>
-                                        </div>
-                                        <div className="flex items-center gap-2 p-2 bg-neutral-500/10 rounded-lg">
-                                            <Activity size={14} className="text-neutral-400" />
-                                            <span className="text-[11px] text-neutral-300 font-bold">No en lista = SegÃºn cámara</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Learning (if LPR) - Full Width */}
-                            {!isFaceMode && (
-                                <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-5">
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <div className="p-2.5 rounded-lg bg-blue-500/20 text-blue-400">
-                                            <Activity size={22} />
-                                        </div>
-                                        <h5 className="font-black text-blue-400 text-base">APRENDIZAJE (LEARNING)</h5>
-                                    </div>
-                                    <p className="text-xs text-neutral-400 leading-relaxed">
-                                        Las matrículas desconocidas se agregan automáticamente a la base de datos. Ãštil para la configuración inicial del sistema o para registrar todos los vehículos que ingresan.
-                                    </p>
-                                    <div className="mt-3 inline-flex items-center gap-2 p-2 bg-blue-500/10 rounded-lg">
-                                        <Database size={14} className="text-blue-400" />
-                                        <span className="text-[11px] text-blue-300 font-bold">Nueva matrícula = Agregar a DB</span>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Important note */}
-                            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
-                                <div className="flex items-start gap-3">
-                                    <Info size={16} className="text-amber-400 shrink-0 mt-0.5" />
-                                    <p className="text-xs text-amber-200/80 leading-relaxed">
-                                        <span className="font-bold">Importante:</span> Esta configuración solo afecta cómo el servidor registra los eventos. La apertura física de barreras/puertas es controlada por la cámara segÃºn su configuración local de Lista Blanca/Negra.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Footer */}
-                        <div className="p-4 bg-white/5 border-t border-white/5">
-                            <Button onClick={() => setShowHelp(false)} className="w-full bg-white/10 hover:bg-white/20 text-white font-bold h-10">
-                                Entendido
-                            </Button>
                         </div>
                     </div>
                 </div>
             )}
         </>
     );
-    function WhatsAppSection() {
-        const [config, setConfig] = useState({ url: "", apiKey: "" });
-        const [loading, setLoading] = useState(true);
-        const [saving, setSaving] = useState(false);
-        const [testing, setTesting] = useState(false);
-        const [sessions, setSessions] = useState<any[]>([]);
+}
 
-        useEffect(() => {
-            loadConfig();
-        }, []);
 
-        const loadConfig = async () => {
-            setLoading(true);
-            try {
-                const [url, apiKey] = await Promise.all([
-                    getSetting("WAHA_URL"),
-                    getSetting("WAHA_API_KEY")
-                ]);
-                setConfig({
-                    url: url?.value || "",
-                    apiKey: apiKey?.value || ""
-                });
-            } catch (err) {
-                console.error("Error loading WAHA config:", err);
-            } finally {
-                setLoading(false);
-            }
-        };
 
-        const handleSave = async () => {
-            setSaving(true);
-            try {
-                await Promise.all([
-                    updateSetting("WAHA_URL", config.url),
-                    updateSetting("WAHA_API_KEY", config.apiKey)
-                ]);
-                toast.success("Configuración de WAHA guardada");
-            } catch (err) {
-                toast.error("Error al guardar la configuración");
-            } finally {
-                setSaving(false);
-            }
-        };
 
-        const handleTest = async () => {
-            if (!config.url) {
-                toast.error("Por favor ingresa la URL de WAHA");
-                return;
-            }
+// Add getWahaHistory to imports first (done separately? No, I must modify the whole file or assume imports are updated. I'll invoke this tool to update the import line first, or I can try to do it all if safe. The imports are at top of file. I will just update the component logic here and assume imports need update if function not found, but I can't edit 2 places easily. I will update component and then imports).
 
-            setTesting(true);
-            try {
-                const result = await testWahaConnection(config.url, config.apiKey);
-                if (result.success) {
-                    toast.success(result.message);
-                    setSessions(result.sessions || []);
-                } else {
-                    toast.error(result.message);
+function WhatsAppSection() {
+    const [config, setConfig] = useState({ url: "", apiKey: "" });
+    // Updated default commands to reflect reality
+    const [commands, setCommands] = useState([
+        { id: 'matricula', cmd: 'matricula [AAA1234]', desc: 'Gestión de matrículas (Consultar/Agregar)', icon: Car, active: true },
+        { id: 'last_events', cmd: 'ultimas entradas/salidas', desc: 'Reporte de últimos accesos con filtro', icon: Activity, active: true },
+        { id: 'logs', cmd: 'último evento', desc: 'Último acceso registrado (con foto)', icon: Eye, active: true },
+        { id: 'status', cmd: 'estado', desc: 'Estado del sistema (Próximamente)', icon: Bot, active: false },
+    ]);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [testing, setTesting] = useState(false);
+    const [sessions, setSessions] = useState<any[]>([]);
+    const [history, setHistory] = useState<any[]>([]);
+
+    useEffect(() => {
+        loadConfig();
+    }, []);
+
+    const loadConfig = async () => {
+        setLoading(true);
+        try {
+            const [url, apiKey, cmdConfig] = await Promise.all([
+                getSetting("WAHA_URL"),
+                getSetting("WAHA_API_KEY"),
+                getSetting("WAHA_COMMANDS")
+            ]);
+
+            setConfig({
+                url: url?.value || "",
+                apiKey: apiKey?.value || ""
+            });
+
+            if (cmdConfig?.value) {
+                try {
+                    const savedCommands = JSON.parse(cmdConfig.value);
+                    setCommands(prev => prev.map(c => {
+                        const saved = savedCommands.find((s: any) => s.id === c.id);
+                        return saved ? { ...c, active: saved.active } : c;
+                    }));
+                } catch (e) {
+                    console.error("Error parsing commands config", e);
                 }
-            } catch (err) {
-                toast.error("Error crítico al conectar con WAHA");
-            } finally {
-                setTesting(false);
             }
-        };
 
-        if (loading) {
-            return (
-                <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-8">
-                    <div className="flex items-center justify-center py-12">
-                        <RefreshCcw className="animate-spin text-emerald-500" size={32} />
-                    </div>
-                </div>
-            );
+            // Load real history
+            await loadHistory();
+
+        } catch (err) {
+            console.error("Error loading WAHA config:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const loadHistory = async () => {
+        try {
+            const logs = await getWahaHistory();
+            setHistory(logs);
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            const commandsConfig = JSON.stringify(commands.map(c => ({ id: c.id, active: c.active })));
+            await Promise.all([
+                updateSetting("WAHA_URL", config.url),
+                updateSetting("WAHA_API_KEY", config.apiKey),
+                updateSetting("WAHA_COMMANDS", commandsConfig)
+            ]);
+            toast.success("Configuración de WAHA guardada");
+        } catch (err) {
+            toast.error("Error al guardar la configuración");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleTest = async () => {
+        if (!config.url) {
+            toast.error("Por favor ingresa la URL de WAHA");
+            return;
         }
 
+        setTesting(true);
+        try {
+            const result = await testWahaConnection(config.url, config.apiKey);
+            if (result.success) {
+                toast.success(result.message);
+                setSessions(result.sessions || []);
+            } else {
+                toast.error(result.message);
+            }
+        } catch (err) {
+            toast.error("Error crítico al conectar con WAHA");
+        } finally {
+            setTesting(false);
+        }
+    };
+
+    const toggleCommand = (id: string) => {
+        setCommands(prev => prev.map(c => c.id === id ? { ...c, active: !c.active } : c));
+    };
+
+    if (loading) {
         return (
-            <div className="space-y-6 animate-in zoom-in-95 duration-500">
-                {/* Header con Estado */}
-                <div className="bg-gradient-to-br from-emerald-500/10 via-teal-500/10 to-green-500/10 border border-emerald-500/20 rounded-2xl p-6">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                            <div className="p-3 bg-emerald-500/20 rounded-xl">
-                                <Bot className="text-emerald-400" size={32} />
-                            </div>
-                            <div>
-                                <h2 className="text-2xl font-black text-white tracking-tight">Chatbot WhatsApp (WAHA)</h2>
-                                <p className="text-sm text-neutral-400 mt-1">Asistente IA y Notificaciones Inteligentes</p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 border border-emerald-500/30 rounded-lg">
-                            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                            <span className="text-xs font-bold text-emerald-400 uppercase">Bot Activo</span>
-                        </div>
-                    </div>
+            <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-8">
+                <div className="flex items-center justify-center py-12">
+                    <RefreshCcw className="animate-spin text-emerald-500" size={32} />
                 </div>
-
-                {/* Estadísticas */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-xl p-5">
-                        <div className="flex items-center justify-between mb-3">
-                            <MessageSquare className="text-blue-400" size={20} />
-                            <span className="text-[10px] font-black text-neutral-600 uppercase tracking-widest">Mensajes</span>
-                        </div>
-                        <div className="text-3xl font-black text-white mb-1">1,247</div>
-                        <div className="text-[10px] text-emerald-400 font-bold">+12% vs ayer</div>
-                    </div>
-
-                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-xl p-5">
-                        <div className="flex items-center justify-between mb-3">
-                            <Bot className="text-purple-400" size={20} />
-                            <span className="text-[10px] font-black text-neutral-600 uppercase tracking-widest">Comandos</span>
-                        </div>
-                        <div className="text-3xl font-black text-white mb-1">342</div>
-                        <div className="text-[10px] text-emerald-400 font-bold">+8% vs ayer</div>
-                    </div>
-
-                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-xl p-5">
-                        <div className="flex items-center justify-between mb-3">
-                            <Smartphone className="text-emerald-400" size={20} />
-                            <span className="text-[10px] font-black text-neutral-600 uppercase tracking-widest">Sesiones</span>
-                        </div>
-                        <div className="text-3xl font-black text-white mb-1">{sessions.length}</div>
-                        <div className="text-[10px] text-neutral-500 font-bold">Activas ahora</div>
-                    </div>
-
-                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-xl p-5">
-                        <div className="flex items-center justify-between mb-3">
-                            <Activity className="text-amber-400" size={20} />
-                            <span className="text-[10px] font-black text-neutral-600 uppercase tracking-widest">Uptime</span>
-                        </div>
-                        <div className="text-3xl font-black text-white mb-1">99.8%</div>
-                        <div className="text-[10px] text-neutral-500 font-bold">Últimos 30 días</div>
-                    </div>
-                </div>
-
-                {/* Configuración y Comandos */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Configuración */}
-                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-6">
-                        <h3 className="text-lg font-black text-white mb-6 uppercase tracking-tight">Configuración</h3>
-
-                        <div className="space-y-5">
-                            {/* URL Configuration */}
-                            <div className="space-y-2">
-                                <Label className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">URL del Servidor WAHA</Label>
-                                <Input
-                                    value={config.url}
-                                    onChange={(e) => setConfig({ ...config, url: e.target.value })}
-                                    placeholder="http://192.168.99.111:3000"
-                                    className="bg-black/40 border-white/10 text-white h-11 rounded-lg font-mono text-sm"
-                                />
-                            </div>
-
-                            {/* API Key */}
-                            <div className="space-y-2">
-                                <Label className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">API Key (Opcional)</Label>
-                                <Input
-                                    value={config.apiKey}
-                                    onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
-                                    placeholder="••••••••••••••••••••••••"
-                                    type="password"
-                                    className="bg-black/40 border-white/10 text-white h-11 rounded-lg font-mono text-sm"
-                                />
-                            </div>
-
-                            {/* Webhook URL Info */}
-                            <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-lg">
-                                <div className="flex items-start gap-2">
-                                    <Info className="text-blue-400 shrink-0 mt-0.5" size={14} />
-                                    <div className="flex-1">
-                                        <h4 className="text-[10px] font-black text-white uppercase tracking-tight mb-1">Webhook URL</h4>
-                                        <code className="block p-2 bg-black/40 rounded text-[9px] font-mono text-blue-400 border border-blue-500/20">
-                                            http://TU_SERVIDOR:10000/api/waha/webhook
-                                        </code>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Action Buttons */}
-                            <div className="flex gap-2 pt-2">
-                                <Button
-                                    variant="ghost"
-                                    onClick={handleTest}
-                                    disabled={testing || saving}
-                                    className="flex-1 text-neutral-400 hover:text-white hover:bg-white/5 font-bold h-10 rounded-lg border border-white/5 text-xs"
-                                >
-                                    {testing ? <RefreshCcw className="animate-spin mr-2" size={14} /> : <Activity className="mr-2" size={14} />}
-                                    PROBAR
-                                </Button>
-                                <Button
-                                    onClick={handleSave}
-                                    disabled={saving || testing}
-                                    className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black h-10 rounded-lg shadow-lg shadow-emerald-600/20 text-xs"
-                                >
-                                    {saving ? <RefreshCcw className="animate-spin mr-2" size={14} /> : <Save className="mr-2" size={14} />}
-                                    GUARDAR
-                                </Button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Comandos Disponibles */}
-                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-6">
-                        <div className="flex items-center gap-2 mb-6">
-                            <MessageSquare className="text-emerald-400" size={18} />
-                            <h3 className="text-lg font-black text-white uppercase tracking-tight">Comandos Disponibles</h3>
-                        </div>
-
-                        <div className="space-y-2">
-                            {[
-                                { cmd: 'estado', desc: 'Estado del sistema en tiempo real', icon: Activity },
-                                { cmd: 'últimos accesos', desc: 'Últimos 5 eventos registrados', icon: Eye },
-                                { cmd: 'quién está', desc: 'Personas actualmente en el edificio', icon: Users },
-                                { cmd: 'cámaras', desc: 'Estado de todos los dispositivos', icon: Camera },
-                                { cmd: 'abrir [puerta]', desc: 'Control remoto de accesos', icon: ShieldCheck }
-                            ].map((item, i) => {
-                                const Icon = item.icon;
-                                return (
-                                    <div key={i} className="flex items-center gap-3 p-3 bg-black/20 rounded-lg border border-emerald-500/10 hover:border-emerald-500/30 transition-all group">
-                                        <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0 group-hover:bg-emerald-500/20 transition-all">
-                                            <Icon size={14} className="text-emerald-400" />
-                                        </div>
-                                        <div className="flex-1">
-                                            <code className="text-[11px] font-mono text-emerald-400 font-bold block">"{item.cmd}"</code>
-                                            <span className="text-[9px] text-neutral-500">{item.desc}</span>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Sesiones Activas */}
-                {sessions.length > 0 && (
-                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-6">
-                        <div className="flex items-center gap-2 mb-4">
-                            <Smartphone className="text-emerald-400" size={18} />
-                            <h3 className="text-lg font-black text-white uppercase tracking-tight">Sesiones Activas</h3>
-                            <span className="ml-auto text-xs font-bold text-neutral-500">{sessions.length} conectadas</span>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {sessions.map((session: any, i: number) => (
-                                <div key={i} className="flex items-center justify-between p-4 bg-black/40 rounded-lg border border-white/5">
-                                    <div className="flex items-center gap-3">
-                                        <div className={cn(
-                                            "w-2 h-2 rounded-full",
-                                            session.status === 'WORKING' ? "bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" : "bg-neutral-500"
-                                        )} />
-                                        <span className="text-sm font-mono text-white font-bold">{session.name}</span>
-                                    </div>
-                                    <span className={cn(
-                                        "text-[10px] font-bold uppercase px-2 py-1 rounded",
-                                        session.status === 'WORKING' ? "bg-emerald-500/20 text-emerald-400" : "bg-neutral-500/20 text-neutral-400"
-                                    )}>
-                                        {session.status}
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
             </div>
         );
     }
 
+    return (
+        <div className="space-y-6 animate-in zoom-in-95 duration-500">
+            {/* Header Compacto */}
+            <div className="bg-gradient-to-br from-emerald-600/10 to-teal-600/10 border border-emerald-500/10 rounded-lg p-5 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <div className="p-2.5 bg-emerald-500/20 rounded-lg text-emerald-400">
+                        <Bot size={24} />
+                    </div>
+                    <div>
+                        <h2 className="text-xl font-black text-white tracking-tight">Chatbot WhatsApp (WAHA)</h2>
+                        <p className="text-xs text-neutral-400">Asistente IA y Notificaciones</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Button onClick={loadHistory} variant="ghost" size="sm" className="h-8 text-xs font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20">
+                        <RefreshCcw size={14} className="mr-2" />
+                        Refrescar Logs
+                    </Button>
+                </div>
+            </div>
 
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-6">
+                {/* Left Column: Config */}
+                <div className="space-y-6">
+                    {/* Connection Card */}
+                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-lg p-6 space-y-6">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Settings className="text-emerald-400" size={18} />
+                                <h3 className="text-sm font-black text-white uppercase tracking-wider">Conexión</h3>
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded">
+                                <Activity size={12} />
+                                <span>Sistema Activo</span>
+                            </div>
+                        </div>
 
+                        <div className="space-y-4">
+                            <div className="space-y-1.5">
+                                <Label className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">URL del Servidor</Label>
+                                <Input
+                                    value={config.url}
+                                    onChange={(e) => setConfig({ ...config, url: e.target.value })}
+                                    placeholder="http://localhost:3000"
+                                    className="bg-black/40 border-white/10 h-10 font-mono text-xs"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">API Key</Label>
+                                <Input
+                                    value={config.apiKey}
+                                    onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
+                                    type="password"
+                                    placeholder="••••••••"
+                                    className="bg-black/40 border-white/10 h-10 font-mono text-xs"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3 pt-2">
+                            <Button onClick={handleTest} disabled={testing} variant="outline" className="flex-1 h-9 text-xs font-bold border-white/10 hover:bg-white/5">
+                                {testing ? "Probando..." : "Probar Conexión"}
+                            </Button>
+                            <Button onClick={handleSave} disabled={saving} className="flex-1 h-9 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20">
+                                {saving ? "Guardando..." : "Guardar Cambios"}
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* Webhook Info */}
+                    <div className="bg-blue-500/5 border border-blue-500/10 rounded-lg p-4 flex items-start gap-4">
+                        <Info className="text-blue-400 shrink-0 mt-1" size={16} />
+                        <div>
+                            <h4 className="text-xs font-black text-blue-100 uppercase mb-1">Webhook URL</h4>
+                            <p className="text-[10px] text-blue-200/60 mb-2">Configura esta URL en WAHA:</p>
+                            <code className="block bg-black/20 rounded p-2 text-[10px] font-mono text-blue-300">http://SERVER_IP:10000/api/webhooks/whatsapp</code>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Right Column: Commands & History */}
+                <div className="space-y-6">
+                    {/* Commands List */}
+                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-lg p-6">
+                        <div className="flex items-center gap-2 mb-4">
+                            <MessageSquare className="text-purple-400" size={18} />
+                            <h3 className="text-sm font-black text-white uppercase tracking-wider">Comandos Disponibles</h3>
+                        </div>
+                        <div className="border border-white/5 rounded-lg overflow-hidden">
+                            <Table>
+                                <TableHeader className="bg-white/5">
+                                    <TableRow className="border-white/5 hover:bg-transparent">
+                                        <TableHead className="h-8 text-[9px] font-black text-neutral-400 uppercase tracking-widest">Comando</TableHead>
+                                        <TableHead className="h-8 text-[9px] font-black text-neutral-400 uppercase tracking-widest text-right">Estado</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {commands.map((cmd) => (
+                                        <TableRow key={cmd.id} className="border-white/5 hover:bg-white/5">
+                                            <TableCell className="py-2">
+                                                <div className="flex items-center gap-2">
+                                                    <div className={`p-1.5 rounded bg-neutral-800 text-neutral-400`}>
+                                                        <cmd.icon size={12} />
+                                                    </div>
+                                                    <div>
+                                                        <span className="block text-xs font-mono font-bold text-neutral-300">{cmd.cmd}</span>
+                                                        <span className="block text-[10px] text-neutral-500 truncate max-w-[150px]">{cmd.desc}</span>
+                                                    </div>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="py-2 text-right">
+                                                <Switch checked={cmd.active} onCheckedChange={() => toggleCommand(cmd.id)} className="scale-75 origin-right" />
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </div>
+
+                    {/* History */}
+                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-lg p-6 max-h-[400px] overflow-hidden flex flex-col">
+                        <div className="flex items-center gap-2 mb-4 shrink-0">
+                            <FileText className="text-amber-400" size={18} />
+                            <h3 className="text-sm font-black text-white uppercase tracking-wider">Historial de Consultas</h3>
+                        </div>
+                        <div className="border border-white/5 rounded-lg overflow-y-auto custom-scrollbar grow">
+                            <Table>
+                                <TableHeader className="bg-white/5 sticky top-0 z-10 backdrop-blur-md">
+                                    <TableRow className="border-white/5 hover:bg-transparent">
+                                        <TableHead className="h-8 text-[9px] font-black text-neutral-400 uppercase tracking-widest w-24">Usuario</TableHead>
+                                        <TableHead className="h-8 text-[9px] font-black text-neutral-400 uppercase tracking-widest">Interacción</TableHead>
+                                        <TableHead className="h-8 text-[9px] font-black text-neutral-400 uppercase tracking-widest text-right w-24">Hora</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {history.length === 0 ? (
+                                        <TableRow className="border-white/5 hover:bg-transparent">
+                                            <TableCell colSpan={3} className="py-8 text-center text-[10px] text-neutral-500 italic">
+                                                Sin registros recientes.
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        history.map((h) => (
+                                            <TableRow key={h.id} className="border-white/5 hover:bg-white/5">
+                                                <TableCell className="py-2 align-top">
+                                                    <span className="text-[9px] font-bold text-white bg-white/5 px-1.5 py-0.5 rounded-full whitespace-nowrap overflow-hidden text-ellipsis max-w-full block" title={h.user}>
+                                                        {h.user.split('@')[0]}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell className="py-2 align-top">
+                                                    <div className="space-y-1">
+                                                        <p className="text-[10px] font-mono text-emerald-400 break-words line-clamp-2" title={h.command}>&gt; {h.command}</p>
+                                                        <p className="text-[9px] text-neutral-400 break-words line-clamp-2" title={h.response}>{h.response}</p>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="py-2 text-right text-[9px] text-neutral-500 font-mono align-top whitespace-nowrap">
+                                                    {h.time}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 }
+

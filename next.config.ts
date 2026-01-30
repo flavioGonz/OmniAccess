@@ -17,6 +17,12 @@ const nextConfig = {
       bodySizeLimit: '10mb',
     },
   },
+  // Reduce logging in development
+  logging: {
+    fetches: {
+      fullUrl: false,
+    },
+  },
   async headers() {
     return [
       {
