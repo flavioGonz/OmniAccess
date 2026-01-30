@@ -44,7 +44,27 @@ Ejecute el siguiente comando para instalar todas las librerías necesarias:
 npm install
 ```
 
-## PASO 4: CONFIGURACIÓN DE LA BASE DE DATOS
+## PASO 4: EJECUCIÓN DEL SCRIPT DE INSTALACIÓN AUTOMÁTICA (RECOMENDADO)
+
+Hemos incluido un script que automatiza la instalación de dependencias, configuración de base de datos y despliegue con PM2.
+
+```bash
+chmod +x install_app.sh
+./install_app.sh
+```
+
+Este script se encargará de:
+1.  Verificar e instalar Node.js y PM2 si no existen.
+2.  Instalar las dependencias del proyecto (`npm install`).
+3.  Generar el cliente de Prisma y sincronizar la base de datos.
+4.  Compilar la aplicación ("build").
+5.  Iniciar los servicios con PM2 y configurar el inicio automático.
+
+*Si prefiere la instalación manual, continúe con los pasos siguientes.*
+
+## PASO 5: CONFIGURACIÓN MANUAL (Si no usó el script)
+
+### Configuración de la Base de Datos
 
 Sincronice el esquema de Prisma con su base de datos:
 
@@ -58,7 +78,7 @@ npx prisma db push
 node seed-devices.js
 ```
 
-## PASO 5: EJECUCIÓN DEL SISTEMA
+## PASO 6: EJECUCIÓN DEL SISTEMA
 
 ### Para iniciar todos los servicios:
 Necesitará dos terminales (o ejecutar en segundo plano):

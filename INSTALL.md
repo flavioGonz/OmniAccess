@@ -137,7 +137,19 @@ HOST=0.0.0.0
 NEXT_PUBLIC_API_URL="http://IP_SERVER_APP:10001"
 ```
 
-### 4. Instalación y Build
+### 4. Instalación Automática (Recomendada)
+Hemos incluido un script que automatiza todo el proceso de instalación y configuración:
+
+```bash
+chmod +x install_app.sh
+./install_app.sh
+```
+
+Este script ejecutará automáticamente los pasos de instalación de dependencias, sincronización de base de datos, compilación y configuración de PM2.
+
+### 5. Instalación Manual (Alternativa)
+Si prefieres hacerlo paso a paso:
+
 ```bash
 # Instalar dependencias
 npm install
@@ -150,7 +162,7 @@ npx prisma db push
 npm run build
 ```
 
-### 5. Iniciar Servicios (PM2)
+### 6. Iniciar Servicios (PM2 - Solo si fue Manual)
 Usamos PM2 para mantener la app y el servidor de webhooks activos 24/7.
 
 ```bash
