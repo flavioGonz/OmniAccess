@@ -35,15 +35,19 @@ export function ExportHistoryDialog({ open, onOpenChange, filters }: ExportHisto
         setIsExporting(true);
         try {
             // Fetch ALL data for the period (no pagination)
+            const fromDate = new Date(startDate + "T00:00:00");
+            const toDate = new Date(endDate + "T23:59:59");
+
             const response = await getAccessEvents({
-                from: new Date(startDate + "T00:00:00"),
-                to: new Date(endDate + "T23:59:59"),
+                from: fromDate,
+                to: toDate,
                 search: filters?.search,
                 decision: filters?.decision,
                 type: filters?.type,
                 direction: filters?.direction,
-                take: 10000, // Limit to 10k for safety
-                skip: 0
+                take: 100000, // Increased limit for full month exports
+                skip: 0,
+                omitEnrichment: true
             });
 
             const events = response.events;
