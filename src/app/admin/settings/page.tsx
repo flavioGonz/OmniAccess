@@ -30,7 +30,9 @@ import {
     MessageSquare,
     Smartphone,
     Bot,
-    ArrowRight
+    ArrowRight,
+    Trash2,
+    Calendar
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SystemFlow from "@/components/dashboard/SystemFlow";
@@ -39,8 +41,8 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { DriverDetailsDialog } from "@/components/DriverDetailsDialog";
 import { DRIVER_MODELS, type DeviceBrand } from "@/lib/driver-models";
-import { updateSetting, getSetting, testS3Connection, getBucketLifecycle, updateBucketLifecycle, testDbConnection, getBucketStats, getDbStats, downloadBackup, restoreBackup, populateDatabase, testWahaConnection, getWahaHistory, testExternalDbConnection, updateDatabaseUrl, runDatabaseMigrations } from "@/app/actions/settings";
-import { useEffect } from "react";
+import { updateSetting, getSetting, testS3Connection, getBucketLifecycle, updateBucketLifecycle, testDbConnection, getBucketStats, getDbStats, downloadBackup, restoreBackup, populateDatabase, testWahaConnection, getWahaHistory, testExternalDbConnection, updateDatabaseUrl, runDatabaseMigrations, getLearnedPlates, clearLearnedPlates } from "@/app/actions/settings";
+import { useEffect, useTransition } from "react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -1316,11 +1318,49 @@ function ModeConfiguration({ title, description, settingKey, options }: {
     const [showHelp, setShowHelp] = useState(false);
     const [pendingMode, setPendingMode] = useState<string | null>(null);
 
+    const [learnedPlates, setLearnedPlates] = useState<{ id: string, plate: string, timestamp: Date, snapshot: string | null }[]>([]);
+    const [loadingLearned, setLoadingLearned] = useState(false);
+    const [isPending, startTransition] = useTransition();
+
     const isFaceMode = settingKey === 'MODE_FACE';
+    const isLprMode = settingKey === 'MODE_LPR';
 
     useEffect(() => {
         loadSetting();
     }, [settingKey]);
+
+    useEffect(() => {
+        if (currentMode === 'LEARNING' && isLprMode) {
+            fetchLearnedPlates();
+        }
+    }, [currentMode, isLprMode]);
+
+    const fetchLearnedPlates = async () => {
+        setLoadingLearned(true);
+        try {
+            const res = await getLearnedPlates();
+            setLearnedPlates(res);
+        } catch (err) {
+            console.error("Error fetching learned plates:", err);
+        } finally {
+            setLoadingLearned(false);
+        }
+    };
+
+    const handleClearLearned = async () => {
+        if (!confirm("¿Estás seguro de que deseas borrar todas las matrículas aprendidas?")) return;
+        try {
+            const res = await clearLearnedPlates();
+            if (res.success) {
+                toast.success("Lista de aprendizaje limpiada");
+                setLearnedPlates([]);
+            } else {
+                toast.error(res.message);
+            }
+        } catch (err) {
+            toast.error("Error al limpiar la lista");
+        }
+    };
 
     const loadSetting = async () => {
         setLoading(true);
@@ -1509,6 +1549,125 @@ function ModeConfiguration({ title, description, settingKey, options }: {
                         </div>
                     </div>
                 </div>
+
+                {/* Learned Plates Information */}
+                {currentMode === 'LEARNING' && isLprMode && (
+                    <div className="mt-8 pt-8 border-t border-white/5 space-y-6">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-blue-500/10 rounded-lg">
+                                    <Activity className="text-blue-400" size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-black text-white uppercase tracking-tight">Matrículas Aprendidas</h3>
+                                    <p className="text-[10px] text-neutral-500 uppercase font-bold">Estas matrículas se han agregado automáticamente</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={fetchLearnedPlates}
+                                    disabled={loadingLearned}
+                                    className="h-8 group"
+                                >
+                                    <RefreshCcw size={14} className={cn("mr-2 group-hover:rotate-180 transition-transform duration-500", loadingLearned && "animate-spin")} />
+                                    Actualizar
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={handleClearLearned}
+                                    className="h-8 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                >
+                                    <Trash2 size={14} className="mr-2" />
+                                    Limpiar Lista
+                                </Button>
+                            </div>
+                        </div>
+
+                        <div className="bg-black/40 border border-white/5 rounded-xl overflow-hidden">
+                            <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
+                                <Table>
+                                    <TableHeader className="bg-white/5">
+                                        <TableRow className="border-white/5 hover:bg-transparent">
+                                            <TableHead className="text-[10px] font-black text-neutral-500 uppercase">Matrícula</TableHead>
+                                            <TableHead className="text-[10px] font-black text-neutral-500 uppercase w-[100px]">Captura</TableHead>
+                                            <TableHead className="text-[10px] font-black text-neutral-500 uppercase">Fecha y Hora de Captura</TableHead>
+                                            <TableHead className="text-[10px] font-black text-neutral-500 uppercase text-right">Estado</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {loadingLearned ? (
+                                            <TableRow>
+                                                <TableCell colSpan={3} className="h-24 text-center">
+                                                    <div className="flex flex-col items-center gap-2">
+                                                        <RefreshCcw className="animate-spin text-blue-500" size={20} />
+                                                        <p className="text-[10px] font-bold text-neutral-500 uppercase">Cargando datos...</p>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : learnedPlates.length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={3} className="h-24 text-center">
+                                                    <div className="flex flex-col items-center gap-2">
+                                                        <Info className="text-neutral-700" size={20} />
+                                                        <p className="text-[10px] font-bold text-neutral-500 uppercase">No hay matrículas aprendidas en esta sesión</p>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : learnedPlates.map((item) => (
+                                            <TableRow key={item.id} className="border-white/5 hover:bg-white/5 group transition-colors">
+                                                <TableCell>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded bg-blue-500/10 flex items-center justify-center border border-blue-500/20">
+                                                            <Car className="text-blue-400" size={14} />
+                                                        </div>
+                                                        <span className="font-mono font-black text-white">{item.plate}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {item.snapshot ? (
+                                                        <div className="w-16 h-10 rounded overflow-hidden border border-white/10 bg-neutral-900 group-hover:scale-110 transition-transform cursor-pointer">
+                                                            <img
+                                                                src={item.snapshot}
+                                                                alt={item.plate}
+                                                                className="w-full h-full object-cover"
+                                                                onClick={() => window.open(item.snapshot!, '_blank')}
+                                                            />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="w-16 h-10 rounded bg-neutral-900 border border-white/5 flex items-center justify-center">
+                                                            <Eye size={12} className="text-neutral-700" />
+                                                        </div>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-2 text-neutral-400">
+                                                        <Calendar size={12} className="text-neutral-600" />
+                                                        <span className="text-xs">{new Date(item.timestamp).toLocaleString('es-UY', {
+                                                            day: '2-digit',
+                                                            month: '2-digit',
+                                                            year: 'numeric',
+                                                            hour: '2-digit',
+                                                            minute: '2-digit',
+                                                            second: '2-digit'
+                                                        })}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-black text-emerald-400 uppercase">
+                                                        Registrada
+                                                    </span>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Confirmation Modal */}

@@ -655,3 +655,59 @@ export async function getWahaHistory() {
         return [];
     }
 }
+export async function getLearnedPlates() {
+    try {
+        const learnedPlates = await prisma.credential.findMany({
+            where: {
+                user: {
+                    name: "Usuario Aprendizaje"
+                },
+                type: "PLATE"
+            },
+            orderBy: {
+                createdAt: 'desc'
+            }
+        });
+
+        const platesWithEvents = await Promise.all(learnedPlates.map(async (p) => {
+            const lastEvent = await prisma.accessEvent.findFirst({
+                where: { plateDetected: p.value },
+                orderBy: { timestamp: 'desc' },
+                select: { snapshotPath: true }
+            });
+
+            return {
+                id: p.id,
+                plate: p.value,
+                timestamp: p.createdAt,
+                snapshot: lastEvent?.snapshotPath || null
+            };
+        }));
+
+        return platesWithEvents;
+    } catch (error) {
+        console.error("Error fetching learned plates:", error);
+        return [];
+    }
+}
+
+export async function clearLearnedPlates() {
+    try {
+        const learningUser = await prisma.user.findFirst({
+            where: { name: "Usuario Aprendizaje" }
+        });
+        if (learningUser) {
+            await prisma.credential.deleteMany({
+                where: {
+                    userId: learningUser.id,
+                    type: "PLATE"
+                }
+            });
+        }
+        revalidatePath("/admin/settings");
+        return { success: true };
+    } catch (error) {
+        console.error("Error clearing learned plates:", error);
+        return { success: false, message: "Error al borrar las matrículas aprendidas" };
+    }
+}

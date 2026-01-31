@@ -17,6 +17,18 @@ import { cn } from "@/lib/utils";
 
 const changes = [
     {
+        version: "v1.2.0",
+        date: "2026-01-31",
+        title: "Nuevo Modo Aprendizaje LPR",
+        description: "Automatización de registro de matrículas y mejoras en la gestión de accesos desconocidos.",
+        items: [
+            { type: "feature", text: "LPR: Nuevo Modo Aprendizaje que registra automáticamente matrículas desconocidas a un usuario del sistema." },
+            { type: "improvement", text: "Ajustes: Visualización de capturas y miniaturas de fotos directamente en la tabla de aprendizaje." },
+            { type: "feature", text: "Ajustes: Funcionalidad para limpiar el historial de aprendizaje y actualizar la lista en tiempo real." },
+            { type: "improvement", text: "Webhook: Lógica optimizada para el registro automático de credenciales desde cámaras Hikvision." }
+        ]
+    },
+    {
         version: "v1.1.0",
         date: "2026-01-31",
         title: "Optimización de Rendimiento y Reportes",

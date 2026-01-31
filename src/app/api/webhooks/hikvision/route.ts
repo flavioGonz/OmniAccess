@@ -198,6 +198,45 @@ export async function POST(req: NextRequest) {
                 where: { value: identifier, type: "PLATE" },
                 include: { user: true },
             });
+
+            // LPR Learning Mode - Automatically add new plates
+            if (!credential) {
+                const lprMode = await getSetting("MODE_LPR");
+                if (lprMode?.value === "LEARNING") {
+                    console.log(`${logPrefix} LEARNING MODE ACTIVE: Adding plate ${identifier}`);
+
+                    // 1. Get or Create Learning User
+                    let learningUser = await prisma.user.findFirst({
+                        where: { name: "Usuario Aprendizaje" }
+                    });
+
+                    if (!learningUser) {
+                        learningUser = await prisma.user.create({
+                            data: {
+                                name: "Usuario Aprendizaje",
+                                role: "RESIDENT",
+                                email: "aprendizaje@omniaccess.local",
+                                phone: "00000000",
+                                notes: "System-generated user for LPR Learning Mode"
+                            }
+                        });
+                        console.log(`${logPrefix} Created 'Usuario Aprendizaje' system user`);
+                    }
+
+                    // 2. Create Credential for the new plate
+                    credential = await prisma.credential.create({
+                        data: {
+                            type: "PLATE",
+                            value: identifier,
+                            userId: learningUser.id,
+                            notes: `Aprendido automáticamente por el sistema`
+                        },
+                        include: { user: true }
+                    }) as any;
+
+                    logDetails += `LEARNING_MODE: Plate ${identifier} registered automatically.\\n`;
+                }
+            }
         } else {
             // For Face events, the identifier is usually the employeeNo.
             // In OmniAccess, we might map this to a DNI or a special EmployeeNo credential.
