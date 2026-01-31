@@ -11,7 +11,8 @@ export async function getAccessEvents(options?: {
     direction?: "ENTRY" | "EXIT" | "ALL",
     unit?: string,
     from?: Date,
-    to?: Date
+    to?: Date,
+    omitEnrichment?: boolean
 }) {
     const whereClause: any = {};
 
@@ -80,6 +81,10 @@ export async function getAccessEvents(options?: {
             }),
             prisma.accessEvent.count({ where: whereClause })
         ]);
+
+        if (options?.omitEnrichment) {
+            return { events, total };
+        }
 
         // Enrich events with duration logic (Keep inside try block as it depends on events)
         const enrichedEvents = await Promise.all(events.map(async (event) => {

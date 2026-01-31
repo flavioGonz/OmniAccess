@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { getAccessEvents } from "@/app/actions/history";
 import {
     ChevronLeft,
@@ -72,6 +72,17 @@ export default function CalendarPage() {
     const daysInMonth = getDaysInMonth(year, month);
     const firstDay = getFirstDayOfMonth(year, month);
 
+    // Optimized grouping of events by day to avoid O(N*Days) filtering in render
+    const eventsByDay = useMemo(() => {
+        const grouped: Record<number, FullAccessEvent[]> = {};
+        events.forEach(event => {
+            const day = new Date(event.timestamp).getDate();
+            if (!grouped[day]) grouped[day] = [];
+            grouped[day].push(event);
+        });
+        return grouped;
+    }, [events]);
+
     useEffect(() => {
         loadMonthEvents();
     }, [year, month]);
@@ -82,11 +93,12 @@ export default function CalendarPage() {
             const start = new Date(year, month, 1);
             const end = new Date(year, month + 1, 0, 23, 59, 59, 999);
 
-            // Fetch ALL events for this month
+            // Fetch ALL events for this month - Optimized with omitEnrichment
             const data = await getAccessEvents({
                 from: start,
                 to: end,
-                take: 2000
+                take: 50000,
+                omitEnrichment: true
             });
 
             // getAccessEvents returns { events, total }
@@ -189,11 +201,7 @@ export default function CalendarPage() {
 
     // Filter logic
     const selectedDayEvents = selectedDate
-        ? events.filter(e => {
-            const d = new Date(e.timestamp);
-            const matchesDate = d.getDate() === selectedDate && d.getMonth() === month && d.getFullYear() === year;
-            if (!matchesDate) return false;
-
+        ? (eventsByDay[selectedDate] || []).filter(e => {
             if (!searchTerm) return true;
             const term = searchTerm.toLowerCase();
             return (
@@ -273,7 +281,7 @@ export default function CalendarPage() {
                             ) : (
                                 Array.from({ length: daysInMonth }).map((_, i) => {
                                     const day = i + 1;
-                                    const dayEvents = events.filter(e => new Date(e.timestamp).getDate() === day);
+                                    const dayEvents = eventsByDay[day] || [];
                                     const hasEvents = dayEvents.length > 0;
                                     const isSelected = selectedDate === day;
                                     const isToday = day === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
@@ -321,11 +329,9 @@ export default function CalendarPage() {
                                 slotDate.setDate(currentDate.getDate() + startDiff);
 
                                 const day = slotDate.getDate();
-                                // Filter events (Note: matches only if in fetched month range, limitation of current fetch logic)
-                                const dayEvents = events.filter(e => {
-                                    const d = new Date(e.timestamp);
-                                    return d.getDate() === day && d.getMonth() === slotDate.getMonth();
-                                });
+                                // Note: eventsByDay only contains events for CURRENTLY LOADED month.
+                                // If slotDate is in another month, it won't show markers unless we improve fetch logic.
+                                const dayEvents = (slotDate.getMonth() === month) ? (eventsByDay[day] || []) : [];
 
                                 const hasEvents = dayEvents.length > 0;
                                 const isSelected = selectedDate === day; // Simple selection logic
