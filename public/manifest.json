@@ -1,0 +1,16 @@
+{
+    "name": "SecureAccess Guard",
+    "short_name": "GuardConsole",
+    "description": "Consola de control de acceso físico",
+    "start_url": "/guard",
+    "display": "standalone",
+    "background_color": "#0a0a0b",
+    "theme_color": "#B20D30",
+    "icons": [
+        {
+            "src": "/favicon.ico",
+            "sizes": "64x64",
+            "type": "image/x-icon"
+        }
+    ]
+}

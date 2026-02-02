@@ -64,6 +64,7 @@ type FullAccessEvent = AccessEvent & {
     device: Device | null;
     stayDuration?: number | null;
     previousDirection?: string | null;
+    bitacora: any | null;
 };
 
 export default function HistoryPage() {
@@ -471,6 +472,12 @@ export default function HistoryPage() {
                                                                     <p className={cn("font-mono text-xs font-black tracking-widest uppercase", isCall ? "text-blue-400" : "text-white")}>
                                                                         {isCall ? "LLAMADA" : (evt.plateDetected || "-------")}
                                                                     </p>
+                                                                )}
+                                                                {evt.bitacora && (
+                                                                    <div className="flex items-center gap-1 mt-0.5">
+                                                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]" />
+                                                                        <span className="text-[8px] font-black text-emerald-500 uppercase tracking-tighter">Con Bitácora</span>
+                                                                    </div>
                                                                 )}
                                                             </div>
                                                         </div>

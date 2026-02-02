@@ -146,7 +146,28 @@ model AccessEvent {
   createdAt     DateTime        @default(now())
   device        Device?         @relation(fields: [deviceId], references: [id], map: "AccessEvent_deviceId_fkey_v2")
   user          User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bitacora      Bitacora?
 }
+
+model Bitacora {
+  id            String       @id @default(cuid())
+  timestamp     DateTime     @default(now())
+  type          String       // "ENTRY" or "EXIT"
+  plate         String?
+  photoPath     String?
+  notes         String?
+  name          String?      // NOMBRE
+  dni           String?      // CEDULA
+  company       String?      // EMPRESA
+  destination   String?      // DESTINATARIO
+  guardName     String?      // GUARDIA
+  latitude      Float?
+  longitude     Float?
+  audioPath     String?
+  accessEventId String?      @unique
+  accessEvent   AccessEvent? @relation(fields: [accessEventId], references: [id])
+}
+
 
 model CallEvent {
   id         String   @id @default(cuid())

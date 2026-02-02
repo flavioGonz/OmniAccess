@@ -17,15 +17,28 @@ import { cn } from "@/lib/utils";
 
 const changes = [
     {
+        version: "v1.5.0",
+        date: "2026-02-02",
+        title: "Experiencia GuardConsole Premium",
+        description: "Transformación total de la interfaz para tablets y optimización de flujo de trabajo.",
+        items: [
+            { type: "feature", text: "Smart Match: Autocompletado inteligente basado en registros históricos." },
+            { type: "feature", text: "Modo Kiosk PWA: Soporte para pantalla completa real sin barras." },
+            { type: "improvement", text: "Tactile Matrix: Entrada de matrículas optimizada para alta velocidad." },
+            { type: "performance", text: "Haptic Feedback: Sonidos táctiles de confirmación en cada acción." },
+            { type: "improvement", text: "Visual: Nueva tipografía Outfit y animaciones 'Breathing' de cristal." },
+            { type: "fix", text: "Resiliencia: Solución para cámaras en contextos HTTP locales." }
+        ]
+    },
+    {
         version: "v1.2.0",
         date: "2026-01-31",
         title: "Nuevo Modo Aprendizaje LPR",
         description: "Automatización de registro de matrículas y mejoras en la gestión de accesos desconocidos.",
         items: [
-            { type: "feature", text: "LPR: Nuevo Modo Aprendizaje que registra automáticamente matrículas desconocidas a un usuario del sistema." },
-            { type: "improvement", text: "Ajustes: Visualización de capturas y miniaturas de fotos directamente en la tabla de aprendizaje." },
-            { type: "feature", text: "Ajustes: Funcionalidad para limpiar el historial de aprendizaje y actualizar la lista en tiempo real." },
-            { type: "improvement", text: "Webhook: Lógica optimizada para el registro automático de credenciales desde cámaras Hikvision." }
+            { type: "feature", text: "LPR: Nuevo Modo Aprendizaje automático." },
+            { type: "improvement", text: "Ajustes: Visualización de capturas en tabla de aprendizaje." },
+            { type: "feature", text: "Ajustes: Limpieza de historial en tiempo real." }
         ]
     },
     {

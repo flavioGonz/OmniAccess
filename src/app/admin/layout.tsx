@@ -22,7 +22,8 @@ import {
     Menu,
     Activity,
     CreditCard,
-    FileText
+    FileText,
+    Monitor
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { HelpMenu } from "@/components/HelpMenu";
@@ -34,12 +35,14 @@ interface SidebarItemProps {
     href: string;
     active: boolean;
     collapsed: boolean;
+    target?: string;
 }
 
-function SidebarItem({ icon, label, href, active, collapsed }: SidebarItemProps) {
+function SidebarItem({ icon, label, href, active, collapsed, target }: SidebarItemProps) {
     return (
         <Link
             href={href}
+            target={target}
             className={cn(
                 "flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg transition-all group relative",
                 active ? "bg-neutral-800 text-white" : "text-neutral-400 hover:bg-neutral-800 hover:text-white",
@@ -130,6 +133,7 @@ export default function AdminLayout({
                 <nav className="flex-1 p-3 space-y-1 overflow-y-auto custom-scrollbar">
                     <SidebarItem icon={<LayoutDashboard size={18} />} label="Monitor en Vivo" href="/admin/dashboard" active={pathname === "/admin/dashboard"} collapsed={collapsed} />
                     <SidebarItem icon={<History size={18} />} label="Historial de Acceso" href="/admin/history" active={pathname === "/admin/history"} collapsed={collapsed} />
+                    <SidebarItem icon={<Monitor size={18} />} label="Consola de Guardia" href="/guard" active={pathname === "/guard"} collapsed={collapsed} target="_blank" />
 
                     {!collapsed && <div className="pt-3 pb-1 px-3 text-[9px] font-semibold text-neutral-600 uppercase tracking-wider transition-opacity">Gestión</div>}
                     {collapsed && <div className="my-2 border-t border-neutral-800" />}

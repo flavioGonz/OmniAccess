@@ -578,7 +578,59 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
                                     </div>
                                 );
                             })}
+                            {/* BITACORA SECTION */}
+                            {event.bitacora && (
+                                <div className="mt-4 p-4 bg-emerald-500/5 rounded-2xl border border-emerald-500/20 space-y-4 animate-in fade-in slide-in-from-bottom-2">
+                                    <div className="flex items-center justify-between">
+                                        <div className="p-1 px-3 bg-emerald-500 rounded-lg text-[10px] font-black text-white uppercase tracking-widest">
+                                            Bitácora de Guardia
+                                        </div>
+                                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-neutral-900 border border-neutral-800">
+                                            <span className="text-[8px] font-black text-neutral-600 uppercase">Guardia:</span>
+                                            <span className="text-[9px] font-black text-white uppercase">{event.bitacora.guardName || "Sistema"}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-4">
+                                        {event.bitacora.photoPath && (
+                                            <div className="relative w-32 h-32 rounded-xl overflow-hidden border-2 border-emerald-500/30 shrink-0 shadow-lg">
+                                                <img
+                                                    src={getImageUrl(event.bitacora.photoPath)}
+                                                    alt="Guard Capture"
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            </div>
+                                        )}
+                                        <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-3">
+                                            <div className="col-span-2 pb-1 border-b border-white/5">
+                                                <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-tight mb-1">Notas / Observaciones</p>
+                                                <p className="text-sm font-black text-emerald-400 italic leading-tight">
+                                                    "{event.bitacora.notes || "S/ Observaciones"}"
+                                                </p>
+                                            </div>
+
+                                            <div>
+                                                <p className="text-[8px] font-black text-neutral-600 uppercase tracking-widest">Visitante</p>
+                                                <p className="text-[11px] font-black text-white uppercase truncate">{event.bitacora.name || "---"}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[8px] font-black text-neutral-600 uppercase tracking-widest">Empresa</p>
+                                                <p className="text-[11px] font-black text-white uppercase truncate">{event.bitacora.company || "---"}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[8px] font-black text-neutral-600 uppercase tracking-widest">Cédula / ID</p>
+                                                <p className="text-[11px] font-bold text-neutral-400 font-mono">{event.bitacora.dni || "---"}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[8px] font-black text-neutral-600 uppercase tracking-widest">Destino</p>
+                                                <p className="text-[11px] font-black text-blue-400 uppercase truncate">{event.bitacora.destination || "---"}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
+
 
                         {/* Footer */}
                         <div className="bg-neutral-900 border-t border-neutral-800 p-4 text-center shrink-0">

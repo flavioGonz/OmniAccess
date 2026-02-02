@@ -217,7 +217,6 @@ export async function POST(req: NextRequest) {
                                 role: "RESIDENT",
                                 email: "aprendizaje@omniaccess.local",
                                 phone: "00000000",
-                                notes: "System-generated user for LPR Learning Mode"
                             }
                         });
                         console.log(`${logPrefix} Created 'Usuario Aprendizaje' system user`);
@@ -318,6 +317,30 @@ export async function POST(req: NextRequest) {
 
         logDetails += `EVENT_INSERT_SUCCESS: ${event.id} \\n`;
         console.log(`${logPrefix} ${logDetails} `);
+
+        // Try to link with Bitacora
+        try {
+            const recentBitacora = await prisma.bitacora.findFirst({
+                where: {
+                    accessEventId: null,
+                    timestamp: {
+                        gte: new Date(Date.now() - 120000) // last 2 minutes
+                    }
+                },
+                orderBy: { timestamp: 'desc' }
+            });
+
+            if (recentBitacora) {
+                await prisma.bitacora.update({
+                    where: { id: recentBitacora.id },
+                    data: { accessEventId: event.id }
+                });
+                logDetails += `BITACORA_LINKED: ${recentBitacora.id}\\n`;
+                console.log(`${logPrefix} Linked event ${event.id} with bitacora ${recentBitacora.id}`);
+            }
+        } catch (linkError) {
+            console.error("Failed to link bitacora", linkError);
+        }
 
         // Emit Socket.io
         if ((global as any).io) {

@@ -77,6 +77,7 @@ export async function getAccessEvents(options?: {
                         }
                     },
                     device: true,
+                    bitacora: true,
                 },
             }),
             prisma.accessEvent.count({ where: whereClause })
