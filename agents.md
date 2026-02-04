@@ -90,6 +90,8 @@ El servidor de webhooks (10000) emite eventos críticos a los que el Front-end s
 - `device_call`: Notificación de llamada entrante desde un intercomunicador.
 - `webhook_debug`: Logs técnicos en tiempo real para depuración de ingesta.
 - `system_alert`: Alertas críticas de error en drivers de hardware.
+- `guard_presence`: Estado en tiempo real de las tablets (incluye IP local auto-detectada).
+- `new_bitacora`: Notificación inmediata de un nuevo registro manual realizado por un guardia.
 
 ---
 
@@ -111,6 +113,7 @@ OmniAccess utiliza un sistema de drivers desacoplado en `src/lib/drivers`:
 1. **Glassmorphism:** Fondos con `backdrop-blur-md` en componentes flotantes.
 2. **Animaciones:** Transiciones suaves con `framer-motion`.
 3. **Tipografía:** Fuentes **Inter** u **Outfit** únicamente.
+4. **Floating UI (V2.1):** En interfaces de tablet (GuardConsole), priorizar botones flotantes (FAB) para acciones multimedia (Foto/Audio) para maximizar espacio de datos.
 
 ---
 

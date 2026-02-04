@@ -2268,6 +2268,22 @@ io.on("connection", (socket) => {
         console.log(`Sending ${debugLogsHistory.length} debug logs to client ${socket.id}`);
         socket.emit("webhook_history", debugLogsHistory);
     }
+
+    // Register guard tablet presence and broadcast to admin
+    socket.on("guard_presence", (data) => {
+        // Prioritize the IP reported by the client if it exists (local IP detection)
+        const socketIp = (socket.handshake.headers['x-forwarded-for'] || socket.handshake.address).replace('::ffff:', '');
+
+        io.emit("guard_presence", {
+            ...data,
+            socketId: socket.id,
+            ip: data.reportedIp || socketIp
+        });
+    });
+
+    socket.on("new_bitacora", (data) => {
+        io.emit("new_bitacora", data);
+    });
 });
 
 global.io = io;

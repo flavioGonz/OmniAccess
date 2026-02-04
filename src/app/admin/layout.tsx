@@ -133,7 +133,7 @@ export default function AdminLayout({
                 <nav className="flex-1 p-3 space-y-1 overflow-y-auto custom-scrollbar">
                     <SidebarItem icon={<LayoutDashboard size={18} />} label="Monitor en Vivo" href="/admin/dashboard" active={pathname === "/admin/dashboard"} collapsed={collapsed} />
                     <SidebarItem icon={<History size={18} />} label="Historial de Acceso" href="/admin/history" active={pathname === "/admin/history"} collapsed={collapsed} />
-                    <SidebarItem icon={<Monitor size={18} />} label="Consola de Guardia" href="/guard" active={pathname === "/guard"} collapsed={collapsed} target="_blank" />
+                    <SidebarItem icon={<Monitor size={18} />} label="Consola de Guardia" href="/admin/consolas" active={pathname === "/admin/consolas"} collapsed={collapsed} />
 
                     {!collapsed && <div className="pt-3 pb-1 px-3 text-[9px] font-semibold text-neutral-600 uppercase tracking-wider transition-opacity">Gestión</div>}
                     {collapsed && <div className="my-2 border-t border-neutral-800" />}
@@ -141,10 +141,8 @@ export default function AdminLayout({
                     <SidebarItem icon={<Users size={18} />} label="Usuarios & Residentes" href="/admin/users" active={pathname === "/admin/users"} collapsed={collapsed} />
                     <SidebarItem icon={<DoorOpen size={18} />} label="Unidades / Lotes" href="/admin/units" active={pathname === "/admin/units"} collapsed={collapsed} />
                     <SidebarItem icon={<Car size={18} />} label="Vehículos / Matrículas" href="/admin/vehicles" active={pathname === "/admin/vehicles" || pathname === "/admin/credentials"} collapsed={collapsed} />
-                    <SidebarItem icon={<CreditCard size={18} />} label="Tags RFID" href="/admin/rfid" active={pathname === "/admin/rfid"} collapsed={collapsed} />
                     <SidebarItem icon={<LayoutGrid size={18} />} label="Plazas de Parking" href="/admin/plazas" active={pathname === "/admin/plazas"} collapsed={collapsed} />
-                    <SidebarItem icon={<Video size={18} />} label="Dispositivos LPR" href="/admin/devices?type=LPR_CAMERA" active={pathname?.includes("devices") && pathname.includes("type=LPR")} collapsed={collapsed} />
-                    <SidebarItem icon={<ScanFace size={18} />} label="Dispositivos Faciales" href="/admin/devices?type=FACE_TERMINAL" active={pathname?.includes("devices") && pathname.includes("type=FACE")} collapsed={collapsed} />
+                    <SidebarItem icon={<Video size={18} />} label="Dispositivos" href="/admin/devices" active={pathname?.includes("devices")} collapsed={collapsed} />
                     <SidebarItem icon={<Users size={18} />} label="Grupos de Acceso" href="/admin/groups" active={pathname === "/admin/groups"} collapsed={collapsed} />
 
                     {!collapsed && <div className="pt-3 pb-1 px-3 text-[9px] font-semibold text-neutral-600 uppercase tracking-wider transition-opacity">Reportes</div>}

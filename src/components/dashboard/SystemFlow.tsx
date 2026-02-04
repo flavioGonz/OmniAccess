@@ -131,8 +131,66 @@ const WebhookDriverNode = memo(({ data }: any) => {
 });
 WebhookDriverNode.displayName = 'WebhookDriverNode';
 
+// Custom Console/Tablet Node for Guards
+const ConsoleNode = memo(({ data }: any) => {
+    const status = data.status || 'offline';
+    const isActive = status === 'online';
+
+    return (
+        <div className={cn(
+            "relative flex flex-col p-4 transition-all duration-500 bg-[#1e1e24] border-2 rounded-[1.5rem] min-w-[200px] custom-drag-handle group/console",
+            isActive ? "border-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.3)] scale-105" : "border-slate-700 opacity-60"
+        )}>
+            <Handle type="target" position={Position.Bottom} className="!bg-emerald-500 !w-3 !h-3" />
+
+            <div className="flex items-center gap-3">
+                <div className="relative">
+                    <div className={cn(
+                        "w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-sm shadow-xl transition-all duration-500",
+                        isActive ? "bg-gradient-to-br from-emerald-500 to-teal-600 rotate-0" : "bg-slate-700 grayscale rotate-3"
+                    )}>
+                        {data.avatar ? (
+                            <img src={data.avatar} className="w-full h-full object-cover rounded-2xl" alt="Guard" />
+                        ) : (
+                            data.guardName?.substring(0, 2).toUpperCase() || "G"
+                        )}
+                    </div>
+                    {isActive && (
+                        <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-[#1e1e24] rounded-full animate-pulse" />
+                    )}
+                </div>
+
+                <div className="flex flex-col">
+                    <span className="text-[12px] font-black uppercase text-white tracking-tight leading-none">
+                        {data.guardName || "Consola Libre"}
+                    </span>
+                    <span className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest mt-1">
+                        {data.deviceId || "Tablet ID: ---"}
+                    </span>
+                </div>
+            </div>
+
+            {/* Device Info */}
+            <div className="mt-4 flex items-center justify-between gap-2 p-2 bg-black/30 rounded-xl border border-white/5">
+                <div className="flex items-center gap-1.5">
+                    <Smartphone size={12} className={isActive ? "text-emerald-400" : "text-slate-600"} />
+                    <span className="text-[9px] font-mono text-neutral-400">{data.ip || "---.---.---.---"}</span>
+                </div>
+                <div className={cn(
+                    "px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter",
+                    isActive ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-800 text-slate-500"
+                )}>
+                    {status}
+                </div>
+            </div>
+        </div>
+    );
+});
+ConsoleNode.displayName = 'ConsoleNode';
+
 const nodeTypes = {
     webhook: WebhookDriverNode,
+    console: ConsoleNode,
 };
 
 const initialNodes: Node[] = [
@@ -193,7 +251,7 @@ const fitViewOptions: FitViewOptions = {
     padding: 0.2,
 };
 
-export default function SystemFlow() {
+export default function SystemFlow({ mode = "full" }: { mode?: "full" | "consoles" }) {
     const [nodes, setNodes] = useState<Node[]>([]);
     const [edges, setEdges] = useState<Edge[]>([]);
     const [webhookActive, setWebhookActive] = useState<string | null>(null);
@@ -204,6 +262,71 @@ export default function SystemFlow() {
             try {
                 const res = await axios.get('/api/topology/positions');
                 const savedPositions = res.data;
+
+                if (mode === "consoles") {
+                    const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
+                    const isStandardPort = window.location.port === '' || window.location.port === '80' || window.location.port === '443';
+                    const socketUrl = isStandardPort
+                        ? `${protocol}://${window.location.hostname}`
+                        : `${protocol}://${window.location.hostname}:10000`;
+                    const socket = io(socketUrl);
+                    const serverNode = {
+                        id: 'lpr-node',
+                        data: { label: 'OmniAccess Server', icon: ShieldCheck, sub: 'Central API', ip: 'localhost', port: '10000', status: 'connected' },
+                        position: { x: 400, y: 100 },
+                        style: { background: '#1e1e24', color: '#fff', border: '2px solid #6366f1', width: 220, borderRadius: 16, padding: 15, boxShadow: '0 0 30px rgba(99, 102, 241, 0.4)' },
+                        type: 'default',
+                    };
+
+                    setNodes([serverNode]);
+
+                    socket.on('guard_presence', (data: any) => {
+                        setNodes(currentNodes => {
+                            const tabletId = `tablet-${data.guardName.replace(/\s+/g, '-').toLowerCase()}`;
+                            const existingNode = currentNodes.find(n => n.id === tabletId);
+
+                            if (existingNode) {
+                                return currentNodes.map(n => n.id === tabletId ? {
+                                    ...n,
+                                    data: { ...n.data, status: 'online', lastSeen: new Date() }
+                                } : n);
+                            }
+
+                            // Add new real tablet node
+                            const newNode = {
+                                id: tabletId,
+                                data: {
+                                    guardName: data.guardName,
+                                    deviceId: 'Tablet Conectada',
+                                    ip: data.ip || 'Detectando...',
+                                    status: 'online',
+                                    lastSeen: new Date()
+                                },
+                                position: { x: 200 + (currentNodes.length * 250), y: 350 },
+                                type: 'console',
+                                dragHandle: '.custom-drag-handle'
+                            };
+
+                            return [...currentNodes, newNode];
+                        });
+
+                        setEdges(currentEdges => {
+                            const tabletId = `tablet-${data.guardName.replace(/\s+/g, '-').toLowerCase()}`;
+                            if (currentEdges.find(e => e.id === `e-${tabletId}`)) return currentEdges;
+
+                            return [...currentEdges, {
+                                id: `e-${tabletId}`,
+                                source: 'lpr-node',
+                                target: tabletId,
+                                type: 'floating',
+                                animated: true,
+                                style: { stroke: '#10b981', strokeWidth: 2 }
+                            }];
+                        });
+                    });
+
+                    return () => { socket.close(); };
+                }
 
                 // Create driver nodes dynamically
                 const driverNodes = webhookDrivers.map((driver, index) => ({
@@ -326,7 +449,11 @@ export default function SystemFlow() {
     // Socket.IO for real-time webhook events
     useEffect(() => {
         // Use window.location.hostname to connect to the server on the same IP as the frontend
-        const socketUrl = `http://${window.location.hostname}:10000`;
+        const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
+        const isStandardPort = window.location.port === '' || window.location.port === '80' || window.location.port === '443';
+        const socketUrl = isStandardPort
+            ? `${protocol}://${window.location.hostname}`
+            : `${protocol}://${window.location.hostname}:10000`;
         const socket = io(socketUrl, {
             transports: ['websocket', 'polling']
         });

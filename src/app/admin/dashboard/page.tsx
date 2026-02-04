@@ -117,7 +117,11 @@ export default function AccessDashboard() {
     useEffect(() => {
         loadInitialData();
 
-        const socketUrl = `http://${window.location.hostname}:10000`;
+        const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
+        const isStandardPort = window.location.port === '' || window.location.port === '80' || window.location.port === '443';
+        const socketUrl = isStandardPort
+            ? `${protocol}://${window.location.hostname}`
+            : `${protocol}://${window.location.hostname}:10000`;
         console.log("🔌 Connecting to socket:", socketUrl);
 
         const newSocket = io(socketUrl, {

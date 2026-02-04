@@ -17,6 +17,34 @@ import { cn } from "@/lib/utils";
 
 const changes = [
     {
+        version: "v1.7.0",
+        date: "2026-02-04",
+        title: "Socket.IO Smart Routing & UI Refinements",
+        description: "Detección inteligente de proxy para Socket.IO, optimización de Guard Console y mejoras en Admin Console.",
+        items: [
+            { type: "feature", text: "Socket.IO: Detección automática de puerto basada en entorno (proxy vs directo)." },
+            { type: "improvement", text: "Guard Console: Solo matrícula es obligatoria, todos los demás campos opcionales." },
+            { type: "improvement", text: "Guard Console: Botón de cámara reparado con canvas oculto para captura." },
+            { type: "feature", text: "Admin Console: Registro Rápido convertido a botón flotante (FAB) con modal." },
+            { type: "improvement", text: "Admin Console: Barra superior eliminada para maximizar espacio del flow." },
+            { type: "improvement", text: "Admin Console: 'Consolas Conectadas' renombrado a 'Dispositivos Conectados'." },
+            { type: "fix", text: "Storage: Confirmado almacenamiento de fotos en MinIO/S3 con bucket 'lpr'." }
+        ]
+    },
+    {
+        version: "v1.6.0",
+        date: "2026-02-04",
+        title: "Floating Media Experience",
+        description: "Reorganización de interfaz y controles multimedia flotantes para tablets.",
+        items: [
+            { type: "feature", text: "Floating Media: Botones flotantes (FAB) para captura de audio y foto." },
+            { type: "improvement", text: "Espacio de Trabajo: Eliminación de bloques fijos de cámara para mayor área de formulario." },
+            { type: "feature", text: "Detección IP: Reporte automático de IP local de la tablet para auditoría precisa." },
+            { type: "improvement", text: "Media Preview: Miniaturas integradas de capturas junto al botón de finalización." },
+            { type: "feature", text: "Real-time Admin: Historial de bitácora en vivo en el panel administrativo." }
+        ]
+    },
+    {
         version: "v1.5.0",
         date: "2026-02-02",
         title: "Experiencia GuardConsole Premium",
