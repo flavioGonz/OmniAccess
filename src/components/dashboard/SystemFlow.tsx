@@ -251,7 +251,7 @@ const fitViewOptions: FitViewOptions = {
     padding: 0.2,
 };
 
-export default function SystemFlow({ mode = "full" }: { mode?: "full" | "consoles" }) {
+const SystemFlow = memo(function SystemFlow({ mode = "full" }: { mode?: "full" | "consoles" }) {
     const [nodes, setNodes] = useState<Node[]>([]);
     const [edges, setEdges] = useState<Edge[]>([]);
     const [webhookActive, setWebhookActive] = useState<string | null>(null);
@@ -788,4 +788,6 @@ export default function SystemFlow({ mode = "full" }: { mode?: "full" | "console
             </ReactFlow>
         </div>
     );
-}
+});
+
+export default SystemFlow;

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -13,7 +14,7 @@ import {
     DoorOpen,
     HelpCircle,
     LayoutGrid,
-    Map,
+    Map as LucideMap,
     Video,
     ScanFace,
     Calendar,
@@ -23,8 +24,14 @@ import {
     Activity,
     CreditCard,
     FileText,
-    Monitor
+    Monitor,
+    Shield,
+    Siren,
+    CheckCircle2,
+    X,
+    Home
 } from "lucide-react";
+import { io } from "socket.io-client";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { HelpMenu } from "@/components/HelpMenu";
 import { cn } from "@/lib/utils";
@@ -36,9 +43,10 @@ interface SidebarItemProps {
     active: boolean;
     collapsed: boolean;
     target?: string;
+    badge?: number;
 }
 
-function SidebarItem({ icon, label, href, active, collapsed, target }: SidebarItemProps) {
+function SidebarItem({ icon, label, href, active, collapsed, target, badge }: SidebarItemProps) {
     return (
         <Link
             href={href}
@@ -49,8 +57,13 @@ function SidebarItem({ icon, label, href, active, collapsed, target }: SidebarIt
                 collapsed && "justify-center px-2"
             )}
         >
-            <div className={cn("shrink-0", active ? "text-blue-500" : "group-hover:text-blue-400")}>
+            <div className={cn("shrink-0 relative", active ? "text-blue-500" : "group-hover:text-blue-400")}>
                 {icon}
+                {badge !== undefined && badge > 0 && (
+                    <div className="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] bg-red-500 text-white text-[8px] font-black rounded-full flex items-center justify-center border-2 border-neutral-900 shadow-lg">
+                        {badge}
+                    </div>
+                )}
             </div>
             {!collapsed && (
                 <span className="whitespace-nowrap transition-opacity duration-300">{label}</span>
@@ -96,6 +109,62 @@ export default function AdminLayout({
 }) {
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(false);
+    const [activeConsolesCount, setActiveConsolesCount] = useState(0);
+    const [isAlertActive, setIsAlertActive] = useState(false);
+    const socketRef = React.useRef<any>(null);
+    const alarmAudioRef = React.useRef<HTMLAudioElement | null>(null);
+
+    React.useEffect(() => {
+        const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
+        const isStandardPort = window.location.port === '' || window.location.port === '80' || window.location.port === '443';
+        const socketUrl = isStandardPort
+            ? `${protocol}://${window.location.hostname}`
+            : `${protocol}://${window.location.hostname}:10000`;
+        const socket = io(socketUrl);
+
+        const activeConsolesRef = new Map<string, any>();
+
+        socket.on('guard_presence', (data: any) => {
+            activeConsolesRef.set(data.guardName, { ...data, lastSeen: Date.now() });
+            setActiveConsolesCount(activeConsolesRef.size);
+        });
+
+        socket.on('alert_status', (data: any) => {
+            setIsAlertActive(data.active);
+            if (data.active) {
+                if (!alarmAudioRef.current) {
+                    alarmAudioRef.current = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
+                    alarmAudioRef.current.loop = true;
+                }
+                alarmAudioRef.current.play().catch(e => console.log("Audio play blocked", e));
+            } else {
+                if (alarmAudioRef.current) {
+                    alarmAudioRef.current.pause();
+                    alarmAudioRef.current.currentTime = 0;
+                }
+            }
+        });
+
+        socketRef.current = socket;
+
+        // Cleanup stale console presence locally in layout for the badge
+        const timer = setInterval(() => {
+            const now = Date.now();
+            let changed = false;
+            for (const [name, data] of activeConsolesRef.entries()) {
+                if (now - data.lastSeen > 30000) {
+                    activeConsolesRef.delete(name);
+                    changed = true;
+                }
+            }
+            if (changed) setActiveConsolesCount(activeConsolesRef.size);
+        }, 10000);
+
+        return () => {
+            socket.disconnect();
+            clearInterval(timer);
+        };
+    }, []);
 
     return (
         <div className="flex min-h-screen bg-gradient-to-br from-neutral-950 via-neutral-900 to-neutral-950 text-neutral-100 font-sans">
@@ -133,7 +202,7 @@ export default function AdminLayout({
                 <nav className="flex-1 p-3 space-y-1 overflow-y-auto custom-scrollbar">
                     <SidebarItem icon={<LayoutDashboard size={18} />} label="Monitor en Vivo" href="/admin/dashboard" active={pathname === "/admin/dashboard"} collapsed={collapsed} />
                     <SidebarItem icon={<History size={18} />} label="Historial de Acceso" href="/admin/history" active={pathname === "/admin/history"} collapsed={collapsed} />
-                    <SidebarItem icon={<Monitor size={18} />} label="Consola de Guardia" href="/admin/consolas" active={pathname === "/admin/consolas"} collapsed={collapsed} />
+                    <SidebarItem icon={<Monitor size={18} />} label="Consola de Guardia" href="/admin/consolas" active={pathname === "/admin/consolas"} collapsed={collapsed} badge={activeConsolesCount} />
 
                     {!collapsed && <div className="pt-3 pb-1 px-3 text-[9px] font-semibold text-neutral-600 uppercase tracking-wider transition-opacity">Gestión</div>}
                     {collapsed && <div className="my-2 border-t border-neutral-800" />}
@@ -190,6 +259,64 @@ export default function AdminLayout({
                     collapsed ? "ml-[70px]" : "ml-64"
                 )}
             >
+                {/* GLOBAL ALERT SYSTEM - SHARED ACROSS ALL ADMIN PAGES */}
+                <AnimatePresence>
+                    {isAlertActive && (
+                        <>
+                            {/* Persistent Border Pulse */}
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="fixed inset-0 pointer-events-none z-[200] border-[12px] border-red-600 animate-pulse bg-red-600/5"
+                            />
+
+                            {/* Top Ticker */}
+                            <div className="fixed top-0 left-0 right-0 h-10 bg-red-600 z-[300] overflow-hidden flex items-center border-b border-white/20 shadow-2xl">
+                                <motion.div
+                                    animate={{ x: ["0%", "-50%"] }}
+                                    transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+                                    className="whitespace-nowrap flex gap-10"
+                                >
+                                    {Array(20).fill(0).map((_, i) => (
+                                        <span key={i} className="text-white text-[12px] font-black uppercase tracking-[0.4em] flex items-center gap-4">
+                                            <Siren size={14} /> ALERTA DE SEGURIDAD - RESPUESTA INMEDIATA REQUERIDA
+                                        </span>
+                                    ))}
+                                </motion.div>
+                            </div>
+
+                            {/* Shared Quick Action Overlay */}
+                            <motion.div
+                                initial={{ y: 20, opacity: 0 }}
+                                animate={{ y: 0, opacity: 1 }}
+                                exit={{ y: 20, opacity: 0 }}
+                                className="fixed bottom-6 right-6 z-[300] bg-red-600 border-2 border-white p-6 rounded-[2.5rem] shadow-[0_0_80px_rgba(220,38,38,0.6)] max-w-sm"
+                            >
+                                <div className="flex items-center justify-between gap-6 mb-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-white rounded-2xl flex items-center justify-center text-red-600 shadow-xl">
+                                            <Siren className="animate-bounce" size={24} />
+                                        </div>
+                                        <span className="text-xs font-black uppercase tracking-widest text-white">Incidente Activo</span>
+                                    </div>
+                                    <motion.button
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        onClick={() => socketRef.current?.emit("alert_toggle", { active: false, triggeredBy: "Administrador" })}
+                                        className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-white/20 backdrop-blur-md transition-all"
+                                    >
+                                        Normalizar
+                                    </motion.button>
+                                </div>
+                                <p className="text-[11px] font-bold leading-relaxed text-white">
+                                    Modo de emergencia detectado. Monitoreo activado en todas las consolas administrativas.
+                                </p>
+                            </motion.div>
+                        </>
+                    )}
+                </AnimatePresence>
+
                 {children}
             </main>
 

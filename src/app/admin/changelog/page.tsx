@@ -17,6 +17,19 @@ import { cn } from "@/lib/utils";
 
 const changes = [
     {
+        version: "v1.8.0",
+        date: "2026-02-06",
+        title: "Build Stability & Panic Protocol v2",
+        description: "Corrección de errores críticos de compilación, optimización de recursos y mejora en el protocolo de pánico.",
+        items: [
+            { type: "fix", text: "Build: Corregido error de variable 'isRecording' usada antes de su declaración." },
+            { type: "performance", text: "Sistema: Limpieza masiva de logs (>1.4GB) para restaurar velocidad y evitar 502 Bad Gateway." },
+            { type: "feature", text: "Protocolo de Pánico: Nuevo botón central 'Hold-to-Deactivate' con feedback visual." },
+            { type: "improvement", text: "Seguridad: Normalización del sistema ahora protegida vía pulsación larga de 2 segundos." },
+            { type: "fix", text: "Multimedia: Eliminación de estados duplicados en componentes de audio/video." }
+        ]
+    },
+    {
         version: "v1.7.0",
         date: "2026-02-04",
         title: "Socket.IO Smart Routing & UI Refinements",

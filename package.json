@@ -47,6 +47,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-hook-form": "^7.69.0",
+    "react-intersection-observer": "^10.0.2",
     "react-leaflet": "^5.0.0",
     "reactflow": "^11.11.4",
     "selfsigned": "^5.4.0",

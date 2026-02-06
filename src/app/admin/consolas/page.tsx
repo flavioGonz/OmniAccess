@@ -8,14 +8,29 @@ import {
     Plus,
     User,
     Building2,
-    Search,
-    RefreshCcw,
-    Smartphone,
-    History,
+    ExternalLink,
+    Filter,
+    Calendar,
+    Siren,
     Clock,
     Camera,
     ChevronRight,
-    MapPin
+    MapPin,
+    Eye,
+    Play,
+    X,
+    History,
+    Search,
+    RefreshCcw,
+    Smartphone,
+    UserCheck,
+    Briefcase,
+    Landmark,
+    Flame,
+    Car,
+    Bike,
+    CheckCircle2,
+    Loader2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import SystemFlow from "@/components/dashboard/SystemFlow";
@@ -24,11 +39,20 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getBitacoraEntries } from "@/app/actions/bitacora";
 import { io } from "socket.io-client";
+import { toast } from "sonner";
 
 export default function ConsolasAdminPage() {
     const [activeConsoles, setActiveConsoles] = useState<any[]>([]);
     const [bitacoraHistory, setBitacoraHistory] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isAlertMode, setIsAlertMode] = useState(false);
+    const [notification, setNotification] = useState<{ type: "success" | "error" | "info" | "alert", title: string, message: string } | null>(null);
+    const socketRef = React.useRef<any>(null);
+
+    const showNotification = (title: string, message: string, type: "success" | "error" | "info" | "alert" = "success", duration: number = 3000) => {
+        setNotification({ type, title, message });
+        setTimeout(() => setNotification(null), duration);
+    };
 
     // Initial load and Socket setup
     useEffect(() => {
@@ -52,6 +76,7 @@ export default function ConsolasAdminPage() {
             ? `${protocol}://${window.location.hostname}`
             : `${protocol}://${window.location.hostname}:10000`;
         const socket = io(socketUrl);
+        socketRef.current = socket;
 
         socket.on('guard_presence', (data: any) => {
             setActiveConsoles(prev => {
@@ -75,6 +100,15 @@ export default function ConsolasAdminPage() {
             setBitacoraHistory(prev => [entry, ...prev]);
         });
 
+        socket.on('alert_status', (data: any) => {
+            setIsAlertMode(data.active);
+            if (!data.active) {
+                showNotification("SISTEMA NORMALIZADO", "La alerta de seguridad ha sido desactivada correctamente.", "success");
+            } else {
+                showNotification("ALERTA ACTIVADA", `El modo de alerta ha sido activado por ${data.triggeredBy || "un compañero"}.`, "alert", 5000);
+            }
+        });
+
         return () => {
             socket.disconnect();
         };
@@ -95,6 +129,12 @@ export default function ConsolasAdminPage() {
         return () => clearInterval(timer);
     }, []);
 
+    useEffect(() => {
+        return () => {
+            if (socketRef.current) socketRef.current.disconnect();
+        };
+    }, []);
+
     const formatTime = (date: Date | string) => {
         const d = new Date(date);
         return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
@@ -105,78 +145,152 @@ export default function ConsolasAdminPage() {
     const [quickName, setQuickName] = useState("");
     const [quickUnit, setQuickUnit] = useState("");
 
+    const [searchTerm, setSearchTerm] = useState("");
+    const [filterDate, setFilterDate] = useState("");
+    const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+    const [selectedAudio, setSelectedAudio] = useState<string | null>(null);
+
+    const filteredHistory = bitacoraHistory.filter(entry => {
+        const matchesSearch =
+            (entry.plate?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
+            (entry.name?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
+            (entry.destination?.toLowerCase() || "").includes(searchTerm.toLowerCase());
+
+        const matchesDate = !filterDate || new Date(entry.timestamp).toISOString().split('T')[0] === filterDate;
+
+        return matchesSearch && matchesDate;
+    });
+
+    const historyEntries = filteredHistory.filter(h => h.type === 'ENTRY');
+    const historyExits = filteredHistory.filter(h => h.type === 'EXIT');
+
+    const QuickActionCard = ({ entry }: { entry: any }) => (
+        <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="group relative h-40 rounded-2xl overflow-hidden bg-neutral-800/40 border border-neutral-700/50 hover:border-blue-500/50 transition-all"
+        >
+            {/* Background Photo */}
+            {entry.photoPath ? (
+                <img
+                    src={entry.photoPath}
+                    alt="Capture"
+                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                />
+            ) : (
+                <div className="absolute inset-0 bg-neutral-900 flex items-center justify-center">
+                    <Camera size={24} className="text-neutral-800" />
+                </div>
+            )}
+
+            {/* Gradient Overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+
+            {/* Content Overlay */}
+            <div className="absolute inset-0 p-3 flex flex-col justify-between">
+                <div className="flex justify-between items-start">
+                    <div className="bg-black/60 backdrop-blur-md px-2 py-1 rounded-lg border border-white/10">
+                        <p className="text-[10px] font-black text-white uppercase tracking-widest">{entry.plate || '--- ---'}</p>
+                    </div>
+                    <div className="bg-black/60 backdrop-blur-md px-2 py-1 rounded-lg border border-white/10 flex items-center gap-1">
+                        <Clock size={8} className="text-neutral-400" />
+                        <p className="text-[9px] font-black text-white">{formatTime(entry.timestamp)}</p>
+                    </div>
+                </div>
+
+                <div className="space-y-1">
+                    <p className="text-[10px] font-bold text-white truncate drop-shadow-md">{entry.name || 'Invitado'}</p>
+                    <p className="text-[8px] font-bold text-neutral-400 uppercase tracking-tighter truncate drop-shadow-md">{entry.destination || '---'}</p>
+                </div>
+            </div>
+
+            {/* Hover Actions */}
+            <div className="absolute inset-0 bg-blue-600/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 backdrop-blur-[2px]">
+                {entry.photoPath && (
+                    <button
+                        onClick={() => setSelectedPhoto(entry.photoPath)}
+                        className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-110 transition-transform shadow-xl"
+                    >
+                        <Eye size={18} />
+                    </button>
+                )}
+                {entry.audioPath && (
+                    <button
+                        onClick={() => setSelectedAudio(entry.audioPath)}
+                        className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center hover:scale-110 transition-transform shadow-xl"
+                    >
+                        <Play size={18} className="fill-current" />
+                    </button>
+                )}
+            </div>
+        </motion.div>
+    );
+
     return (
-        <div className="flex h-screen overflow-hidden bg-[#0a0a0c]">
+        <div className="flex h-screen overflow-hidden transition-all duration-700 relative bg-[#0a0a0c]">
+
             {/* Main Layout: Flow on left, Quick Action on right */}
             <div className="flex-1 flex overflow-hidden">
                 {/* Left: Network Topology */}
-                <div className="flex-1 relative border-r border-neutral-800 overflow-hidden">
+                <div className="flex-1 relative border-r border-neutral-800 overflow-hidden group/flow">
                     <SystemFlow mode="consoles" />
 
                     {/* Floating Info Overlay */}
-                    <div className="absolute top-6 left-6 z-10 bg-black/60 backdrop-blur-md border border-white/10 p-4 rounded-2xl max-w-xs transition-all hover:bg-black/80">
-                        <div className="flex items-center gap-2 mb-3">
-                            <Activity className="text-blue-400 animate-pulse" size={14} />
-                            <span className="text-[10px] font-black text-white uppercase tracking-widest">Estado del Sistema</span>
+                    <div className="absolute top-6 left-6 z-50 backdrop-blur-md border border-neutral-800 p-6 rounded-[2.5rem] max-w-sm transition-all duration-500 bg-black/60 hover:bg-black/80">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 bg-blue-500/20 rounded-xl flex items-center justify-center text-blue-400 border border-blue-500/30">
+                                    <Activity className="animate-pulse" size={16} />
+                                </div>
+                                <span className="text-xs font-black uppercase tracking-widest text-white/80">
+                                    Estado del Sistema
+                                </span>
+                            </div>
                         </div>
-                        <p className="text-[10px] text-neutral-400 font-medium leading-relaxed">
-                            Visualización en tiempo real de la infraestructura LPR y consolas guardiapad conectadas a la red local.
+
+                        <p className="text-[11px] font-bold leading-relaxed text-neutral-400">
+                            Visualización en tiempo real de la infraestructura operativa y consolas conectadas.
                         </p>
+                    </div>
+
+                    {/* Floating Quick Actions Container */}
+                    <div className="absolute bottom-6 right-6 z-50 flex flex-col gap-4">
+                        {/* Panic Button */}
+                        <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => {
+                                if (socketRef.current) {
+                                    socketRef.current.emit('alert_toggle', {
+                                        active: !isAlertMode,
+                                        triggeredBy: "Administrador"
+                                    });
+                                }
+                            }}
+                            className={cn(
+                                "w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all border-2",
+                                isAlertMode
+                                    ? "bg-white text-red-600 border-red-600 animate-pulse"
+                                    : "bg-red-600 hover:bg-red-500 text-white border-red-400/20"
+                            )}
+                        >
+                            <Siren size={24} className={isAlertMode ? "animate-bounce" : ""} />
+                        </motion.button>
+
+                        {/* Floating Quick Register Button */}
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => setShowQuickRegister(true)}
+                            className="bg-blue-600 hover:bg-blue-500 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-2xl shadow-blue-500/30 border-2 border-blue-400/20"
+                        >
+                            <Plus size={24} className="font-black" />
+                        </motion.button>
                     </div>
                 </div>
 
                 {/* Right: Quick Operational Panel */}
-                <aside className="w-[450px] bg-neutral-900 overflow-y-auto custom-scrollbar p-8 flex flex-col gap-8">
-
-                    {/* Consolas Conectadas (Repaired) */}
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between px-2">
-                            <h3 className="text-xs font-black text-neutral-400 uppercase tracking-widest flex items-center gap-2">
-                                <Smartphone size={14} className="text-blue-500" /> Dispositivos Conectados
-                            </h3>
-                            {activeConsoles.length > 0 && (
-                                <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                            )}
-                        </div>
-
-                        <div className="space-y-3">
-                            <AnimatePresence mode="popLayout">
-                                {activeConsoles.length > 0 ? (
-                                    activeConsoles.map((tablet, i) => (
-                                        <motion.div
-                                            key={tablet.guardName}
-                                            initial={{ opacity: 0, x: 20 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            exit={{ opacity: 0, scale: 0.95 }}
-                                            className="bg-neutral-800/40 border border-neutral-700/50 p-4 rounded-2xl flex items-center gap-4 hover:bg-neutral-800/60 transition-all group cursor-pointer border-l-4 border-l-emerald-500"
-                                        >
-                                            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center font-black text-xs text-emerald-400 shadow-inner">
-                                                {tablet.guardName.substring(0, 1).toUpperCase()}
-                                            </div>
-                                            <div className="flex-1">
-                                                <p className="text-[11px] font-black text-white uppercase tracking-tight">{tablet.guardName}</p>
-                                                <div className="flex items-center gap-2 mt-0.5">
-                                                    <MapPin size={10} className="text-neutral-600" />
-                                                    <p className="text-[9px] font-bold text-neutral-500 uppercase tracking-tighter">Guardiapad Activo</p>
-                                                </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-[9px] font-mono text-neutral-500">{tablet.ip}</p>
-                                                <span className="text-[8px] font-black uppercase mt-1 inline-block text-emerald-500">
-                                                    online
-                                                </span>
-                                            </div>
-                                        </motion.div>
-                                    ))
-                                ) : (
-                                    <div className="py-8 text-center bg-neutral-800/10 rounded-2xl border border-dashed border-neutral-800">
-                                        <Smartphone size={24} className="mx-auto text-neutral-700 mb-2 opacity-20" />
-                                        <p className="text-[10px] font-bold text-neutral-600 uppercase tracking-widest">No hay consolas activas</p>
-                                    </div>
-                                )}
-                            </AnimatePresence>
-                        </div>
-                    </div>
+                <aside className="w-[450px] overflow-y-auto custom-scrollbar p-8 flex flex-col gap-8 transition-all duration-500 bg-neutral-900 border-l border-neutral-800">
 
                     {/* Historial de Bitácora (New) */}
                     <div className="space-y-4">
@@ -184,74 +298,87 @@ export default function ConsolasAdminPage() {
                             <h3 className="text-xs font-black text-neutral-400 uppercase tracking-widest flex items-center gap-2">
                                 <History size={14} className="text-amber-500" /> Historial de Bitácora
                             </h3>
-                            <button className="text-[10px] font-black text-blue-500 hover:text-blue-400 uppercase tracking-tighter transition-colors">
+                            <button
+                                onClick={() => window.location.href = "/admin/bitacora"}
+                                className="text-[10px] font-black text-blue-500 hover:text-blue-400 uppercase tracking-tighter transition-colors flex items-center gap-1"
+                            >
+                                <ExternalLink size={10} />
                                 Ver Todo
                             </button>
                         </div>
 
-                        <div className="space-y-3">
-                            {isLoading ? (
-                                Array(3).fill(0).map((_, i) => (
-                                    <div key={i} className="bg-neutral-800/20 h-20 rounded-2xl animate-pulse" />
-                                ))
-                            ) : bitacoraHistory.length > 0 ? (
-                                bitacoraHistory.slice(0, 10).map((entry) => (
-                                    <div key={entry.id} className="bg-neutral-800/20 border border-neutral-700/30 p-4 rounded-2xl hover:bg-neutral-800/40 transition-colors group">
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div className="flex items-center gap-2">
-                                                <div className={cn(
-                                                    "px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter",
-                                                    entry.type === 'ENTRY' ? "bg-blue-500/20 text-blue-400" : "bg-amber-500/20 text-amber-500"
-                                                )}>
-                                                    {entry.type === 'ENTRY' ? 'ENTRADA' : 'SALIDA'}
-                                                </div>
-                                                <span className="text-[10px] font-black text-white tracking-widest uppercase">{entry.plate || '--- ---'}</span>
-                                            </div>
-                                            <div className="flex items-center gap-1 text-neutral-600">
-                                                <Clock size={10} />
-                                                <span className="text-[9px] font-bold">{formatTime(entry.timestamp)}</span>
-                                            </div>
-                                        </div>
+                        {/* Search and Filters */}
+                        <div className="flex gap-2 px-2">
+                            <div className="relative flex-1 group">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600 group-focus-within:text-blue-500 transition-colors" size={12} />
+                                <Input
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    placeholder="Buscar..."
+                                    className="pl-8 bg-neutral-950 border-neutral-800 h-9 text-[10px] font-bold text-white placeholder:text-neutral-700 rounded-xl focus:border-blue-500/50 focus:ring-0 transition-all"
+                                />
+                            </div>
 
-                                        <div className="space-y-1.5">
-                                            <div className="flex items-center gap-2">
-                                                <User size={10} className="text-neutral-500" />
-                                                <p className="text-[10px] font-bold text-neutral-400 truncate max-w-[200px]">{entry.name || 'Invitado'}</p>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <Building2 size={10} className="text-neutral-500" />
-                                                <p className="text-[9px] font-medium text-neutral-500 truncate">{entry.destination || '---'}</p>
-                                            </div>
-                                        </div>
+                            <div className="relative w-32 group">
+                                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600 transition-colors group-focus-within:text-blue-500" size={12} />
+                                <Input
+                                    type="date"
+                                    value={filterDate}
+                                    onChange={(e) => setFilterDate(e.target.value)}
+                                    className="pl-8 bg-neutral-950 border-neutral-800 h-9 text-[9px] font-black text-neutral-400 focus:border-blue-500/50 focus:ring-0 rounded-xl appearance-none uppercase"
+                                />
+                            </div>
 
-                                        {entry.photoPath && (
-                                            <div className="mt-3 relative h-20 rounded-xl overflow-hidden border border-neutral-700/50 bg-black">
-                                                <img
-                                                    src={entry.photoPath}
-                                                    alt="Capture"
-                                                    className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity"
-                                                />
-                                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
-                                                <div className="absolute bottom-2 left-2 flex items-center gap-1">
-                                                    <Camera size={10} className="text-white" />
-                                                    <span className="text-[8px] font-black text-white uppercase tracking-tighter">Imagen Capturada</span>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {entry.notes && (
-                                            <div className="mt-2 p-2 bg-black/20 rounded-lg border border-white/5">
-                                                <p className="text-[9px] text-neutral-500 italic leading-snug line-clamp-2">"{entry.notes}"</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))
-                            ) : (
-                                <div className="py-8 text-center bg-neutral-800/10 rounded-2xl border border-dashed border-neutral-800">
-                                    <History size={24} className="mx-auto text-neutral-700 mb-2 opacity-20" />
-                                    <p className="text-[10px] font-bold text-neutral-600 uppercase tracking-widest">No hay registros</p>
-                                </div>
+                            {(searchTerm || filterDate) && (
+                                <button
+                                    onClick={() => { setSearchTerm(""); setFilterDate(""); }}
+                                    className="px-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-400 rounded-xl transition-colors shrink-0 h-9"
+                                >
+                                    <X size={14} />
+                                </button>
                             )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            {/* Column Entradas */}
+                            <div className="space-y-4">
+                                <div className="px-2 py-1 bg-blue-500/10 rounded-lg border border-blue-500/20 text-center">
+                                    <span className="text-[8px] font-black text-blue-400 uppercase tracking-[0.2em]">Entradas</span>
+                                </div>
+                                <div className="space-y-3">
+                                    {isLoading ? (
+                                        Array(2).fill(0).map((_, i) => (
+                                            <div key={i} className="bg-neutral-800/20 h-40 rounded-2xl animate-pulse" />
+                                        ))
+                                    ) : historyEntries.length > 0 ? (
+                                        historyEntries.slice(0, 5).map((entry) => (
+                                            <QuickActionCard key={entry.id} entry={entry} />
+                                        ))
+                                    ) : (
+                                        <p className="text-[9px] text-neutral-600 text-center py-4 font-bold uppercase">Sin entradas</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Column Salidas */}
+                            <div className="space-y-4">
+                                <div className="px-2 py-1 bg-amber-500/10 rounded-lg border border-amber-500/20 text-center">
+                                    <span className="text-[8px] font-black text-amber-400 uppercase tracking-[0.2em]">Salidas</span>
+                                </div>
+                                <div className="space-y-3">
+                                    {isLoading ? (
+                                        Array(2).fill(0).map((_, i) => (
+                                            <div key={i} className="bg-neutral-800/20 h-40 rounded-2xl animate-pulse" />
+                                        ))
+                                    ) : historyExits.length > 0 ? (
+                                        historyExits.slice(0, 5).map((entry) => (
+                                            <QuickActionCard key={entry.id} entry={entry} />
+                                        ))
+                                    ) : (
+                                        <p className="text-[9px] text-neutral-600 text-center py-4 font-bold uppercase">Sin salidas</p>
+                                    )}
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -259,15 +386,7 @@ export default function ConsolasAdminPage() {
                 </aside>
             </div>
 
-            {/* Floating Quick Register Button */}
-            <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setShowQuickRegister(true)}
-                className="fixed bottom-8 right-8 z-50 bg-blue-600 hover:bg-blue-500 text-white rounded-full w-16 h-16 flex items-center justify-center shadow-2xl shadow-blue-500/30 border-2 border-blue-400/20"
-            >
-                <Plus size={28} className="font-black" />
-            </motion.button>
+
 
             {/* Quick Register Modal */}
             <AnimatePresence>
@@ -350,6 +469,131 @@ export default function ConsolasAdminPage() {
                     </motion.div>
                 )}
             </AnimatePresence>
-        </div>
+
+            {/* Photo Lightbox */}
+            <AnimatePresence>
+                {selectedPhoto && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/95 z-[200] flex items-center justify-center p-4 md:p-12"
+                        onClick={() => setSelectedPhoto(null)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9 }}
+                            animate={{ scale: 1 }}
+                            exit={{ scale: 0.9 }}
+                            className="relative max-w-5xl w-full h-full flex items-center justify-center"
+                        >
+                            <img
+                                src={selectedPhoto}
+                                alt="Full Size"
+                                className="max-w-full max-h-full object-contain rounded-3xl shadow-2xl border border-white/10"
+                            />
+                            <button
+                                onClick={() => setSelectedPhoto(null)}
+                                className="absolute top-0 right-0 m-4 p-3 bg-white/10 hover:bg-white/20 backdrop-blur-xl rounded-full text-white transition-all shadow-xl"
+                            >
+                                <X size={24} />
+                            </button>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Audio Player Modal */}
+            <AnimatePresence>
+                {selectedAudio && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 20 }}
+                        className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[200] w-full max-w-md px-4"
+                    >
+                        <div className="bg-neutral-900/90 backdrop-blur-2xl border border-white/10 p-6 rounded-[2.5rem] shadow-2xl flex items-center gap-6">
+                            <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 flex items-center justify-center text-emerald-500">
+                                <Play size={24} className="fill-current" />
+                            </div>
+                            <div className="flex-1">
+                                <p className="text-[10px] font-black text-white uppercase tracking-widest mb-2">Nota de Audio</p>
+                                <audio controls autoPlay src={selectedAudio} className="w-full h-8 brightness-90 contrast-125" />
+                            </div>
+                            <button
+                                onClick={() => setSelectedAudio(null)}
+                                className="text-neutral-500 hover:text-white transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* NOTIFICATION OVERLAY SCREEN */}
+            <AnimatePresence>
+                {notification && (
+                    <NotificationOverlay
+                        {...notification}
+                        onClose={() => setNotification(null)}
+                    />
+                )}
+            </AnimatePresence>
+        </div >
+    );
+}
+
+function NotificationOverlay({ type, title, message, onClose }: { type: string, title: string, message: string, onClose: () => void }) {
+    const isAlert = type === "alert" || type === "error";
+
+    return (
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className={cn(
+                "fixed inset-0 z-[1000] flex flex-col items-center justify-center p-8 backdrop-blur-3xl",
+                isAlert ? "bg-red-600/95" : "bg-black/90"
+            )}
+        >
+            <motion.div
+                initial={{ scale: 0.8, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.8, y: 20 }}
+                className="flex flex-col items-center text-center max-w-2xl"
+            >
+                <div className={cn(
+                    "w-32 h-32 rounded-[3rem] flex items-center justify-center mb-10 shadow-2xl relative",
+                    isAlert ? "bg-white text-red-600" : "bg-white text-black"
+                )}>
+                    {type === "success" && <CheckCircle2 size={64} strokeWidth={2.5} />}
+                    {type === "error" && <X size={64} strokeWidth={2.5} />}
+                    {type === "info" && <UserCheck size={64} strokeWidth={2.5} />}
+                    {type === "alert" && <Siren size={64} strokeWidth={2.5} className="animate-bounce" />}
+
+                    {/* Pulsating Ring */}
+                    <motion.div
+                        animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }}
+                        transition={{ repeat: Infinity, duration: 2 }}
+                        className="absolute inset-0 rounded-[3rem] border-4 border-white"
+                    />
+                </div>
+
+                <h2 className="text-6xl font-black text-white uppercase tracking-tighter mb-4">
+                    {title}
+                </h2>
+                <p className="text-xl font-black text-white/60 uppercase tracking-widest leading-relaxed">
+                    {message}
+                </p>
+
+                <motion.div
+                    initial={{ scaleX: 0 }}
+                    animate={{ scaleX: 1 }}
+                    transition={{ duration: 3, ease: "linear" }}
+                    className="h-2 bg-white/20 w-80 mt-12 rounded-full origin-left"
+                />
+            </motion.div>
+        </motion.div>
     );
 }

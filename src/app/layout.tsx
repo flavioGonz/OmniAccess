@@ -13,6 +13,10 @@ export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   title: "SecureAccess - Control de Acceso",
   description: "Sistema de control de acceso LPR y Facial",
+  icons: {
+    icon: "/favicon.png",
+    apple: "/icon-192.png",
+  },
 };
 
 import { ThemeProvider } from "@/components/theme-provider";

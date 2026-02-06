@@ -78,6 +78,32 @@ export async function getBitacoraEntries() {
     });
 }
 
+export async function getBitacoraPage(page: number = 0, pageSize: number = 20, query: string = "") {
+    const skip = page * pageSize;
+    const where = query ? {
+        OR: [
+            { plate: { contains: query, mode: 'insensitive' as any } },
+            { name: { contains: query, mode: 'insensitive' as any } },
+            { destination: { contains: query, mode: 'insensitive' as any } },
+        ]
+    } : {};
+
+    return await prisma.bitacora.findMany({
+        where,
+        orderBy: { timestamp: 'desc' },
+        include: {
+            accessEvent: {
+                include: {
+                    user: true,
+                    device: true
+                }
+            }
+        },
+        skip,
+        take: pageSize
+    });
+}
+
 export async function deleteBitacoraEntry(id: string) {
     await prisma.bitacora.delete({
         where: { id }

@@ -679,6 +679,9 @@ const fetchAkuvoxFaceImage = async (device, options = {}) => {
 const debounceCache = new Map();
 const DEBOUNCE_TIME = 5000;
 
+// Global Alert State
+let isAlertActive = false;
+
 // Debug Logs History (In-memory)
 const debugLogsHistory = [];
 const MAX_DEBUG_LOGS = 500;
@@ -2269,6 +2272,9 @@ io.on("connection", (socket) => {
         socket.emit("webhook_history", debugLogsHistory);
     }
 
+    // Send initial alert status
+    socket.emit("alert_status", { active: isAlertActive });
+
     // Register guard tablet presence and broadcast to admin
     socket.on("guard_presence", (data) => {
         // Prioritize the IP reported by the client if it exists (local IP detection)
@@ -2283,6 +2289,27 @@ io.on("connection", (socket) => {
 
     socket.on("new_bitacora", (data) => {
         io.emit("new_bitacora", data);
+    });
+
+    socket.on("alert_toggle", async (data) => {
+        isAlertActive = data.active;
+        console.log(`[ALERT] Alert mode set to: ${isAlertActive} by ${data.triggeredBy || socket.id}`);
+
+        // Log to database for permanent record
+        try {
+            await prisma.bitacora.create({
+                data: {
+                    type: isAlertActive ? "ALERTA_ACTIVADA" : "ALERTA_DESACTIVADA",
+                    notes: `Modo de alerta ${isAlertActive ? 'activado' : 'desactivado'} desde consola.`,
+                    guardName: data.triggeredBy || "Sistema",
+                    timestamp: new Date()
+                }
+            });
+        } catch (error) {
+            console.error("Error logging alert to bitacora:", error);
+        }
+
+        io.emit("alert_status", { active: isAlertActive, triggeredBy: data.triggeredBy });
     });
 });
 

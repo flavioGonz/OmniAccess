@@ -46,11 +46,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { createBitacoraEntry, deleteBitacoraEntry } from "@/app/actions/bitacora";
+import { createBitacoraEntry, deleteBitacoraEntry, getBitacoraPage } from "@/app/actions/bitacora";
+import { getAccessEvents } from "@/app/actions/history";
 import { toast } from "sonner";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { io } from "socket.io-client";
+import { useInView } from "react-intersection-observer";
 
 interface GuardConsoleProps {
     initialEntries: any[];
@@ -58,7 +60,8 @@ interface GuardConsoleProps {
     units: any[];
 }
 
-type TabType = "control" | "history" | "alerts";
+type TabType = "control" | "history" | "alerts" | "lpr";
+
 
 export default function GuardConsole({ initialEntries, logo, units }: GuardConsoleProps) {
     const [activeTab, setActiveTab] = useState<TabType>("control");
@@ -80,8 +83,62 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
     const [isCameraActive, setIsCameraActive] = useState(false);
     const [currentTime, setCurrentTime] = useState(new Date());
     const [showSuccessOverlay, setShowSuccessOverlay] = useState(false);
+    const [showAlarmSplash, setShowAlarmSplash] = useState(false);
     const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null);
     const [isTransitioning, setIsTransitioning] = useState(false);
+    const [isAlertMode, setIsAlertMode] = useState(false);
+    const [alertStartTime, setAlertStartTime] = useState<Date | null>(null);
+    const [historyPage, setHistoryPage] = useState(0);
+    const [historySearch, setHistorySearch] = useState("");
+    const [hasMoreHistory, setHasMoreHistory] = useState(true);
+    const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+    const [notification, setNotification] = useState<{ type: "success" | "error" | "info" | "alert", title: string, message: string } | null>(null);
+
+    // LPR History state
+    const [lprEntries, setLprEntries] = useState<any[]>([]);
+    const [isLprLoading, setIsLprLoading] = useState(false);
+    const [lprSearch, setLprSearch] = useState("");
+
+    // Audio States
+    const [isRecording, setIsRecording] = useState(false);
+    const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+    const [audioUrl, setAudioUrl] = useState<string | null>(null);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const audioChunksRef = useRef<Blob[]>([]);
+
+    // Audio recording timer state
+    const [recordingDuration, setRecordingDuration] = useState(0);
+    const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    useEffect(() => {
+        if (isRecording) {
+            setRecordingDuration(0);
+            recordingTimerRef.current = setInterval(() => {
+                setRecordingDuration(prev => prev + 1);
+            }, 1000);
+        } else {
+            if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+        }
+        return () => { if (recordingTimerRef.current) clearInterval(recordingTimerRef.current); };
+    }, [isRecording]);
+
+    const formatDuration = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    const { ref: loadMoreRef, inView } = useInView({
+        threshold: 0.5,
+    });
+
+    const alarmAudioRef = useRef<HTMLAudioElement | null>(null);
+
+    // Show Notification Screen
+    const showNotification = (title: string, message: string, type: "success" | "error" | "info" | "alert" = "success", duration: number = 2000) => {
+        setNotification({ type, title, message });
+        setTimeout(() => setNotification(null), duration);
+    };
 
     useEffect(() => {
         // Use the same protocol as the page (http or https)
@@ -128,24 +185,135 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
             });
         }, 4000);
 
+        newSocket.on('alert_status', (data: any) => {
+            setIsAlertMode(data.active);
+            if (data.active) {
+                // Trigger PWA notification if possible
+                if ("Notification" in window && Notification.permission === "granted") {
+                    new Notification("⚠️ ALERTA DE SEGURIDAD", {
+                        body: `Modo de alerta activado por ${data.triggeredBy || "un compañero"}.`,
+                        icon: "/logo-transparent.png",
+                        tag: "security-alert"
+                    });
+                }
+
+                // Show High Impact Splash Screen
+                setShowAlarmSplash(true);
+                setTimeout(() => setShowAlarmSplash(false), 4000);
+
+                // Keep the tactile vibration but remove the "ugly toast"
+            } else {
+                showNotification("SISTEMA NORMALIZADO", "La alerta de seguridad ha sido desactivada correctamente.", "success");
+            }
+        });
+
+        newSocket.on('new_bitacora', (entry: any) => {
+            setEntries(prev => [entry, ...prev]);
+        });
+
         return () => {
             clearInterval(heartBeat);
             newSocket.close();
         };
     }, [guardName]);
 
+    // Notification Permission Request
+    useEffect(() => {
+        if ("Notification" in window && Notification.permission === "default") {
+            Notification.requestPermission();
+        }
+    }, []);
+
+    // Alarm Audio Control
+    useEffect(() => {
+        if (isAlertMode) {
+            // Create audio object if not exists
+            if (!alarmAudioRef.current) {
+                alarmAudioRef.current = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg"); // Standard alert sound
+                alarmAudioRef.current.loop = true;
+            }
+            alarmAudioRef.current.play().catch(e => console.log("Audio play blocked", e));
+        } else {
+            if (alarmAudioRef.current) {
+                alarmAudioRef.current.pause();
+                alarmAudioRef.current.currentTime = 0;
+            }
+        }
+    }, [isAlertMode]);
+
+    // Vibration Feedback for Alerts
+    useEffect(() => {
+        let interval: any;
+        if (isAlertMode && "vibrate" in navigator) {
+            // Periodic strong vibration while alert is active
+            interval = setInterval(() => {
+                navigator.vibrate([500, 200, 500]);
+            }, 3000);
+        }
+        return () => clearInterval(interval);
+    }, [isAlertMode]);
+
+    const toggleAlertMode = (forcedState?: boolean) => {
+        if (!socket) return;
+        const newState = forcedState !== undefined ? forcedState : !isAlertMode;
+        socket.emit("alert_toggle", { active: newState, triggeredBy: guardName || "Invitado" });
+    };
+
+    // Panic Button Hold Logic
+    const [panicHoldProgress, setPanicHoldProgress] = useState(0);
+    const [deactivateHoldProgress, setDeactivateHoldProgress] = useState(0);
+    const panicHoldRef = useRef<any>(null);
+    const deactivateHoldRef = useRef<any>(null);
+
+    const startPanicHold = () => {
+        if (isAlertMode) return;
+        playTactileSound();
+        let start = Date.now();
+        panicHoldRef.current = setInterval(() => {
+            let elapsed = Date.now() - start;
+            let progress = Math.min((elapsed / 1500) * 100, 100); // 1.5 seconds hold
+            setPanicHoldProgress(progress);
+            if (progress >= 100) {
+                clearInterval(panicHoldRef.current);
+                toggleAlertMode(true);
+                setPanicHoldProgress(0);
+                if ("vibrate" in navigator) navigator.vibrate([100, 50, 100, 50, 400]);
+            }
+        }, 50);
+    };
+
+    const cancelPanicHold = () => {
+        clearInterval(panicHoldRef.current);
+        setPanicHoldProgress(0);
+    };
+
+    const startDeactivateHold = () => {
+        if (!isAlertMode) return;
+        playTactileSound();
+        let start = Date.now();
+        deactivateHoldRef.current = setInterval(() => {
+            let elapsed = Date.now() - start;
+            let progress = Math.min((elapsed / 2000) * 100, 100); // 2 seconds hold for deactivation
+            setDeactivateHoldProgress(progress);
+            if (progress >= 100) {
+                clearInterval(deactivateHoldRef.current);
+                toggleAlertMode(false);
+                setDeactivateHoldProgress(0);
+                if ("vibrate" in navigator) navigator.vibrate([200, 100, 200]);
+            }
+        }, 50);
+    };
+
+    const cancelDeactivateHold = () => {
+        clearInterval(deactivateHoldRef.current);
+        setDeactivateHoldProgress(0);
+    };
+
     const [showUnitPicker, setShowUnitPicker] = useState(false);
     const [showOriginPicker, setShowOriginPicker] = useState(false);
     const [unitSearch, setUnitSearch] = useState("");
     const [showUnitResults, setShowUnitResults] = useState(false);
     const [selectedUnit, setSelectedUnit] = useState<any>(null);
-
-    // Audio States
-    const [isRecording, setIsRecording] = useState(false);
-    const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-    const [audioUrl, setAudioUrl] = useState<string | null>(null);
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-    const audioChunksRef = useRef<Blob[]>([]);
 
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -177,7 +345,7 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
         if (tempGuardName.trim()) {
             saveGuardName(tempGuardName);
             setShowIdentityOverlay(false);
-            toast.success(`Bienvenido, ${tempGuardName}`);
+            showNotification("BIENVENIDO", `Sesión iniciada como ${tempGuardName}. GuardConsole v2.1 activo.`, "success");
         }
     };
 
@@ -185,7 +353,7 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
         setGuardName("");
         localStorage.removeItem("bitacora_guard_name");
         setShowIdentityOverlay(true);
-        toast.info("Sesión cerrada");
+        showNotification("SESIÓN CERRADA", "Se ha finalizado la sesión del guardia exitosamente.", "info");
     };
 
     // Clock
@@ -224,6 +392,71 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
         setGuardName(val);
         localStorage.setItem("bitacora_guard_name", val);
     };
+
+    // INFINITE SCROLL EFFECT
+    useEffect(() => {
+        if (inView && hasMoreHistory && !isHistoryLoading && activeTab === "history") {
+            loadMoreHistory();
+        }
+    }, [inView, hasMoreHistory, isHistoryLoading, activeTab]);
+
+    const loadMoreHistory = async () => {
+        setIsHistoryLoading(true);
+        try {
+            const nextPage = historyPage + 1;
+            const newEntries = await getBitacoraPage(nextPage, 20, historySearch);
+            if (newEntries.length < 20) setHasMoreHistory(false);
+            setEntries(prev => [...prev, ...newEntries]);
+            setHistoryPage(nextPage);
+        } catch (error) {
+            console.error("Error loading more history:", error);
+        } finally {
+            setIsHistoryLoading(false);
+        }
+    };
+
+    // SEARCH HISTORY EFFECT
+    useEffect(() => {
+        const timer = setTimeout(async () => {
+            if (activeTab === "history") {
+                setIsHistoryLoading(true);
+                try {
+                    const firstPage = await getBitacoraPage(0, 20, historySearch);
+                    setEntries(firstPage);
+                    setHistoryPage(0);
+                    setHasMoreHistory(firstPage.length === 20);
+                } catch (error) {
+                    console.error("Search error:", error);
+                } finally {
+                    setIsHistoryLoading(false);
+                }
+            }
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [historySearch, activeTab]);
+
+    // FETCH LPR HISTORY EFFECT
+    useEffect(() => {
+        const fetchLPR = async () => {
+            if (activeTab === "lpr") {
+                setIsLprLoading(true);
+                try {
+                    const { events } = await getAccessEvents({
+                        type: 'PLATE',
+                        take: 30,
+                        search: lprSearch
+                    });
+                    setLprEntries(events);
+                } catch (error) {
+                    console.error("LPR fetch error:", error);
+                } finally {
+                    setIsLprLoading(false);
+                }
+            }
+        };
+        const timer = setTimeout(fetchLPR, 500);
+        return () => clearTimeout(timer);
+    }, [activeTab, lprSearch]);
 
     // TACTILE SOUND UTILITY
     const playTactileSound = () => {
@@ -274,7 +507,7 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
             if (unitMatch) setSelectedUnit(unitMatch);
 
             setShowMatchPrompt(false);
-            toast.success("Datos autocompletados");
+            showNotification("DATOS VINCULADOS", `Se ha cargado la identidad de ${matchingEntry.name} automáticamente.`, "info", 2500);
             playTactileSound();
         }
     };
@@ -286,10 +519,8 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
 
             // CHECK SECURE CONTEXT
             if (!window.isSecureContext) {
-                toast.error("⚠️ NAVEGADOR BLOQUEA CÁMARA: Se requiere HTTPS o habilitar 'Insecure Origin' en Chrome Flags.", {
-                    duration: 10000,
-                    description: "Vaya a chrome://flags/#unsafely-treat-insecure-origin-as-secure y añada esta IP."
-                });
+                const msg = "⚠️ NAVEGADOR BLOQUEA CÁMARA: El acceso debe ser por HTTPS para activar la visión artificial.";
+                showNotification("ERROR DE SEGURIDAD", msg, "error", 5000);
                 // Allow them to continue but warn
                 setIsCameraActive(false);
                 return;
@@ -305,7 +536,7 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
             } catch (err: any) {
                 console.error("Camera error:", err);
                 const msg = err.name === "NotAllowedError" ? "Permiso de cámara denegado" : "Error de hardware o acceso a cámara";
-                toast.error(msg);
+                showNotification("ERROR DE CÁMARA", msg, "error");
                 setIsCameraActive(false);
             }
         }
@@ -337,9 +568,8 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
     // Audio recording functions
     const startRecording = async () => {
         if (!window.isSecureContext) {
-            toast.error("⚠️ Microsfono Bloqueado por HTTP", {
-                description: "Use HTTPS para habilitar hardware de grabación."
-            });
+            const msg = "⚠️ MICRÓFONO BLOQUEADO: Se requiere conexión segura HTTPS para capturar audio de seguridad.";
+            showNotification("ERROR DE AUDIO", msg, "error", 5000);
             return;
         }
 
@@ -365,7 +595,7 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
         } catch (err: any) {
             console.error("Mic error:", err);
             const msg = err.name === "NotAllowedError" ? "Permiso de micrófono denegado" : "Error al acceder al micrófono";
-            toast.error(msg);
+            showNotification("ERROR DE MICRÓFONO", msg, "error");
         }
     };
 
@@ -379,7 +609,7 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
     const handleSubmit = async () => {
         // Solo validar que haya matrícula
         if (!plate.trim()) {
-            toast.error("Debe ingresar una matrícula");
+            showNotification("MATRÍCULA REQUERIDA", "Debe ingresar una matrícula para continuar con el registro.", "error", 2500);
             return;
         }
 
@@ -421,12 +651,11 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
                 setAudioBlob(null);
                 setAudioUrl(null);
                 setShowSuccessOverlay(false);
+                showNotification("REGISTRO EXITOSO", `Entrada de ${plate.toUpperCase()} guardada en bitácora.`, "success");
             }, 1500);
-
-            toast.success("Registro completado exitosamente");
         } catch (err) {
             console.error("Submit error:", err);
-            toast.error("Error al guardar el registro");
+            showNotification("ERROR DE REGISTRO", "No se pudo guardar la información. Intente nuevamente.", "error", 3000);
         } finally {
             setIsSubmitting(false);
         }
@@ -437,9 +666,9 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
             try {
                 await deleteBitacoraEntry(id);
                 setEntries(prev => prev.filter((e: any) => e.id !== id));
-                toast.success("Registro eliminado");
+                showNotification("REGISTRO ELIMINADO", "La entrada ha sido removida del historial.", "info");
             } catch (error) {
-                toast.error("Error al eliminar");
+                showNotification("ERROR AL ELIMINAR", "Hubo un problema al procesar la solicitud.", "error");
             }
         }
     };
@@ -571,6 +800,141 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
                 )}
             </AnimatePresence>
 
+            {/* ALARM ACTIVATION SPLASH - PREMIUM OVERLAY */}
+            <AnimatePresence>
+                {showAlarmSplash && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[500] bg-[#B20D30] flex flex-col items-center justify-center text-white overflow-hidden"
+                    >
+                        {/* Dramatic pulsating rings behind the icon */}
+                        <motion.div
+                            animate={{ scale: [1, 1.5, 1], opacity: [0.3, 0.1, 0.3] }}
+                            transition={{ repeat: Infinity, duration: 2 }}
+                            className="absolute w-[600px] h-[600px] rounded-full border-[1px] border-white/20"
+                        />
+                        <motion.div
+                            animate={{ scale: [1, 1.3, 1], opacity: [0.5, 0.2, 0.5] }}
+                            transition={{ repeat: Infinity, duration: 1.5, delay: 0.2 }}
+                            className="absolute w-[400px] h-[400px] rounded-full border-[2px] border-white/30"
+                        />
+
+                        <motion.div
+                            initial={{ scale: 0, rotate: -180 }}
+                            animate={{ scale: 1, rotate: 0 }}
+                            transition={{ type: "spring", damping: 12 }}
+                            className="w-48 h-48 rounded-[3rem] bg-white flex items-center justify-center text-[#B20D30] mb-10 shadow-[0_0_100px_rgba(255,255,255,0.4)] relative z-10"
+                        >
+                            <Siren size={100} strokeWidth={2.5} className="animate-bounce" />
+                        </motion.div>
+
+                        <div className="text-center relative z-10 space-y-4 px-10">
+                            <motion.h2
+                                initial={{ y: 20, opacity: 0 }}
+                                animate={{ y: 0, opacity: 1 }}
+                                transition={{ delay: 0.2 }}
+                                className="text-6xl font-black uppercase tracking-tighter"
+                            >
+                                Emergencia Activada
+                            </motion.h2>
+                            <motion.p
+                                initial={{ y: 20, opacity: 0 }}
+                                animate={{ y: 0, opacity: 1 }}
+                                transition={{ delay: 0.3 }}
+                                className="text-xl font-black uppercase tracking-[0.4em] text-white/60"
+                            >
+                                Centro de Monitoreo Notificado
+                            </motion.p>
+                        </div>
+
+                        {/* Animated Bottom Bar */}
+                        <motion.div
+                            initial={{ scaleX: 0 }}
+                            animate={{ scaleX: 1 }}
+                            transition={{ duration: 4, ease: "linear" }}
+                            className="absolute bottom-0 left-0 right-0 h-4 bg-white/40 origin-left"
+                        />
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* PANIC / ALERT CRITICAL OVERLAY (Persistent during alert) */}
+            <AnimatePresence>
+                {isAlertMode && !showAlarmSplash && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[300] bg-red-600/20 backdrop-blur-[2px] flex flex-col items-center justify-center"
+                    >
+                        <div className="absolute inset-0 border-[20px] border-red-600 animate-pulse pointer-events-none" />
+                        <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-red-600 to-transparent flex items-center justify-center px-10">
+                            <div className="flex items-center gap-6 text-white">
+                                <Siren size={48} className="animate-bounce" />
+                                <div className="text-center">
+                                    <h2 className="text-4xl font-black uppercase tracking-tighter">MODO ALERTA ACTIVO</h2>
+                                    <p className="text-sm font-black text-white/80 uppercase tracking-widest mt-1">El centro de monitoreo ha sido notificado</p>
+                                </div>
+                                <Siren size={48} className="animate-bounce" />
+                            </div>
+                        </div>
+
+                        {/* CENTRAL DEACTIVATE BUTTON */}
+                        <motion.div
+                            initial={{ scale: 0.5, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            className="relative flex flex-col items-center gap-8"
+                        >
+                            <button
+                                onMouseDown={startDeactivateHold}
+                                onMouseUp={cancelDeactivateHold}
+                                onMouseLeave={cancelDeactivateHold}
+                                onTouchStart={startDeactivateHold}
+                                onTouchEnd={cancelDeactivateHold}
+                                className="w-56 h-56 rounded-full bg-white border-8 border-red-600 shadow-2xl flex flex-col items-center justify-center gap-4 relative overflow-hidden group active:scale-95 transition-transform"
+                            >
+                                <motion.div
+                                    className="absolute bottom-0 left-0 right-0 bg-red-600/10 pointer-events-none"
+                                    animate={{ height: `${deactivateHoldProgress}%` }}
+                                    transition={{ duration: 0.1 }}
+                                />
+
+                                <Shield size={64} className={cn("text-red-600 transition-all duration-300", deactivateHoldProgress > 0 ? "scale-110" : "group-hover:scale-105")} />
+                                <div className="text-center px-4 relative z-10">
+                                    <p className="text-red-600 font-black text-xs uppercase tracking-widest">Normalizar</p>
+                                    <p className="text-red-600 font-black text-[10px] uppercase opacity-40 mt-1">Mantener pulsado</p>
+                                </div>
+
+                                {/* Circular progress border */}
+                                <svg className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none" viewBox="0 0 100 100">
+                                    <circle
+                                        cx="50"
+                                        cy="50"
+                                        r="46"
+                                        fill="none"
+                                        stroke="#dc2626"
+                                        strokeWidth="4"
+                                        strokeDasharray="289"
+                                        strokeDashoffset={289 - (289 * deactivateHoldProgress) / 100}
+                                        className="transition-all duration-100"
+                                    />
+                                </svg>
+                            </button>
+
+                            <motion.div
+                                animate={{ opacity: [0.4, 1, 0.4] }}
+                                transition={{ repeat: Infinity, duration: 2 }}
+                                className="px-6 py-2 bg-red-600 text-white rounded-full text-[10px] font-black uppercase tracking-[0.3em]"
+                            >
+                                Protocolo de Seguridad Activo
+                            </motion.div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* AUTOCOMPLETE PROMPT MODAL */}
             <AnimatePresence>
                 {showMatchPrompt && (
@@ -659,7 +1023,7 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
                                     <div className="flex flex-col xl:flex-row gap-8">
                                         {/* FORM SECTION (Expanded) */}
                                         <div className="flex-1 space-y-8">
-                                            <div className="bg-white/80 backdrop-blur-xl border border-black/20 rounded-[3rem] p-10 shadow-sm space-y-10 group transition-all hover:shadow-2xl">
+                                            <div className="bg-transparent space-y-10 group transition-all">
                                                 <div className="flex flex-col gap-10">
                                                     <div className="flex-1 w-full space-y-6">
                                                         <div className="flex items-center gap-4 ml-4">
@@ -952,7 +1316,55 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
 
                                 {/* CONTROL BAR (Classification, Unit, Vehicle, Media, Finish) */}
                                 <div className="fixed top-1/2 -translate-y-1/2 right-6 z-[90]">
-                                    <div className="flex flex-col gap-3 bg-white/95 backdrop-blur-3xl p-3 rounded-[3rem] border border-black/20 shadow-2xl">
+                                    <div className={cn(
+                                        "flex flex-col gap-3 p-3 rounded-[3rem] border shadow-[0_10px_60px_-10px_rgba(0,0,0,0.15)] ring-1 ring-black/5 transition-all duration-500",
+                                        isAlertMode
+                                            ? "bg-red-600 border-red-400 animate-pulse shadow-[0_0_50px_rgba(220,38,38,0.5)]"
+                                            : "bg-white/40 backdrop-blur-2xl border-white/40"
+                                    )}>
+                                        {/* Panic / Alert Button - Hold to Activate */}
+                                        <div className="relative">
+                                            <motion.button
+                                                whileHover={{ scale: 1.1 }}
+                                                whileTap={{ scale: 0.9 }}
+                                                onClick={() => {
+                                                    if (isAlertMode) {
+                                                        toggleAlertMode();
+                                                        playTactileSound();
+                                                    }
+                                                }}
+                                                onMouseDown={!isAlertMode ? startPanicHold : undefined}
+                                                onMouseUp={!isAlertMode ? cancelPanicHold : undefined}
+                                                onMouseLeave={!isAlertMode ? cancelPanicHold : undefined}
+                                                onTouchStart={!isAlertMode ? startPanicHold : undefined}
+                                                onTouchEnd={!isAlertMode ? cancelPanicHold : undefined}
+                                                className={cn(
+                                                    "w-16 h-16 rounded-[1.8rem] flex items-center justify-center transition-all shadow-lg relative z-10",
+                                                    isAlertMode ? "bg-white text-red-600 animate-bounce" : "bg-red-500 text-white"
+                                                )}
+                                            >
+                                                <Siren size={28} className={isAlertMode ? "animate-pulse" : ""} />
+                                            </motion.button>
+
+                                            {/* Progress Ring for Hold */}
+                                            {panicHoldProgress > 0 && !isAlertMode && (
+                                                <svg className="absolute inset-[-4px] w-[72px] h-[72px] rotate-[-90deg] pointer-events-none">
+                                                    <circle
+                                                        cx="36"
+                                                        cy="36"
+                                                        r="34"
+                                                        stroke="currentColor"
+                                                        strokeWidth="4"
+                                                        fill="transparent"
+                                                        className="text-red-600"
+                                                        strokeDasharray={213.6}
+                                                        strokeDashoffset={213.6 - (213.6 * panicHoldProgress) / 100}
+                                                    />
+                                                </svg>
+                                            )}
+                                        </div>
+
+                                        <div className={cn("h-px mx-2", isAlertMode ? "bg-white/20" : "bg-black/10")} />
                                         {/* Classification Button - Dynamic Icon */}
                                         <motion.button
                                             whileHover={{ scale: 1.05 }}
@@ -1059,13 +1471,168 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
                         )}
 
                         {activeTab === "alerts" && (
-                            <motion.div key="alerts" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="h-full w-full flex flex-col items-center justify-center gap-6 pb-40">
-                                <div className="w-24 h-24 rounded-[2.5rem] bg-white border border-black transition-all duration-300 flex items-center justify-center text-black/20 shadow-sm">
-                                    <Bell size={44} />
+                            <motion.div key="alerts" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="h-full w-full overflow-y-auto px-8 pt-6 pb-40 custom-scrollbar">
+                                <div className="max-w-7xl mx-auto space-y-10">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <h2 className="text-4xl font-black uppercase tracking-tighter text-black leading-none">Eventos Críticos</h2>
+                                            <p className="text-[10px] text-[#B20D30] font-black uppercase tracking-[0.3em] mt-3 flex items-center gap-2">
+                                                <Siren size={14} className="animate-pulse" /> Registro de activación de botón de pánico
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                                        {(() => {
+                                            const alertArr = entries.filter(e => e.type.includes("ALERTA"));
+                                            if (alertArr.length === 0) return (
+                                                <div className="col-span-full py-40 flex flex-col items-center gap-6 opacity-20">
+                                                    <Shield size={80} />
+                                                    <p className="text-xl font-black uppercase tracking-[0.5em]">Historial de Alertas Limpio</p>
+                                                </div>
+                                            );
+
+                                            return alertArr.map((alert, idx) => {
+                                                const isActive = alert.type === "ALERTA_ACTIVADA";
+                                                const deactivationEvent = alertArr[idx - 1]; // Anterior en el array (posterior en el tiempo)
+                                                let duration = "ACTIVA";
+
+                                                if (isActive && deactivationEvent && deactivationEvent.type === "ALERTA_DESACTIVADA") {
+                                                    const diff = new Date(deactivationEvent.timestamp || deactivationEvent.createdAt).getTime() - new Date(alert.timestamp || alert.createdAt).getTime();
+                                                    const mins = Math.floor(diff / 60000);
+                                                    const secs = Math.floor((diff % 60000) / 1000);
+                                                    duration = `${mins}m ${secs}s`;
+                                                }
+
+                                                return (
+                                                    <motion.div
+                                                        key={alert.id}
+                                                        initial={{ opacity: 0, scale: 0.9 }}
+                                                        animate={{ opacity: 1, scale: 1 }}
+                                                        className={cn(
+                                                            "p-8 rounded-[2.5rem] border-2 transition-all duration-500",
+                                                            isActive ? "bg-red-600 border-white text-white shadow-2xl shadow-red-600/40" : "bg-white border-black text-black"
+                                                        )}
+                                                    >
+                                                        <div className="flex items-center justify-between mb-8">
+                                                            <div className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest", isActive ? "bg-white text-red-600" : "bg-black text-white")}>
+                                                                {isActive ? "ACTIVACIÓN" : "NORMALIZACIÓN"}
+                                                            </div>
+                                                            <Clock size={18} className={isActive ? "text-white/40" : "text-black/20"} />
+                                                        </div>
+
+                                                        <div className="space-y-6">
+                                                            <div>
+                                                                <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", isActive ? "text-white/60" : "text-black/40")}>Operario</p>
+                                                                <p className="text-xl font-black uppercase tracking-tight">{alert.guardName || "Sistema"}</p>
+                                                            </div>
+
+                                                            <div className="flex justify-between items-end">
+                                                                <div>
+                                                                    <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", isActive ? "text-white/60" : "text-black/40")}>Fecha y Hora</p>
+                                                                    <p className="text-sm font-bold opacity-80">{new Date(alert.timestamp || alert.createdAt).toLocaleString('es-UY', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
+                                                                </div>
+                                                                {isActive && (
+                                                                    <div className="text-right">
+                                                                        <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", isActive ? "text-white/60" : "text-black/40")}>Duración</p>
+                                                                        <p className="text-sm font-black uppercase tracking-widest animate-pulse">{duration}</p>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </motion.div>
+                                                );
+                                            });
+                                        })()}
+                                    </div>
                                 </div>
-                                <div className="text-center">
-                                    <h3 className="text-xl font-black uppercase tracking-tighter mb-2 text-black">Sin Notificaciones Críticas</h3>
-                                    <p className="text-[10px] text-black/40 font-black uppercase tracking-widest leading-relaxed">El sistema de seguridad operativa <br /> está funcionando en condiciones normales.</p>
+                            </motion.div>
+                        )}
+                        {activeTab === "lpr" && (
+                            <motion.div key="lpr" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="h-full w-full overflow-y-auto px-8 pt-6 pb-40 custom-scrollbar">
+                                <div className="max-w-7xl mx-auto space-y-10">
+                                    <div className="flex items-center justify-between sticky top-0 bg-slate-50/95 backdrop-blur-md py-6 z-30 gap-6">
+                                        <div>
+                                            <h2 className="text-4xl font-black uppercase tracking-tighter text-black leading-none">Historial LPR</h2>
+                                            <p className="text-[10px] text-[#B20D30] font-black uppercase tracking-[0.3em] mt-3">Reconocimiento automático de matrículas</p>
+                                        </div>
+                                        <div className="relative group">
+                                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-black/20 group-focus-within:text-[#B20D30] transition-colors" size={18} />
+                                            <Input
+                                                placeholder="BUSCAR MATRÍCULA..."
+                                                value={lprSearch}
+                                                onChange={(e) => setLprSearch(e.target.value)}
+                                                className="pl-12 h-14 w-80 bg-white/40 backdrop-blur-md border border-black rounded-2xl font-black text-xs uppercase tracking-widest transition-all focus:border-[#B20D30]/50 shadow-sm"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {isLprLoading ? (
+                                        <div className="py-40 flex flex-col items-center gap-6 opacity-20">
+                                            <Loader2 className="animate-spin" size={60} />
+                                            <p className="text-xl font-black uppercase tracking-[0.5em]">Cargando Eventos LPR...</p>
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                                            {lprEntries.map((event) => (
+                                                <motion.div
+                                                    key={event.id}
+                                                    initial={{ opacity: 0, scale: 0.9 }}
+                                                    animate={{ opacity: 1, scale: 1 }}
+                                                    className="p-8 rounded-[2.5rem] border-2 border-black bg-white text-black shadow-xl hover:shadow-2xl transition-all group"
+                                                >
+                                                    <div className="flex items-center justify-between mb-8">
+                                                        <div className="px-4 py-2 rounded-xl bg-black text-white text-[10px] font-black uppercase tracking-widest">
+                                                            LPR DETECTADO
+                                                        </div>
+                                                        <Car size={20} className="text-black/20 group-hover:text-black transition-colors" />
+                                                    </div>
+
+                                                    <div className="space-y-6">
+                                                        <div className="flex items-center gap-6">
+                                                            <div className="w-24 h-14 bg-slate-100 rounded-xl border-4 border-slate-200 flex items-center justify-center">
+                                                                <span className="text-2xl font-black tracking-tighter uppercase whitespace-nowrap">{event.plateDetected}</span>
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-[10px] font-black uppercase tracking-widest mb-1 text-black/40">Propietario / Residente</p>
+                                                                <p className="text-xl font-black uppercase tracking-tight truncate">{event.user?.name || "No Identificado"}</p>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <div>
+                                                                <p className="text-[10px] font-black uppercase tracking-widest mb-1 text-black/40">Lote / Unidad</p>
+                                                                <p className="text-sm font-black uppercase tracking-tighter">{event.user?.unit?.name || "---"}</p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="text-[10px] font-black uppercase tracking-widest mb-1 text-black/40">Fecha y Hora</p>
+                                                                <p className="text-xs font-bold opacity-60 tabular-nums">
+                                                                    {new Date(event.timestamp).toLocaleString('es-UY', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+
+                                                        {event.direction && (
+                                                            <div className={cn(
+                                                                "w-full py-3 rounded-2xl flex items-center justify-center gap-3 border-2 transition-all",
+                                                                event.direction === "ENTRY" ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-600" : "bg-orange-500/5 border-orange-500/20 text-orange-600"
+                                                            )}>
+                                                                {event.direction === "ENTRY" ? <LogIn size={14} /> : <LogOut size={14} />}
+                                                                <span className="text-[9px] font-black uppercase tracking-[0.3em]">{event.direction === "ENTRY" ? "SENTIDO: INGRESO" : "SENTIDO: EGRESO"}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </motion.div>
+                                            ))}
+
+                                            {lprEntries.length === 0 && (
+                                                <div className="col-span-full py-40 flex flex-col items-center gap-6 opacity-20">
+                                                    <Search size={80} />
+                                                    <p className="text-xl font-black uppercase tracking-[0.5em]">No se encontraron registros</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </motion.div>
                         )}
@@ -1080,11 +1647,19 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
                                         <div className="flex items-center gap-4">
                                             <div className="relative">
                                                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-black/30" size={20} />
-                                                <Input placeholder="FILTRAR POR MATRÍCULA..." className="pl-12 h-14 w-80 bg-white border border-black transition-all duration-300 rounded-2xl font-black text-xs uppercase tracking-widest transition-all focus:border-[#B20D30]/50 shadow-sm" />
+                                                <Input
+                                                    placeholder="FILTRAR POR MATRÍCULA..."
+                                                    className="pl-12 h-14 w-80 bg-white/40 backdrop-blur-md border border-black transition-all duration-300 rounded-2xl font-black text-xs uppercase tracking-widest transition-all focus:border-[#B20D30]/50 shadow-sm"
+                                                    value={historySearch}
+                                                    onChange={(e) => {
+                                                        setHistorySearch(e.target.value);
+                                                    }}
+                                                />
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="bg-white border-2 border-black rounded-[3rem] overflow-hidden shadow-2xl">
+
+                                    <div className="w-full">
                                         <table className="w-full text-left border-collapse">
                                             <thead>
                                                 <tr className="bg-black border-b-4 border-black shadow-lg">
@@ -1157,6 +1732,14 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
                                                 ))}
                                             </tbody>
                                         </table>
+
+                                        {/* Infinite Scroll Load More Trigger */}
+                                        <div ref={loadMoreRef} className="py-20 flex justify-center w-full">
+                                            {isHistoryLoading && <Loader2 className="animate-spin text-[#B20D30]" size={32} />}
+                                            {!hasMoreHistory && !isHistoryLoading && (
+                                                <p className="text-[10px] font-black uppercase tracking-[0.4em] text-black/20">Fin de la bitácora</p>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </motion.div>
@@ -1166,49 +1749,74 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
                 </div>
 
                 {/* FIXED FOOTER NAVIGATION - IMPROVED DESIGN */}
-                <footer className="fixed bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white via-white to-white/95 backdrop-blur-2xl border-t-2 border-black transition-all duration-300/80 flex items-center justify-between px-8 z-[100] shadow-[0_-20px_60px_rgba(0,0,0,0.08)]">
+                <footer className={cn(
+                    "fixed bottom-0 left-0 right-0 h-24 border-t-2 transition-all duration-500 flex items-center justify-between px-8 z-[100] shadow-[0_-20px_60px_rgba(0,0,0,0.08)]",
+                    isAlertMode
+                        ? "bg-red-600 border-white animate-pulse"
+                        : "bg-gradient-to-t from-white via-white to-white/95 backdrop-blur-2xl border-black"
+                )}>
                     <div className="flex items-center gap-5">
-                        <div className="w-16 h-16 flex items-center justify-center shrink-0 bg-gradient-to-br from-slate-50 to-white rounded-2xl border-2 border-black transition-all duration-300 shadow-sm">
+                        <div className={cn(
+                            "w-16 h-16 flex items-center justify-center shrink-0 rounded-2xl border-2 transition-all duration-300 shadow-sm",
+                            isAlertMode ? "bg-white border-white" : "bg-gradient-to-br from-slate-50 to-white border-black"
+                        )}>
                             <Image src="/logo-transparent.png" alt="Logo" width={100} height={100} className="object-contain" />
                         </div>
                         <div className="hidden xl:block">
-                            <h1 className="text-base font-black tracking-tight uppercase text-black leading-none">OmniAccess</h1>
-                            <p className="text-[8px] font-black text-[#B20D30] uppercase tracking-widest mt-1">Console v2.1</p>
+                            <h1 className={cn("text-base font-black tracking-tight uppercase leading-none", isAlertMode ? "text-white" : "text-black")}>OmniAccess</h1>
+                            <p className={cn("text-[8px] font-black uppercase tracking-widest mt-1", isAlertMode ? "text-white/60" : "text-[#B20D30]")}>Console v2.1</p>
                         </div>
                     </div>
 
-                    <nav className="bg-gradient-to-br from-slate-100 to-slate-50 border-2 border-black transition-all duration-300/80 rounded-[1.5rem] p-2 flex items-center gap-2 shadow-lg">
-                        <BottomTab icon={<FileText size={20} />} active={activeTab === "control"} onClick={() => handleTabChange("control")} label="Acceso" small />
-                        <BottomTab icon={<HistoryIcon size={20} />} active={activeTab === "history"} onClick={() => handleTabChange("history")} label="Historial" small />
-                        <BottomTab icon={<Bell size={20} />} active={activeTab === "alerts"} onClick={() => handleTabChange("alerts")} label="Alertas" small />
+                    <nav className={cn(
+                        "border-2 transition-all duration-300/80 rounded-[1.5rem] p-2 flex items-center gap-2 shadow-lg",
+                        isAlertMode ? "bg-white border-white" : "bg-gradient-to-br from-slate-100 to-slate-50 border-black"
+                    )}>
+                        <BottomTab icon={<FileText size={20} />} active={activeTab === "control"} onClick={() => handleTabChange("control")} label="Acceso" small alertActive={isAlertMode} />
+                        <BottomTab icon={<HistoryIcon size={20} />} active={activeTab === "history"} onClick={() => handleTabChange("history")} label="Historial" small alertActive={isAlertMode} />
+                        <BottomTab icon={<Car size={20} />} active={activeTab === "lpr"} onClick={() => handleTabChange("lpr")} label="LPR" small alertActive={isAlertMode} />
+                        <BottomTab icon={<Bell size={20} />} active={activeTab === "alerts"} onClick={() => handleTabChange("alerts")} label="Alertas" small alertActive={isAlertMode} />
                     </nav>
 
                     <div className="flex items-center gap-6">
                         <div className="hidden lg:flex flex-col items-end mr-3">
-                            <p className="text-2xl font-black tabular-nums tracking-tighter text-[#B20D30] leading-none mb-1">{currentTime.toLocaleTimeString('es-UY', { hour12: false, hour: '2-digit', minute: '2-digit' })}</p>
-                            <p className="text-[9px] text-black/40 font-black uppercase tracking-widest leading-none">{currentTime.toLocaleDateString('es-UY', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
+                            <p className={cn("text-2xl font-black tabular-nums tracking-tighter leading-none mb-1", isAlertMode ? "text-white" : "text-[#B20D30]")}>{currentTime.toLocaleTimeString('es-UY', { hour12: false, hour: '2-digit', minute: '2-digit' })}</p>
+                            <p className={cn("text-[8px] font-black uppercase tracking-widest leading-none", isAlertMode ? "text-white/60" : "text-black/40")}>{currentTime.toLocaleDateString('es-UY', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
                         </div>
 
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={() => { playTactileSound(); }}
-                                className="flex items-center gap-3 pl-2 pr-5 h-14 rounded-[1.25rem] bg-gradient-to-br from-slate-50 to-white hover:from-slate-100 hover:to-slate-50 transition-all border-2 border-black transition-all duration-300 group active:scale-95 shadow-md"
+                                className={cn(
+                                    "flex items-center gap-3 pl-2 pr-5 h-14 rounded-[1.25rem] border-2 transition-all duration-300 group active:scale-95 shadow-md",
+                                    isAlertMode
+                                        ? "bg-white border-white"
+                                        : "bg-gradient-to-br from-slate-50 to-white border-black hover:from-slate-100 hover:to-slate-50"
+                                )}
                             >
-                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#B20D30] to-[#E53935] flex items-center justify-center shadow-lg">
+                                <div className={cn(
+                                    "w-10 h-10 rounded-xl flex items-center justify-center shadow-lg",
+                                    isAlertMode ? "bg-red-600" : "bg-gradient-to-br from-[#B20D30] to-[#E53935]"
+                                )}>
                                     <span className="text-[10px] font-black text-white">{guardName?.substring(0, 2) || "GA"}</span>
                                 </div>
                                 <div className="text-left hidden sm:block">
-                                    <p className="text-[10px] font-black text-black uppercase leading-none tracking-tight">{guardName || "GUARDIA"}</p>
+                                    <p className={cn("text-[10px] font-black uppercase leading-none tracking-tight", isAlertMode ? "text-red-600" : "text-black")}>{guardName || "GUARDIA"}</p>
                                     <div className="flex items-center gap-1.5 mt-1">
-                                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-sm shadow-emerald-500/50" />
-                                        <p className="text-[8px] font-black text-emerald-600 uppercase tracking-widest">Online</p>
+                                        <div className={cn("w-2 h-2 rounded-full animate-pulse shadow-sm", isAlertMode ? "bg-red-500 shadow-red-500/50" : "bg-emerald-500 shadow-emerald-500/50")} />
+                                        <p className={cn("text-[8px] font-black uppercase tracking-widest", isAlertMode ? "text-red-600" : "text-emerald-600")}>Online</p>
                                     </div>
                                 </div>
                             </button>
 
                             <button
                                 onClick={handleLogout}
-                                className="w-14 h-14 rounded-[1.25rem] bg-white border-2 border-black transition-all duration-300 text-black/40 hover:text-[#B20D30] hover:border-[#B20D30]/20 flex items-center justify-center transition-all active:scale-95"
+                                className={cn(
+                                    "w-14 h-14 rounded-[1.25rem] border-2 transition-all duration-300 flex items-center justify-center transition-all active:scale-95",
+                                    isAlertMode
+                                        ? "bg-white border-white text-red-600"
+                                        : "bg-white border-black text-black/40 hover:text-[#B20D30] hover:border-[#B20D30]/20"
+                                )}
                                 title="Cerrar Sesión"
                             >
                                 <LogOut size={20} />
@@ -1216,6 +1824,92 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
                         </div>
                     </div>
                 </footer>
+
+                {/* NOTIFICATION OVERLAY SCREEN */}
+                <AnimatePresence>
+                    {notification && (
+                        <NotificationOverlay
+                            {...notification}
+                            onClose={() => setNotification(null)}
+                        />
+                    )}
+                </AnimatePresence>
+
+                {/* AUDIO RECORDING HUB - NEW APPROACH */}
+                <AnimatePresence>
+                    {isRecording && (
+                        <motion.div
+                            initial={{ opacity: 0, scale: 1.1 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            className="fixed inset-0 z-[1000] flex flex-col items-center justify-center p-8 backdrop-blur-3xl bg-black/80"
+                        >
+                            <motion.div
+                                initial={{ opacity: 0, y: 40 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="flex flex-col items-center gap-12 max-w-2xl w-full"
+                            >
+                                {/* REC Status Indicator */}
+                                <div className="flex items-center gap-4 bg-red-600/20 px-8 py-3 rounded-2xl border border-red-500/30">
+                                    <motion.div
+                                        animate={{ opacity: [1, 0.4, 1] }}
+                                        transition={{ repeat: Infinity, duration: 1 }}
+                                        className="w-4 h-4 rounded-full bg-red-600 shadow-[0_0_15px_rgba(220,38,38,0.8)]"
+                                    />
+                                    <span className="text-white font-black text-xs uppercase tracking-[0.4em]">REC ON AIR</span>
+                                    <div className="h-4 w-px bg-white/10 mx-2" />
+                                    <span className="text-white font-black text-xl tabular-nums">{formatDuration(recordingDuration)}</span>
+                                </div>
+
+                                {/* Dynamic Visualizer */}
+                                <div className="flex gap-2 items-center h-48">
+                                    {[...Array(32)].map((_, i) => (
+                                        <motion.div
+                                            key={i}
+                                            animate={{
+                                                height: [10, 40 + Math.random() * 100, 10],
+                                            }}
+                                            transition={{
+                                                repeat: Infinity,
+                                                duration: 0.4 + Math.random() * 0.4,
+                                                delay: i * 0.02
+                                            }}
+                                            className="w-1.5 min-h-[10px] bg-gradient-to-t from-red-600 to-white rounded-full opacity-80"
+                                        />
+                                    ))}
+                                </div>
+
+                                <div className="text-center">
+                                    <h3 className="text-4xl font-black text-white uppercase tracking-tighter mb-4">Capturando Nota de Audio</h3>
+                                    <p className="text-white/40 font-black text-[10px] uppercase tracking-[0.5em]">La grabación se adjuntará automáticamente al reporte</p>
+                                </div>
+
+                                {/* Main Controls */}
+                                <div className="flex items-center gap-10 mt-6">
+                                    {/* Stop and Save */}
+                                    <motion.button
+                                        whileHover={{ scale: 1.1 }}
+                                        whileTap={{ scale: 0.9 }}
+                                        onClick={stopRecording}
+                                        className="w-28 h-28 rounded-[3rem] bg-white text-red-600 flex items-center justify-center shadow-[0_20px_50px_rgba(0,0,0,0.4)] group"
+                                    >
+                                        <div className="w-10 h-10 bg-red-600 rounded-xl transition-transform group-hover:scale-90" />
+                                    </motion.button>
+
+                                    {/* Cancel */}
+                                    <motion.button
+                                        whileHover={{ scale: 1.1 }}
+                                        whileTap={{ scale: 0.9 }}
+                                        onClick={() => { stopRecording(); setAudioUrl(null); setAudioBlob(null); }}
+                                        className="w-20 h-20 rounded-[2.5rem] bg-white/10 text-white border border-white/20 flex items-center justify-center hover:bg-white/20 transition-colors"
+                                    >
+                                        <X size={32} />
+                                    </motion.button>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </main >
 
             <style jsx global>{`
@@ -1227,7 +1921,7 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
         </div >
     );
 }
-function BottomTab({ icon, active, onClick, label, small }: any) {
+function BottomTab({ icon, active, onClick, label, small, alertActive }: any) {
     return (
         <motion.button
             whileHover={{ scale: 1.05, y: -2 }}
@@ -1247,7 +1941,9 @@ function BottomTab({ icon, active, onClick, label, small }: any) {
             className={cn(
                 small ? "w-24 h-16" : "w-20 md:w-28 h-18",
                 "rounded-[1.25rem] flex flex-col items-center justify-center gap-1.5 transition-all relative overflow-hidden",
-                active ? "text-[#B20D30]" : "text-black/40 hover:text-black hover:bg-white/60"
+                active
+                    ? (alertActive ? "text-red-700 bg-white" : "text-[#B20D30]")
+                    : (alertActive ? "text-red-300" : "text-black/40 hover:text-black hover:bg-white/60")
             )}
         >
             <div className={cn("relative z-10 transition-all duration-300", active && "scale-110")}>
@@ -1469,70 +2165,6 @@ function AudioRecordingFloatingButton({ isRecording, audioUrl, onStart, onStop, 
                     <Volume2 size={22} />
                 </motion.button>
             )}
-            {/* AUDIO RECORDING OVERLAY - FULLSCREEN */}
-            {isRecording && (
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="fixed inset-0 bg-gradient-to-br from-red-900 via-red-800 to-black z-[200] flex flex-col items-center justify-center"
-                >
-                    {/* Header */}
-                    <div className="absolute top-8 left-1/2 -translate-x-1/2 z-10">
-                        <div className="bg-white/10 backdrop-blur-xl border border-white/20 px-8 py-4 rounded-3xl flex items-center gap-4">
-                            <div className="w-3 h-3 bg-white rounded-full animate-pulse" />
-                            <span className="text-white font-black text-xl uppercase tracking-widest">Grabando Audio</span>
-                        </div>
-                    </div>
-
-                    {/* Animated Waveform */}
-                    <div className="flex gap-3 items-center h-64">
-                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((i) => (
-                            <motion.div
-                                key={i}
-                                animate={{ height: [40, 200, 40] }}
-                                transition={{ repeat: Infinity, duration: 0.8, delay: i * 0.1 }}
-                                className="w-4 bg-white rounded-full shadow-2xl"
-                            />
-                        ))}
-                    </div>
-
-                    {/* Microphone Icon */}
-                    <motion.div
-                        animate={{ scale: [1, 1.1, 1] }}
-                        transition={{ repeat: Infinity, duration: 2 }}
-                        className="mt-12"
-                    >
-                        <Mic size={80} className="text-white drop-shadow-2xl" />
-                    </motion.div>
-
-                    {/* Controls */}
-                    <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex gap-6 z-10">
-                        {/* Stop Recording Button */}
-                        <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={onStop}
-                            className="w-24 h-24 rounded-full bg-white border-8 border-white/30 shadow-2xl flex items-center justify-center hover:scale-110 transition-transform"
-                        >
-                            <Square size={32} className="text-red-600" fill="currentColor" />
-                        </motion.button>
-
-                        {/* Cancel Button */}
-                        <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => {
-                                onStop(); // Stop recording
-                                onClear(); // Clear the audio
-                            }}
-                            className="w-20 h-20 rounded-full bg-black/50 border-4 border-white/30 shadow-2xl flex items-center justify-center hover:bg-black/70 transition-colors"
-                        >
-                            <X size={28} className="text-white" />
-                        </motion.button>
-                    </div>
-                </motion.div>
-            )}
         </>
     );
 }
@@ -1599,9 +2231,9 @@ function TactilePlateInput({ value, onChange }: { value: string, onChange: (v: s
             <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="bg-white border-2 border-slate-200 px-8 py-3 rounded-2xl shadow-sm"
+                className="px-8 py-3 rounded-2xl"
             >
-                <p className="text-[10px] font-black text-[#B20D30] uppercase tracking-[0.4em]">Toque para Editar Matrícula</p>
+                <p className="text-[10px] font-black text-[#B20D30] uppercase tracking-[0.4em] animate-pulse">Escribe la matricula en cada casillero</p>
             </motion.div>
         </div>
     );
@@ -1645,5 +2277,60 @@ function OriginPickerButton({ active, onClick, icon, label, sub }: { active: boo
                 </div>
             )}
         </motion.button>
+    );
+}
+
+function NotificationOverlay({ type, title, message, onClose }: { type: string, title: string, message: string, onClose: () => void }) {
+    const isAlert = type === "alert" || type === "error";
+
+    return (
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className={cn(
+                "fixed inset-0 z-[1000] flex flex-col items-center justify-center p-8 backdrop-blur-3xl",
+                isAlert ? "bg-red-600/95" : "bg-black/90"
+            )}
+        >
+            <motion.div
+                initial={{ scale: 0.8, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.8, y: 20 }}
+                className="flex flex-col items-center text-center max-w-2xl"
+            >
+                <div className={cn(
+                    "w-32 h-32 rounded-[3rem] flex items-center justify-center mb-10 shadow-2xl relative",
+                    isAlert ? "bg-white text-red-600" : "bg-white text-black"
+                )}>
+                    {type === "success" && <CheckCircle2 size={64} strokeWidth={2.5} />}
+                    {type === "error" && <X size={64} strokeWidth={2.5} />}
+                    {type === "info" && <UserCheck size={64} strokeWidth={2.5} />}
+                    {type === "alert" && <Siren size={64} strokeWidth={2.5} className="animate-bounce" />}
+
+                    {/* Pulsating Ring */}
+                    <motion.div
+                        animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }}
+                        transition={{ repeat: Infinity, duration: 2 }}
+                        className="absolute inset-0 rounded-[3rem] border-4 border-white"
+                    />
+                </div>
+
+                <h2 className="text-6xl font-black text-white uppercase tracking-tighter mb-4">
+                    {title}
+                </h2>
+                <p className="text-xl font-black text-white/60 uppercase tracking-widest leading-relaxed">
+                    {message}
+                </p>
+
+                <motion.div
+                    initial={{ scaleX: 0 }}
+                    animate={{ scaleX: 1 }}
+                    transition={{ duration: 2, ease: "linear" }}
+                    className="h-2 bg-white/20 w-80 mt-12 rounded-full origin-left"
+                />
+            </motion.div>
+        </motion.div>
     );
 }
