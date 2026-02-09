@@ -20,7 +20,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import FloatingEdge from './flow/FloatingEdge';
-import { Database, Server, Smartphone, HardDrive, ShieldCheck, Video, Globe, MessageSquare, Monitor, Webhook, Camera, Copy, Check } from 'lucide-react';
+import { Database, Server, Smartphone, HardDrive, ShieldCheck, Video, Globe, MessageSquare, Monitor, Webhook, Camera, Copy, Check, Activity } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import axios from 'axios';
 import { io } from 'socket.io-client';
@@ -131,58 +131,85 @@ const WebhookDriverNode = memo(({ data }: any) => {
 });
 WebhookDriverNode.displayName = 'WebhookDriverNode';
 
-// Custom Console/Tablet Node for Guards
 const ConsoleNode = memo(({ data }: any) => {
     const status = data.status || 'offline';
     const isActive = status === 'online';
 
     return (
         <div className={cn(
-            "relative flex flex-col p-4 transition-all duration-500 bg-[#1e1e24] border-2 rounded-[1.5rem] min-w-[200px] custom-drag-handle group/console",
-            isActive ? "border-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.3)] scale-105" : "border-slate-700 opacity-60"
+            "relative flex flex-col items-center justify-center p-1.5 bg-[#121214] border border-[#2c2c30] rounded-[1rem] w-[200px] h-[130px] shadow-2xl transition-all duration-500 custom-drag-handle group/console",
+            isActive ? "shadow-[0_20px_50px_-10px_rgba(16,185,129,0.3)] scale-105" : "opacity-60 grayscale"
         )}>
-            <Handle type="target" position={Position.Bottom} className="!bg-emerald-500 !w-3 !h-3" />
+            {/* Tablet Bezel Reflection */}
+            <div className="absolute inset-0 rounded-[1rem] bg-gradient-to-tr from-white/5 to-transparent pointer-events-none" />
 
-            <div className="flex items-center gap-3">
-                <div className="relative">
-                    <div className={cn(
-                        "w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-sm shadow-xl transition-all duration-500",
-                        isActive ? "bg-gradient-to-br from-emerald-500 to-teal-600 rotate-0" : "bg-slate-700 grayscale rotate-3"
-                    )}>
-                        {data.avatar ? (
-                            <img src={data.avatar} className="w-full h-full object-cover rounded-2xl" alt="Guard" />
-                        ) : (
-                            data.guardName?.substring(0, 2).toUpperCase() || "G"
-                        )}
+            {/* Screen Area */}
+            <div className={cn(
+                "relative z-10 w-full h-full bg-neutral-900 rounded-[0.6rem] overflow-hidden flex flex-col border border-white/5 shadow-inner",
+                isActive ? "bg-slate-900" : "bg-neutral-800"
+            )}>
+                {/* Status Bar */}
+                <div className="h-5 w-full bg-black/40 flex items-center justify-between px-3 backdrop-blur-sm border-b border-white/5">
+                    <div className="flex items-center gap-1.5">
+                        <div className={cn("w-1.5 h-1.5 rounded-full shadow-lg", isActive ? "bg-emerald-500 shadow-emerald-500/50" : "bg-red-500")} />
+                        <span className="text-[7px] font-mono text-white/50 tracking-wider">4G • {data.ip?.split('.').slice(-1)[0]}</span>
                     </div>
+                    <div className="flex gap-0.5">
+                        <div className="w-2 h-1 bg-white/20 rounded-[1px]" />
+                        <div className="w-0.5 h-1 bg-white/20 rounded-[1px]" />
+                    </div>
+                </div>
+
+                {/* Main Screen Content */}
+                <div className="flex-1 flex flex-col items-center justify-center p-2 relative overflow-hidden group-hover/console:bg-white/5 transition-colors">
+                    {/* Dynamic Background */}
                     {isActive && (
-                        <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-[#1e1e24] rounded-full animate-pulse" />
+                        <div className="absolute inset-0 bg-gradient-to-b from-emerald-600/10 via-transparent to-transparent opacity-50" />
                     )}
+
+                    <div className="relative z-10 flex flex-col items-center gap-2">
+                        <div className="flex items-center gap-3">
+                            {/* Avatar */}
+                            <div className={cn(
+                                "w-9 h-9 rounded-lg flex items-center justify-center text-[10px] font-black shadow-lg ring-2 ring-white/10",
+                                isActive ? "bg-white text-emerald-600" : "bg-neutral-700 text-neutral-500"
+                            )}>
+                                {data.avatar ? <img src={data.avatar} className="w-full h-full object-cover rounded-lg" alt="Avatar" /> : (data.guardName?.[0] || "G")}
+                            </div>
+
+                            {/* Info */}
+                            <div className="flex flex-col text-left">
+                                <span className="text-[10px] font-black text-white uppercase leading-none tracking-tight">{data.guardName?.split(' ')[0] || "Guardia"}</span>
+                                <span className="text-[7px] font-bold text-white/40 uppercase mt-0.5 tracking-wider">
+                                    {data.deviceId || "Tablet"}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Connection Status Pill */}
+                        <div className={cn(
+                            "px-2 py-0.5 rounded-full border flex items-center gap-1",
+                            isActive ? "bg-emerald-500/20 border-emerald-500/30" : "bg-neutral-800 border-neutral-700"
+                        )}>
+                            {isActive && <Activity size={8} className="text-emerald-400 animate-pulse" />}
+                            <span className={cn(
+                                "text-[6px] font-black uppercase tracking-widest",
+                                isActive ? "text-emerald-400" : "text-neutral-500"
+                            )}>
+                                {isActive ? "Conectado" : "Offline"}
+                            </span>
+                        </div>
+                    </div>
                 </div>
 
-                <div className="flex flex-col">
-                    <span className="text-[12px] font-black uppercase text-white tracking-tight leading-none">
-                        {data.guardName || "Consola Libre"}
-                    </span>
-                    <span className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest mt-1">
-                        {data.deviceId || "Tablet ID: ---"}
-                    </span>
+                {/* Home Indicator */}
+                <div className="h-3 w-full flex items-center justify-center bg-black/20 backdrop-blur-sm">
+                    <div className="w-10 h-0.5 bg-white/20 rounded-full" />
                 </div>
             </div>
 
-            {/* Device Info */}
-            <div className="mt-4 flex items-center justify-between gap-2 p-2 bg-black/30 rounded-xl border border-white/5">
-                <div className="flex items-center gap-1.5">
-                    <Smartphone size={12} className={isActive ? "text-emerald-400" : "text-slate-600"} />
-                    <span className="text-[9px] font-mono text-neutral-400">{data.ip || "---.---.---.---"}</span>
-                </div>
-                <div className={cn(
-                    "px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter",
-                    isActive ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-800 text-slate-500"
-                )}>
-                    {status}
-                </div>
-            </div>
+            {/* Handle on Top for incoming edge from Server */}
+            <Handle type="target" position={Position.Top} className="!w-2 !h-2 !bg-neutral-600 !border-2 !border-[#121214] !top-[-4px]" />
         </div>
     );
 });

@@ -1,0 +1,61 @@
+▲ Next.js 16.1.1 (Turbopack)
+- Environments: .env
+- Experiments (use with caution):
+  · serverActions
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 17.9s
+  Running TypeScript ...
+  Collecting page data using 3 workers ...
+  Generating static pages using 3 workers (0/13) ...
+  Generating static pages using 3 workers (3/13) 
+  Generating static pages using 3 workers (6/13) 
+  Generating static pages using 3 workers (9/13) 
+✓ Generating static pages using 3 workers (13/13) in 149.2ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ƒ /_not-found
+├ ƒ /admin
+├ ƒ /admin/audit
+├ ƒ /admin/bitacora
+├ ƒ /admin/calendar
+├ ƒ /admin/changelog
+├ ƒ /admin/consolas
+├ ƒ /admin/credentials
+├ ƒ /admin/dashboard
+├ ƒ /admin/debug
+├ ƒ /admin/devices
+├ ƒ /admin/groups
+├ ƒ /admin/help
+├ ƒ /admin/help/docs/[slug]
+├ ƒ /admin/help/docs/akuvox-driver
+├ ƒ /admin/help/docs/hikvision-driver
+├ ƒ /admin/help/structure
+├ ƒ /admin/history
+├ ƒ /admin/plazas
+├ ƒ /admin/rfid
+├ ƒ /admin/settings
+├ ƒ /admin/units
+├ ƒ /admin/users
+├ ƒ /admin/vehicles
+├ ƒ /api/devices/[deviceId]/faces/[userId]
+├ ƒ /api/events
+├ ƒ /api/files/[...key]
+├ ƒ /api/proxy/device-image
+├ ƒ /api/subscribe
+├ ƒ /api/system-status
+├ ƒ /api/test
+├ ƒ /api/test-akuvox
+├ ƒ /api/topology/positions
+├ ƒ /api/users/[id]/face
+├ ƒ /api/webhooks/akuvox
+├ ƒ /api/webhooks/hikvision
+├ ƒ /api/webhooks/whatsapp
+├ ƒ /facepad/getresult
+└ ƒ /guard
+
+
+ƒ  (Dynamic)  server-rendered on demand
+

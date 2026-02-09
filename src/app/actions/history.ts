@@ -73,7 +73,8 @@ export async function getAccessEvents(options?: {
                             unit: {
                                 select: { name: true }
                             },
-                            parkingSlotId: true
+                            parkingSlotId: true,
+                            vehicles: true
                         }
                     },
                     device: true,
@@ -207,5 +208,58 @@ export async function getRelatedSessionEvents(eventId: string) {
     } catch (error) {
         console.error("Database connection error in getRelatedSessionEvents:", error);
         return [];
+    }
+}
+
+export async function getPlateAnalysis(plate: string) {
+    try {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        const events = await prisma.accessEvent.findMany({
+            where: {
+                plateDetected: plate,
+                timestamp: {
+                    gte: sevenDaysAgo
+                }
+            },
+            orderBy: {
+                timestamp: 'desc'
+            },
+            select: {
+                id: true,
+                direction: true,
+                timestamp: true,
+                decision: true
+            }
+        });
+
+        const totalEvents = events.length;
+        const entries = events.filter(e => e.direction === 'ENTRY').length;
+        const exits = events.filter(e => e.direction === 'EXIT').length;
+        const grants = events.filter(e => e.decision === 'GRANT').length;
+        const denies = events.filter(e => e.decision === 'DENY').length;
+        const lastVisit = events[0]?.timestamp || null;
+
+        return {
+            totalEvents,
+            entries,
+            exits,
+            grants,
+            denies,
+            lastVisit,
+            events: events.slice(0, 5) // últimos 5 eventos
+        };
+    } catch (error) {
+        console.error("Error in getPlateAnalysis:", error);
+        return {
+            totalEvents: 0,
+            entries: 0,
+            exits: 0,
+            grants: 0,
+            denies: 0,
+            lastVisit: null,
+            events: []
+        };
     }
 }

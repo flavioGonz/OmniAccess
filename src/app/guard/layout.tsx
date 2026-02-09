@@ -7,6 +7,8 @@ const montserrat = Montserrat({
     variable: "--font-montserrat",
 });
 
+import { PushNotificationManager } from "@/components/PushNotificationManager";
+
 export default function GuardLayout({
     children,
 }: {
@@ -14,6 +16,7 @@ export default function GuardLayout({
 }) {
     return (
         <div className={`${montserrat.variable} font-sans fixed inset-0 bg-slate-100 text-slate-900 overflow-hidden selection:bg-[#B20D30] selection:text-white`}>
+            <PushNotificationManager />
             {children}
         </div>
     );

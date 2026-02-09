@@ -711,3 +711,43 @@ export async function clearLearnedPlates() {
         return { success: false, message: "Error al borrar las matrículas aprendidas" };
     }
 }
+export async function uploadBrandingFile(formData: FormData) {
+    try {
+        const file = formData.get("file") as File;
+        if (!file) throw new Error("No se proporcionó ningún archivo");
+
+        const bytes = await file.arrayBuffer();
+        const buffer = Buffer.from(bytes);
+
+        const uploadDir = path.join(process.cwd(), "public", "branding");
+        await fs.mkdir(uploadDir, { recursive: true });
+
+        const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
+        const filePath = path.join(uploadDir, fileName);
+        await fs.writeFile(filePath, buffer);
+
+        return { success: true, url: `/branding/${fileName}` };
+    } catch (error: any) {
+        console.error("Error uploading branding file:", error);
+        return { success: false, message: error.message };
+    }
+}
+
+export async function saveGuardBranding(settings: Record<string, string>) {
+    try {
+        await prisma.$transaction(
+            Object.entries(settings).map(([key, value]) =>
+                prisma.setting.upsert({
+                    where: { key },
+                    update: { value },
+                    create: { key, value },
+                })
+            )
+        );
+        revalidatePath("/guard");
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error saving guard branding:", error);
+        return { success: false, message: error.message };
+    }
+}

@@ -17,6 +17,20 @@ import { cn } from "@/lib/utils";
 
 const changes = [
     {
+        version: "v1.8.1",
+        date: "2026-02-09",
+        title: "Console UI Refinements",
+        description: "Rediseño de nodos de consola, optimización de espacio y alertas mejoradas.",
+        items: [
+            { type: "improvement", text: "Admin Console: Eliminación de panel derecho para maximizar visualización de topología." },
+            { type: "feature", text: "Admin Console: Botón flotante para mapa táctico y acciones rápidas." },
+            { type: "feature", text: "UI: Nodos de consola con diseño 'Tablet' y manejo de conexiones superior." },
+            { type: "fix", text: "Alertas: Corregido bug de alerta 'Sistema Normalizado' al recargar." },
+            { type: "improvement", text: "UX: Notificaciones de éxito ahora usan color verde esmeralda." },
+            { type: "improvement", text: "Docs: Actualización de documentación de eventos Socket.io en agents.md." }
+        ]
+    },
+    {
         version: "v1.8.0",
         date: "2026-02-06",
         title: "Build Stability & Panic Protocol v2",

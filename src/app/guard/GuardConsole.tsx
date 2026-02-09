@@ -28,7 +28,12 @@ import {
     Play,
     Volume2,
     Building2,
+    Map as MapIcon,
+    ShieldAlert,
+    Navigation,
     UserCheck,
+    UserX,
+    CarFront,
     Briefcase,
     Home,
     Plus,
@@ -40,30 +45,40 @@ import {
     Bike,
     Zap,
     Monitor,
-    Maximize2
+    Maximize2,
+    Calendar,
+    Eye
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { createBitacoraEntry, deleteBitacoraEntry, getBitacoraPage } from "@/app/actions/bitacora";
-import { getAccessEvents } from "@/app/actions/history";
+import { getAccessEvents, getPlateAnalysis } from "@/app/actions/history";
+import { getQuickCreateData } from "@/app/actions/users";
+import { UserFormDialog } from "@/components/UserFormDialog";
 import { toast } from "sonner";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { io } from "socket.io-client";
 import { useInView } from "react-intersection-observer";
+import { saveGuardBranding, uploadBrandingFile } from "@/app/actions/settings";
+
+import dynamic from 'next/dynamic';
+const LiveGuardMap = dynamic(() => import('@/components/LiveGuardMap'), { ssr: false });
 
 interface GuardConsoleProps {
     initialEntries: any[];
     logo: string;
+    headerColor: string;
+    initialIcons: Record<string, string>;
     units: any[];
 }
 
-type TabType = "control" | "history" | "alerts" | "lpr";
+type TabType = "control" | "history" | "alerts" | "lpr" | "map";
 
 
-export default function GuardConsole({ initialEntries, logo, units }: GuardConsoleProps) {
+export default function GuardConsole({ initialEntries, logo, headerColor, initialIcons, units }: GuardConsoleProps) {
     const [activeTab, setActiveTab] = useState<TabType>("control");
     const [entries, setEntries] = useState(initialEntries);
     const [type, setType] = useState<"ENTRY" | "EXIT">("ENTRY");
@@ -77,6 +92,7 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
     const [originType, setOriginType] = useState<"PARTICULAR" | "EMPRESA" | "IMM" | "POLICIA" | "BOMBEROS" | "AMBULANCIA">("PARTICULAR");
     const [company, setCompany] = useState("");
     const [socket, setSocket] = useState<any>(null);
+    const [monitoringMissions, setMonitoringMissions] = useState<any[]>([]); // For observing multiple ongoing alerts
     const [guardName, setGuardName] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
@@ -84,6 +100,7 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
     const [currentTime, setCurrentTime] = useState(new Date());
     const [showSuccessOverlay, setShowSuccessOverlay] = useState(false);
     const [showAlarmSplash, setShowAlarmSplash] = useState(false);
+    const isFirstAlertStatusReceived = useRef(false);
     const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null);
     const [isTransitioning, setIsTransitioning] = useState(false);
     const [isAlertMode, setIsAlertMode] = useState(false);
@@ -98,6 +115,83 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
     const [lprEntries, setLprEntries] = useState<any[]>([]);
     const [isLprLoading, setIsLprLoading] = useState(false);
     const [lprSearch, setLprSearch] = useState("");
+    const [lprDate, setLprDate] = useState(new Date().toISOString().split('T')[0]);
+
+    // Alerts History state
+    const [alertsSearch, setAlertsSearch] = useState("");
+    const [alertsDate, setAlertsDate] = useState(new Date().toISOString().split('T')[0]);
+
+    // Image Viewer state
+    const [viewerData, setViewerData] = useState<{
+        url: string,
+        plate?: string,
+        name?: string,
+        unit?: string,
+        direction?: string,
+        confidence?: number,
+        timestamp?: string,
+        deviceName?: string
+    } | null>(null);
+    const viewerImage = viewerData?.url || null;
+    const setViewerImage = (url: string | null) => setViewerData(url ? { url } : null);
+
+    // Plate Analysis state
+    const [plateAnalysis, setPlateAnalysis] = useState<any>(null);
+    const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+
+    // Quick Create States
+    const [showQuickCreate, setShowQuickCreate] = useState(false);
+    const [quickCreateContext, setQuickCreateContext] = useState<any>(null);
+    const [quickCreateData, setQuickCreateData] = useState<any>(null);
+    const [loadingQuickCreateData, setLoadingQuickCreateData] = useState(false);
+
+    // Alert Normalization Modal
+    const [showNormalizationModal, setShowNormalizationModal] = useState(false);
+    const [normalizationText, setNormalizationText] = useState("");
+
+    // Settings / Configuration
+    const [showSettingsModal, setShowSettingsModal] = useState(false);
+    const [customLogo, setCustomLogo] = useState<string | null>(logo);
+    const [customHeaderColor, setCustomHeaderColor] = useState<string>(headerColor);
+    const [customIcons, setCustomIcons] = useState<Record<string, string>>(initialIcons);
+    const [isSavingBranding, setIsSavingBranding] = useState(false);
+
+    const [guardPhoto, setGuardPhoto] = useState<string | null>(null);
+
+    useEffect(() => {
+        // We still support local guard photo, but branding is now server-side
+        const savedPhoto = localStorage.getItem("guard_photo");
+        if (savedPhoto) setGuardPhoto(savedPhoto);
+    }, []);
+
+    // Refs for socket listeners to access current state
+    const lprSearchRef = useRef(lprSearch);
+    const lprDateRef = useRef(lprDate);
+    const activeTabRef = useRef(activeTab);
+
+    useEffect(() => { lprSearchRef.current = lprSearch; }, [lprSearch]);
+    useEffect(() => { lprDateRef.current = lprDate; }, [lprDate]);
+    useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
+
+    // MAP & GPS STATES
+    const [myLocation, setMyLocation] = useState<{ lat: number, lng: number } | null>(null);
+    const [otherGuards, setOtherGuards] = useState<any[]>([]);
+
+    // UNIT VEHICLE PROMPT
+    const [showVehiclePrompt, setShowVehiclePrompt] = useState(false);
+    const [availableVehicles, setAvailableVehicles] = useState<any[]>([]);
+
+    // PROFILE MENU
+    const [showProfileMenu, setShowProfileMenu] = useState(false);
+    const [showCameraModal, setShowCameraModal] = useState(false);
+
+    // BACKUP REQUEST STATES
+    const [backupLocation, setBackupLocation] = useState<{ lat: number, lng: number } | null>(null);
+    const [showBackupModal, setShowBackupModal] = useState(false);
+    const [incomingBackup, setIncomingBackup] = useState<any>(null);
+    const [activeMission, setActiveMission] = useState<any>(null);
+    const [showResolutionModal, setShowResolutionModal] = useState(false);
+    const [backupDetail, setBackupDetail] = useState("");
 
     // Audio States
     const [isRecording, setIsRecording] = useState(false);
@@ -109,6 +203,10 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
     // Audio recording timer state
     const [recordingDuration, setRecordingDuration] = useState(0);
     const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Profile Camera Refs
+    const profileVideoRef = useRef<HTMLVideoElement>(null);
+    const profileCanvasRef = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {
         if (isRecording) {
@@ -128,6 +226,21 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
+    // Load plate analysis when viewer opens with a plate
+    useEffect(() => {
+        if (viewerData?.plate && viewerData.plate !== '--- ---') {
+            setLoadingAnalysis(true);
+            getPlateAnalysis(viewerData.plate).then(analysis => {
+                setPlateAnalysis(analysis);
+                setLoadingAnalysis(false);
+            }).catch(() => {
+                setLoadingAnalysis(false);
+            });
+        } else {
+            setPlateAnalysis(null);
+        }
+    }, [viewerData?.plate]);
+
     const { ref: loadMoreRef, inView } = useInView({
         threshold: 0.5,
     });
@@ -138,6 +251,43 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
     const showNotification = (title: string, message: string, type: "success" | "error" | "info" | "alert" = "success", duration: number = 2000) => {
         setNotification({ type, title, message });
         setTimeout(() => setNotification(null), duration);
+    };
+
+    // Profile Camera Logic
+    useEffect(() => {
+        let stream: MediaStream | null = null;
+        if (showCameraModal) {
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+                .then(s => {
+                    stream = s;
+                    if (profileVideoRef.current) profileVideoRef.current.srcObject = s;
+                })
+                .catch(err => console.error("Profile camera error:", err));
+        }
+        return () => {
+            if (stream) stream.getTracks().forEach(track => track.stop());
+        };
+    }, [showCameraModal]);
+
+    const captureProfilePhoto = () => {
+        if (profileVideoRef.current && profileCanvasRef.current) {
+            const video = profileVideoRef.current;
+            const canvas = profileCanvasRef.current;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext("2d");
+            if (ctx) {
+                // Flip horizontally for mirror effect if needed
+                ctx.translate(canvas.width, 0);
+                ctx.scale(-1, 1);
+                ctx.drawImage(video, 0, 0);
+                const dataUrl = canvas.toDataURL("image/jpeg");
+                setGuardPhoto(dataUrl);
+                localStorage.setItem("guard_photo", dataUrl);
+                setShowCameraModal(false);
+                playTactileSound();
+            }
+        }
     };
 
     useEffect(() => {
@@ -177,45 +327,165 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
 
         // Emit presence every 4 seconds for a tighter keepalive
         const heartBeat = setInterval(() => {
-            newSocket.emit('guard_presence', {
-                guardName: guardName || 'Invitado',
-                status: 'online',
-                timestamp: new Date().toISOString(),
-                reportedIp: detectedLocalIp // Send the IP we found
-            });
+            if (newSocket.connected) {
+                newSocket.emit('guard_presence', {
+                    guardName: guardName || 'Invitado',
+                    status: 'online',
+                    timestamp: new Date().toISOString(),
+                    reportedIp: detectedLocalIp // Send the IP we found
+                });
+            }
         }, 4000);
 
         newSocket.on('alert_status', (data: any) => {
+            const previousState = isAlertMode;
             setIsAlertMode(data.active);
+
+            // Solo mostrar notificaciones si no es la primera vez (evita mensaje al recargar)
+            if (!isFirstAlertStatusReceived.current) {
+                isFirstAlertStatusReceived.current = true;
+                return;
+            }
+
             if (data.active) {
-                // Trigger PWA notification if possible
                 if ("Notification" in window && Notification.permission === "granted") {
                     new Notification("⚠️ ALERTA DE SEGURIDAD", {
                         body: `Modo de alerta activado por ${data.triggeredBy || "un compañero"}.`,
-                        icon: "/logo-transparent.png",
+                        icon: "/icons/sildan-icon-dot.png",
                         tag: "security-alert"
                     });
                 }
-
-                // Show High Impact Splash Screen
+                if ('setAppBadge' in navigator) (navigator as any).setAppBadge(1).catch(() => { });
                 setShowAlarmSplash(true);
                 setTimeout(() => setShowAlarmSplash(false), 4000);
-
-                // Keep the tactile vibration but remove the "ugly toast"
-            } else {
-                showNotification("SISTEMA NORMALIZADO", "La alerta de seguridad ha sido desactivada correctamente.", "success");
+            } else if (previousState) {
+                const message = data.explanation
+                    ? `La alerta ha sido desactivada. Motivo: ${data.explanation}`
+                    : "La alerta de seguridad ha sido desactivada correctamente.";
+                showNotification("SISTEMA NORMALIZADO", message, "success", 50000);
+                if ('clearAppBadge' in navigator) (navigator as any).clearAppBadge().catch(() => { });
             }
         });
 
         newSocket.on('new_bitacora', (entry: any) => {
-            setEntries(prev => [entry, ...prev]);
+            setEntries(prev => {
+                if (prev.some(e => e.id === entry.id)) return prev;
+                return [entry, ...prev];
+            });
         });
+
+        newSocket.on('NEW_ACCESS', (event: any) => {
+            const isLpr = activeTabRef.current === "lpr";
+            // Check if the event matches the current date filter
+            const eventDate = new Date(event.timestamp).toISOString().split('T')[0];
+            const isSameDate = lprDateRef.current === eventDate;
+
+            // Check search filter
+            const search = lprSearchRef.current.toUpperCase();
+            const matchesSearch = !search ||
+                (event.plateDetected || "").toUpperCase().includes(search) ||
+                (event.user?.name || "").toUpperCase().includes(search) ||
+                (event.user?.unit?.name || "").toUpperCase().includes(search);
+
+            if (isLpr && isSameDate && matchesSearch && (event.accessType === "PLATE" || event.plateDetected)) {
+                setLprEntries(prev => {
+                    if (prev.find(e => e.id === event.id)) return prev;
+                    return [event, ...prev];
+                });
+            }
+        });
+
+        // MISSION & BACKUP LISTENERS (CONSOLIDATED)
+        newSocket.on('active_missions', (data: any[]) => {
+            setMonitoringMissions(data);
+        });
+
+        newSocket.on('backup_requested', (data: any) => {
+            setIncomingBackup(data);
+            setMonitoringMissions(prev => {
+                if (prev.find(m => m.id === data.id)) return prev;
+                return [...prev, data];
+            });
+            if ('setAppBadge' in navigator) (navigator as any).setAppBadge(1).catch(() => { });
+            if ("vibrate" in navigator) navigator.vibrate([200, 100, 200, 100, 500]);
+            playTactileSound();
+        });
+
+        newSocket.on('backup_status_update', (data: any) => {
+            setActiveMission((prev: any) => {
+                if (prev && (prev.id === data.requestId)) {
+                    return { ...prev, status: data.accepted ? 'ACCEPTED' : 'REJECTED', responderId: data.responderId, responderName: data.responderName };
+                }
+                return prev;
+            });
+            setMonitoringMissions(prev => prev.map(m =>
+                m.id === data.requestId
+                    ? { ...m, status: data.accepted ? 'ACCEPTED' : 'REJECTED', responderId: data.responderId, responderName: data.responderName }
+                    : m
+            ));
+            if (data.accepted) {
+                showNotification("APOYO EN CAMINO", `${data.responderName} ha aceptado la solicitud.`, "success");
+                setIncomingBackup(null);
+            }
+        });
+
+        newSocket.on('backup_resolved', (data: any) => {
+            setActiveMission((prev: any) => prev?.id === data.requestId ? null : prev);
+            setMonitoringMissions(prev => prev.filter(m => m.id !== data.requestId));
+            setIncomingBackup(null);
+            showNotification("ALERTA FINALIZADA", `El incidente ha sido gestionado por ${data.resolverName}.`, "success", 5000);
+            if ('clearAppBadge' in navigator) (navigator as any).clearAppBadge().catch(() => { });
+        });
+
+        newSocket.on('backup_cancelled', (data: any) => {
+            setActiveMission((prev: any) => prev?.id === data.requestId ? null : prev);
+            setMonitoringMissions(prev => prev.filter(m => m.id !== data.requestId));
+            setIncomingBackup(null);
+            showNotification("ALERTA CANCELADA", `La alerta fue cancelada por ${data.cancelledBy}.`, "info");
+        });
+
+        newSocket.on('guard_locations', (data: any) => {
+            setOtherGuards(data);
+        });
+
+        // GPS WATCHER (CONTINUOUS IN BACKGROUND)
+        let watchId: number | null = null;
+        if ("geolocation" in navigator) {
+            watchId = navigator.geolocation.watchPosition(
+                (position) => {
+                    const { latitude, longitude, accuracy } = position.coords;
+                    setMyLocation({ lat: latitude, lng: longitude });
+                    if (newSocket && newSocket.connected) {
+                        try {
+                            const storedName = localStorage.getItem("guardName");
+                            newSocket.emit('guard_location_update', {
+                                lat: latitude,
+                                lng: longitude,
+                                accuracy,
+                                guardName: storedName || guardName || "Operario",
+                                timestamp: Date.now()
+                            });
+                        } catch (e) {
+                            console.error("Socket emit error", e);
+                        }
+                    }
+                },
+                (error) => console.error("GPS Error:", error),
+                {
+                    enableHighAccuracy: true,
+                    maximumAge: 0,
+                    timeout: 10000
+                }
+            );
+        }
 
         return () => {
             clearInterval(heartBeat);
-            newSocket.close();
+            if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+            newSocket.disconnect();
         };
     }, [guardName]);
+
 
     // Notification Permission Request
     useEffect(() => {
@@ -223,6 +493,26 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
             Notification.requestPermission();
         }
     }, []);
+
+    const handleQuickCreateClick = async (data: { plate?: string, cara?: string, name?: string }) => {
+        setQuickCreateContext(data);
+        if (quickCreateData) {
+            setShowQuickCreate(true);
+            return;
+        }
+
+        setLoadingQuickCreateData(true);
+        try {
+            const data = await getQuickCreateData();
+            setQuickCreateData(data);
+            setShowQuickCreate(true);
+        } catch (error) {
+            console.error("Error fetching quick create data:", error);
+            toast.error("Error al cargar datos de creación rápida");
+        } finally {
+            setLoadingQuickCreateData(false);
+        }
+    };
 
     // Alarm Audio Control
     useEffect(() => {
@@ -253,10 +543,14 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
         return () => clearInterval(interval);
     }, [isAlertMode]);
 
-    const toggleAlertMode = (forcedState?: boolean) => {
+    const toggleAlertMode = (forcedState?: boolean, explanation?: string) => {
         if (!socket) return;
         const newState = forcedState !== undefined ? forcedState : !isAlertMode;
-        socket.emit("alert_toggle", { active: newState, triggeredBy: guardName || "Invitado" });
+        socket.emit("alert_toggle", {
+            active: newState,
+            triggeredBy: guardName || "Invitado",
+            explanation: explanation || ""
+        });
     };
 
     // Panic Button Hold Logic
@@ -297,9 +591,10 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
             setDeactivateHoldProgress(progress);
             if (progress >= 100) {
                 clearInterval(deactivateHoldRef.current);
-                toggleAlertMode(false);
                 setDeactivateHoldProgress(0);
                 if ("vibrate" in navigator) navigator.vibrate([200, 100, 200]);
+                // Abrir modal para pedir explicación
+                setShowNormalizationModal(true);
             }
         }, 50);
     };
@@ -345,6 +640,7 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
         if (tempGuardName.trim()) {
             saveGuardName(tempGuardName);
             setShowIdentityOverlay(false);
+            setShowProfileMenu(false); // Ensure menu is closed
             showNotification("BIENVENIDO", `Sesión iniciada como ${tempGuardName}. GuardConsole v2.1 activo.`, "success");
         }
     };
@@ -441,10 +737,17 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
             if (activeTab === "lpr") {
                 setIsLprLoading(true);
                 try {
+                    const from = new Date(lprDate);
+                    from.setHours(0, 0, 0, 0);
+                    const to = new Date(lprDate);
+                    to.setHours(23, 59, 59, 999);
+
                     const { events } = await getAccessEvents({
                         type: 'PLATE',
-                        take: 30,
-                        search: lprSearch
+                        take: 50,
+                        search: lprSearch,
+                        from,
+                        to
                     });
                     setLprEntries(events);
                 } catch (error) {
@@ -456,7 +759,7 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
         };
         const timer = setTimeout(fetchLPR, 500);
         return () => clearTimeout(timer);
-    }, [activeTab, lprSearch]);
+    }, [activeTab, lprSearch, lprDate]);
 
     // TACTILE SOUND UTILITY
     const playTactileSound = () => {
@@ -477,8 +780,13 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
 
     // PLATE MATCH DETECTION
     useEffect(() => {
-        if (plate.length >= 6) {
-            const match = entries.find(e => e.plate?.toUpperCase() === plate.toUpperCase());
+        const cleanPlate = plate.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+        if (cleanPlate.length >= 4) {
+            const match = entries.find(e => {
+                const cleanEntryPlate = (e.plate || "").replace(/[^A-Z0-9]/gi, '').toUpperCase();
+                return cleanEntryPlate === cleanPlate;
+            });
+
             if (match && !showMatchPrompt && (name !== match.name || dni !== match.dni)) {
                 setMatchingEntry(match);
                 setShowMatchPrompt(true);
@@ -625,9 +933,10 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
             formData.append("destination", selectedUnit ? selectedUnit.name + (selectedUnit.number ? ` (${selectedUnit.number})` : "") : "");
             formData.append("guardName", guardName.trim());
 
-            if (location) {
-                formData.append("latitude", location.lat.toString());
-                formData.append("longitude", location.lng.toString());
+            const finalLocation = myLocation || location;
+            if (finalLocation) {
+                formData.append("latitude", finalLocation.lat.toString());
+                formData.append("longitude", finalLocation.lng.toString());
             }
 
             if (capturedPhoto) {
@@ -644,14 +953,12 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
 
             setShowSuccessOverlay(true);
             setTimeout(() => {
-                setEntries(prev => [newEntry as any, ...prev]);
                 setPlate(""); setNotes(""); setName(""); setDni(""); setCompany("");
                 setSelectedUnit(null); setUnitSearch("");
                 setCapturedPhoto(null);
                 setAudioBlob(null);
                 setAudioUrl(null);
                 setShowSuccessOverlay(false);
-                showNotification("REGISTRO EXITOSO", `Entrada de ${plate.toUpperCase()} guardada en bitácora.`, "success");
             }, 1500);
         } catch (err) {
             console.error("Submit error:", err);
@@ -693,23 +1000,40 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
                             {/* Animated Logo Branding */}
                             <motion.div
                                 animate={{
-                                    opacity: [0.7, 1, 0.7],
                                     scale: [0.98, 1.02, 0.98],
+                                    opacity: [0.8, 1, 0.8]
                                 }}
                                 transition={{
-                                    duration: 3,
+                                    duration: 4,
                                     repeat: Infinity,
                                     ease: "easeInOut"
                                 }}
-                                className="w-48 h-48 flex items-center justify-center p-4 mb-12"
+                                className="w-64 h-64 relative mb-12 p-4 flex items-center justify-center bg-white rounded-full shadow-inner"
                             >
-                                <Image src="/logo-transparent.png" alt="Logo" width={200} height={200} className="object-contain" />
+                                <Image
+                                    src={customLogo || logo || "/logo-transparent.png"}
+                                    alt="Logo"
+                                    width={200}
+                                    height={200}
+                                    className="object-contain drop-shadow-xl"
+                                    priority
+                                />
+                                <motion.div
+                                    animate={{ rotate: 360 }}
+                                    transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+                                    className="absolute inset-0 border-t-2 border-r-2 border-[#B20D30]/20 rounded-full"
+                                />
                             </motion.div>
 
-                            <div className="bg-slate-50 border-2 border-black transition-all duration-300 p-10 rounded-[3.5rem] shadow-2xl w-full flex flex-col items-center gap-8">
+                            <div className="bg-white border-2 border-slate-100 transition-all duration-300 p-10 rounded-[4rem] shadow-2xl w-full flex flex-col items-center gap-10">
                                 <div className="text-center">
-                                    <h1 className="text-4xl font-black text-black uppercase tracking-tighter mb-2">OmniAccess</h1>
-                                    <p className="text-[12px] text-black font-black uppercase font-bold uppercase tracking-widest">Identificación de Operario</p>
+                                    <div className="flex items-center justify-center gap-3 mb-4">
+                                        <div className="w-12 h-12 bg-black rounded-2xl flex items-center justify-center">
+                                            <Shield className="text-white" size={24} />
+                                        </div>
+                                        <h1 className="text-4xl font-black text-black uppercase tracking-tighter">SecureAccess</h1>
+                                    </div>
+                                    <p className="text-[12px] text-black/40 font-black uppercase tracking-[0.4em]">Consola de Seguridad</p>
                                 </div>
 
                                 <div className="w-full space-y-3">
@@ -760,7 +1084,7 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
                             }}
                             className="w-40 h-40 flex items-center justify-center p-6 mb-4"
                         >
-                            <Image src="/logo-transparent.png" alt="Loading" width={160} height={160} className="object-contain" />
+                            <Image src={customLogo || logo || "/logo-transparent.png"} alt="Loading" width={160} height={160} className="object-contain" />
                         </motion.div>
                         <motion.p
                             initial={{ opacity: 0, y: 10 }}
@@ -980,18 +1304,45 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative pb-24">
                 <div className="flex-1 overflow-hidden relative">
                     <AnimatePresence mode="wait">
+                        {activeTab === "map" && (
+                            <motion.div key="map" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full w-full relative z-0">
+                                <LiveGuardMap
+                                    myLocation={myLocation}
+                                    guards={otherGuards}
+                                    socketId={socket?.id}
+                                    onLongPress={(latlng) => {
+                                        setBackupLocation(latlng);
+                                        setShowBackupModal(true);
+                                        playTactileSound();
+                                    }}
+                                    backupMissions={monitoringMissions.map(m => ({
+                                        ...m,
+                                        responderLocation: m.responderId === socket?.id
+                                            ? myLocation
+                                            : (otherGuards.find(g => g.socketId === m.responderId) || null)
+                                    }))}
+                                    onAlertClick={(mission) => {
+                                        // Any guard can manage if it's PENDING or if they are involved
+                                        setActiveMission(mission);
+                                        setShowResolutionModal(true);
+                                        setBackupDetail(mission.details || "");
+                                    }}
+                                />
+                            </motion.div>
+                        )}
                         {activeTab === "control" && (
                             <motion.div key="control" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.02 }} transition={{ duration: 0.2 }} className="h-full w-full overflow-y-auto p-4 md:p-8 pb-64 custom-scrollbar">
 
                                 <div className="max-w-7xl mx-auto flex flex-col gap-10">
                                     {/* TOP TOGGLE (ENTRY/EXIT) */}
-                                    <div className="grid grid-cols-2 gap-8">
+                                    {/* TOP TOGGLE (ENTRY/EXIT) */}
+                                    <div className="flex items-center gap-6">
                                         <motion.button
                                             whileHover={{ scale: 1.02 }}
                                             whileTap={{ scale: 0.98 }}
                                             onClick={() => { playTactileSound(); setType("ENTRY"); }}
                                             className={cn(
-                                                "h-28 rounded-[2rem] border-2 flex flex-col items-center justify-center gap-2 transition-all relative overflow-hidden group",
+                                                "flex-1 h-28 rounded-[2rem] border-2 flex flex-col items-center justify-center gap-2 transition-all relative overflow-hidden group",
                                                 type === "ENTRY"
                                                     ? "bg-gradient-to-br from-[#B20D30] to-[#E53935] border-[#B20D30] text-white shadow-xl shadow-[#B20D30]/20"
                                                     : "bg-white border-black transition-all duration-300 text-black/40 hover:bg-slate-50"
@@ -1002,12 +1353,17 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
                                             {type === "ENTRY" && <div className="absolute top-0 right-0 w-12 h-12 bg-white/10 rounded-full -mr-6 -mt-6" />}
                                         </motion.button>
 
+                                        {/* CENTER LOGO */}
+                                        <div className="w-24 h-24 flex items-center justify-center shrink-0">
+                                            <Image src={customLogo || logo || "/logo-transparent.png"} alt="Logo" width={100} height={100} className="object-contain drop-shadow-md" />
+                                        </div>
+
                                         <motion.button
                                             whileHover={{ scale: 1.02 }}
                                             whileTap={{ scale: 0.98 }}
                                             onClick={() => { playTactileSound(); setType("EXIT"); }}
                                             className={cn(
-                                                "h-28 rounded-[2rem] border-2 flex flex-col items-center justify-center gap-2 transition-all relative overflow-hidden group",
+                                                "flex-1 h-28 rounded-[2rem] border-2 flex flex-col items-center justify-center gap-2 transition-all relative overflow-hidden group",
                                                 type === "EXIT"
                                                     ? "bg-gradient-to-br from-orange-600 to-amber-500 border-orange-600 text-white shadow-xl shadow-orange-600/20"
                                                     : "bg-white border-black transition-all duration-300 text-black/40 hover:bg-slate-50"
@@ -1026,12 +1382,6 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
                                             <div className="bg-transparent space-y-10 group transition-all">
                                                 <div className="flex flex-col gap-10">
                                                     <div className="flex-1 w-full space-y-6">
-                                                        <div className="flex items-center gap-4 ml-4">
-                                                            <div className="w-10 h-10 rounded-2xl bg-black flex items-center justify-center text-white shadow-lg">
-                                                                <Monitor size={20} />
-                                                            </div>
-                                                            <Label className="text-sm font-black uppercase text-black tracking-[0.3em]">Identificación de Matrícula</Label>
-                                                        </div>
                                                         <div className="flex justify-center overflow-hidden py-4">
                                                             <TactilePlateInput value={plate} onChange={setPlate} />
                                                         </div>
@@ -1236,6 +1586,21 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
                                                                 setSelectedUnit(u);
                                                                 setShowUnitPicker(false);
                                                                 playTactileSound();
+
+                                                                // AUTO-FILL LOGIC
+                                                                const vehicles: any[] = [];
+                                                                if (u.users) {
+                                                                    u.users.forEach((user: any) => {
+                                                                        if (user.vehicles) {
+                                                                            user.vehicles.forEach((v: any) => vehicles.push({ ...v, ownerName: user.name }));
+                                                                        }
+                                                                    });
+                                                                }
+
+                                                                if (vehicles.length > 0) {
+                                                                    setAvailableVehicles(vehicles);
+                                                                    setShowVehiclePrompt(true);
+                                                                }
                                                             }}
                                                             className={cn(
                                                                 "min-h-[220px] rounded-[3rem] border-2 flex flex-col items-center justify-center gap-6 transition-all relative overflow-hidden group",
@@ -1325,21 +1690,37 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
                                         {/* Panic / Alert Button - Hold to Activate */}
                                         <div className="relative">
                                             <motion.button
+                                                style={{ touchAction: "none" }}
                                                 whileHover={{ scale: 1.1 }}
                                                 whileTap={{ scale: 0.9 }}
-                                                onClick={() => {
+                                                onClick={(e) => {
                                                     if (isAlertMode) {
                                                         toggleAlertMode();
                                                         playTactileSound();
                                                     }
                                                 }}
-                                                onMouseDown={!isAlertMode ? startPanicHold : undefined}
-                                                onMouseUp={!isAlertMode ? cancelPanicHold : undefined}
-                                                onMouseLeave={!isAlertMode ? cancelPanicHold : undefined}
-                                                onTouchStart={!isAlertMode ? startPanicHold : undefined}
-                                                onTouchEnd={!isAlertMode ? cancelPanicHold : undefined}
+                                                onMouseDown={(e) => {
+                                                    if (!isAlertMode) startPanicHold();
+                                                }}
+                                                onMouseUp={(e) => {
+                                                    if (!isAlertMode) cancelPanicHold();
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                    if (!isAlertMode) cancelPanicHold();
+                                                }}
+                                                onTouchStart={(e) => {
+                                                    // Prevent default to avoid scrolling while holding
+                                                    // e.preventDefault(); // CAUTION: e.preventDefault() on touchstart might block click depending on browser
+                                                    // but we do want to block scroll.
+                                                    if (!isAlertMode) {
+                                                        startPanicHold();
+                                                    }
+                                                }}
+                                                onTouchEnd={(e) => {
+                                                    if (!isAlertMode) cancelPanicHold();
+                                                }}
                                                 className={cn(
-                                                    "w-16 h-16 rounded-[1.8rem] flex items-center justify-center transition-all shadow-lg relative z-10",
+                                                    "w-16 h-16 rounded-[1.8rem] flex items-center justify-center transition-all shadow-lg relative z-10 select-none",
                                                     isAlertMode ? "bg-white text-red-600 animate-bounce" : "bg-red-500 text-white"
                                                 )}
                                             >
@@ -1365,6 +1746,8 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
                                         </div>
 
                                         <div className={cn("h-px mx-2", isAlertMode ? "bg-white/20" : "bg-black/10")} />
+
+
                                         {/* Classification Button - Dynamic Icon */}
                                         <motion.button
                                             whileHover={{ scale: 1.05 }}
@@ -1471,168 +1854,285 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
                         )}
 
                         {activeTab === "alerts" && (
-                            <motion.div key="alerts" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="h-full w-full overflow-y-auto px-8 pt-6 pb-40 custom-scrollbar">
-                                <div className="max-w-7xl mx-auto space-y-10">
-                                    <div className="flex items-center justify-between">
+                            <motion.div key="alerts" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="h-full w-full overflow-y-auto px-8 pt-6 pb-40 custom-scrollbar">
+                                <div className="max-w-7xl mx-auto space-y-8">
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between sticky top-0 bg-slate-50/95 backdrop-blur-md py-6 z-30 gap-6">
                                         <div>
-                                            <h2 className="text-4xl font-black uppercase tracking-tighter text-black leading-none">Eventos Críticos</h2>
-                                            <p className="text-[10px] text-[#B20D30] font-black uppercase tracking-[0.3em] mt-3 flex items-center gap-2">
-                                                <Siren size={14} className="animate-pulse" /> Registro de activación de botón de pánico
-                                            </p>
+                                            <h2 className="text-3xl font-black uppercase tracking-tighter text-black leading-none">Eventos Críticos</h2>
+                                            <p className="text-[10px] text-[#B20D30] font-black uppercase tracking-[0.3em] mt-2">Registro de activación de botón de pánico</p>
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                            <div className="relative group">
+                                                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-black/20 group-focus-within:text-[#B20D30] transition-colors" size={18} />
+                                                <Input
+                                                    type="date"
+                                                    value={alertsDate}
+                                                    onChange={(e) => setAlertsDate(e.target.value)}
+                                                    className="pl-12 h-14 w-48 bg-white/40 backdrop-blur-md border border-black rounded-2xl font-black text-xs uppercase tracking-widest transition-all focus:border-[#B20D30]/50 shadow-sm"
+                                                />
+                                            </div>
+                                            <div className="relative group">
+                                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-black/20 group-focus-within:text-[#B20D30] transition-colors" size={18} />
+                                                <Input
+                                                    placeholder="BUSCAR OPERARIO..."
+                                                    value={alertsSearch}
+                                                    onChange={(e) => setAlertsSearch(e.target.value)}
+                                                    className="pl-12 h-14 w-80 bg-white/40 backdrop-blur-md border border-black rounded-2xl font-black text-xs uppercase tracking-widest transition-all focus:border-[#B20D30]/50 shadow-sm"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                                        {(() => {
-                                            const alertArr = entries.filter(e => e.type.includes("ALERTA"));
-                                            if (alertArr.length === 0) return (
-                                                <div className="col-span-full py-40 flex flex-col items-center gap-6 opacity-20">
-                                                    <Shield size={80} />
-                                                    <p className="text-xl font-black uppercase tracking-[0.5em]">Historial de Alertas Limpio</p>
-                                                </div>
-                                            );
+                                    <div className="w-full">
+                                        <table className="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr className="shadow-lg" style={{ backgroundColor: customHeaderColor }}>
+                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Activó</th>
+                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Normalizó</th>
+                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Duración</th>
+                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white text-right">Fecha/Hora</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50">
+                                                {(() => {
+                                                    const alertArr = entries.filter(e => {
+                                                        const isAlertType = e.type.includes("ALERTA");
+                                                        const matchesSearch = !alertsSearch || (e.guardName || "").toLowerCase().includes(alertsSearch.toLowerCase());
+                                                        const alertDate = new Date(e.timestamp || e.createdAt).toISOString().split('T')[0];
+                                                        const matchesDate = !alertsDate || alertDate === alertsDate;
 
-                                            return alertArr.map((alert, idx) => {
-                                                const isActive = alert.type === "ALERTA_ACTIVADA";
-                                                const deactivationEvent = alertArr[idx - 1]; // Anterior en el array (posterior en el tiempo)
-                                                let duration = "ACTIVA";
+                                                        return isAlertType && matchesSearch && matchesDate;
+                                                    });
 
-                                                if (isActive && deactivationEvent && deactivationEvent.type === "ALERTA_DESACTIVADA") {
-                                                    const diff = new Date(deactivationEvent.timestamp || deactivationEvent.createdAt).getTime() - new Date(alert.timestamp || alert.createdAt).getTime();
-                                                    const mins = Math.floor(diff / 60000);
-                                                    const secs = Math.floor((diff % 60000) / 1000);
-                                                    duration = `${mins}m ${secs}s`;
-                                                }
-
-                                                return (
-                                                    <motion.div
-                                                        key={alert.id}
-                                                        initial={{ opacity: 0, scale: 0.9 }}
-                                                        animate={{ opacity: 1, scale: 1 }}
-                                                        className={cn(
-                                                            "p-8 rounded-[2.5rem] border-2 transition-all duration-500",
-                                                            isActive ? "bg-red-600 border-white text-white shadow-2xl shadow-red-600/40" : "bg-white border-black text-black"
-                                                        )}
-                                                    >
-                                                        <div className="flex items-center justify-between mb-8">
-                                                            <div className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest", isActive ? "bg-white text-red-600" : "bg-black text-white")}>
-                                                                {isActive ? "ACTIVACIÓN" : "NORMALIZACIÓN"}
-                                                            </div>
-                                                            <Clock size={18} className={isActive ? "text-white/40" : "text-black/20"} />
-                                                        </div>
-
-                                                        <div className="space-y-6">
-                                                            <div>
-                                                                <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", isActive ? "text-white/60" : "text-black/40")}>Operario</p>
-                                                                <p className="text-xl font-black uppercase tracking-tight">{alert.guardName || "Sistema"}</p>
-                                                            </div>
-
-                                                            <div className="flex justify-between items-end">
-                                                                <div>
-                                                                    <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", isActive ? "text-white/60" : "text-black/40")}>Fecha y Hora</p>
-                                                                    <p className="text-sm font-bold opacity-80">{new Date(alert.timestamp || alert.createdAt).toLocaleString('es-UY', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
+                                                    if (alertArr.length === 0) return (
+                                                        <tr>
+                                                            <td colSpan={4} className="py-40 text-center">
+                                                                <div className="flex flex-col items-center gap-6 opacity-20 text-black">
+                                                                    <Shield size={80} />
+                                                                    <p className="text-xl font-black uppercase tracking-[0.5em]">Historial de Alertas Limpio</p>
                                                                 </div>
-                                                                {isActive && (
-                                                                    <div className="text-right">
-                                                                        <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", isActive ? "text-white/60" : "text-black/40")}>Duración</p>
-                                                                        <p className="text-sm font-black uppercase tracking-widest animate-pulse">{duration}</p>
+                                                            </td>
+                                                        </tr>
+                                                    );
+
+                                                    return alertArr.map((alert, idx) => {
+                                                        // Solo mostrar eventos de ACTIVACIÓN
+                                                        if (alert.type !== "ALERTA_ACTIVADA") return null;
+
+                                                        const deactivationEvent = entries.find(e =>
+                                                            e.type === "ALERTA_DESACTIVADA" &&
+                                                            new Date(e.timestamp || e.createdAt).getTime() > new Date(alert.timestamp || alert.createdAt).getTime()
+                                                        );
+
+                                                        let duration = "---";
+                                                        let isStillActive = false;
+                                                        if (deactivationEvent) {
+                                                            const diff = new Date(deactivationEvent.timestamp || deactivationEvent.createdAt).getTime() - new Date(alert.timestamp || alert.createdAt).getTime();
+                                                            const mins = Math.floor(diff / 60000);
+                                                            const secs = Math.floor((diff % 60000) / 1000);
+                                                            duration = `${mins}m ${secs}s`;
+                                                        } else {
+                                                            duration = "ACTIVA";
+                                                            isStillActive = true;
+                                                        }
+
+                                                        return (
+                                                            <tr key={alert.id} className="hover:bg-slate-50/50 transition-colors group">
+                                                                <td className="px-8 py-6">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="w-8 h-8 rounded-lg bg-red-100 text-red-600 flex items-center justify-center text-[10px] font-black">
+                                                                            {(alert.guardName || "SI").substring(0, 2).toUpperCase()}
+                                                                        </div>
+                                                                        <div>
+                                                                            <div className="text-xs font-bold text-black uppercase">{alert.guardName || "Sistema"}</div>
+                                                                            <div className="text-[9px] font-black text-red-600 uppercase tracking-wider">Activó Alerta</div>
+                                                                        </div>
                                                                     </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </motion.div>
-                                                );
-                                            });
-                                        })()}
+                                                                </td>
+                                                                <td className="px-8 py-6">
+                                                                    {deactivationEvent ? (
+                                                                        <div className="flex items-center gap-3">
+                                                                            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center text-[10px] font-black">
+                                                                                {(deactivationEvent.guardName || "SI").substring(0, 2).toUpperCase()}
+                                                                            </div>
+                                                                            <div>
+                                                                                <div className="text-xs font-bold text-black uppercase">{deactivationEvent.guardName || "Sistema"}</div>
+                                                                                <div className="text-[9px] font-black text-emerald-600 uppercase tracking-wider">Normalizó</div>
+                                                                            </div>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="flex items-center gap-2">
+                                                                            <div className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></div>
+                                                                            <span className="text-xs font-black text-red-600 uppercase">Pendiente</span>
+                                                                        </div>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-8 py-6">
+                                                                    <div className={cn(
+                                                                        "px-4 py-2 rounded-xl text-sm font-black inline-flex items-center gap-2 border-2",
+                                                                        isStillActive
+                                                                            ? "bg-red-600 border-red-600 text-white animate-pulse shadow-lg shadow-red-600/30"
+                                                                            : "bg-white border-emerald-500 text-emerald-600"
+                                                                    )}>
+                                                                        <Clock size={16} />
+                                                                        {duration}
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-8 py-6 text-right">
+                                                                    <div className="flex flex-col items-end">
+                                                                        <span className="text-sm font-bold text-black tabular-nums">
+                                                                            {new Date(alert.timestamp || alert.createdAt).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                                                        </span>
+                                                                        <span className="text-[10px] font-black text-black/40 uppercase tracking-widest">
+                                                                            {new Date(alert.timestamp || alert.createdAt).toLocaleDateString('es-UY', { day: '2-digit', month: '2-digit' })}
+                                                                        </span>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    }).filter(Boolean);
+                                                })()}
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
                             </motion.div>
                         )}
                         {activeTab === "lpr" && (
-                            <motion.div key="lpr" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="h-full w-full overflow-y-auto px-8 pt-6 pb-40 custom-scrollbar">
-                                <div className="max-w-7xl mx-auto space-y-10">
-                                    <div className="flex items-center justify-between sticky top-0 bg-slate-50/95 backdrop-blur-md py-6 z-30 gap-6">
+                            <motion.div key="lpr" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="h-full w-full overflow-y-auto px-8 pt-6 pb-40 custom-scrollbar">
+                                <div className="max-w-7xl mx-auto space-y-8">
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between sticky top-0 bg-slate-50/95 backdrop-blur-md py-6 z-30 gap-6">
                                         <div>
-                                            <h2 className="text-4xl font-black uppercase tracking-tighter text-black leading-none">Historial LPR</h2>
-                                            <p className="text-[10px] text-[#B20D30] font-black uppercase tracking-[0.3em] mt-3">Reconocimiento automático de matrículas</p>
+                                            <h2 className="text-3xl font-black uppercase tracking-tighter text-black leading-none">Historial LPR</h2>
+                                            <p className="text-[10px] text-[#B20D30] font-black uppercase tracking-[0.3em] mt-2">Reconocimiento automático de matrículas</p>
                                         </div>
-                                        <div className="relative group">
-                                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-black/20 group-focus-within:text-[#B20D30] transition-colors" size={18} />
-                                            <Input
-                                                placeholder="BUSCAR MATRÍCULA..."
-                                                value={lprSearch}
-                                                onChange={(e) => setLprSearch(e.target.value)}
-                                                className="pl-12 h-14 w-80 bg-white/40 backdrop-blur-md border border-black rounded-2xl font-black text-xs uppercase tracking-widest transition-all focus:border-[#B20D30]/50 shadow-sm"
-                                            />
+                                        <div className="flex items-center gap-4">
+                                            <div className="relative group">
+                                                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-black/20 group-focus-within:text-[#B20D30] transition-colors" size={18} />
+                                                <Input
+                                                    type="date"
+                                                    value={lprDate}
+                                                    onChange={(e) => setLprDate(e.target.value)}
+                                                    className="pl-12 h-14 w-48 bg-white/40 backdrop-blur-md border border-black rounded-2xl font-black text-xs uppercase tracking-widest transition-all focus:border-[#B20D30]/50 shadow-sm"
+                                                />
+                                            </div>
+                                            <div className="relative group">
+                                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-black/20 group-focus-within:text-[#B20D30] transition-colors" size={18} />
+                                                <Input
+                                                    placeholder="BUSCAR MATRÍCULA..."
+                                                    value={lprSearch}
+                                                    onChange={(e) => setLprSearch(e.target.value)}
+                                                    className="pl-12 h-14 w-80 bg-white/40 backdrop-blur-md border border-black rounded-2xl font-black text-xs uppercase tracking-widest transition-all focus:border-[#B20D30]/50 shadow-sm"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
 
-                                    {isLprLoading ? (
-                                        <div className="py-40 flex flex-col items-center gap-6 opacity-20">
-                                            <Loader2 className="animate-spin" size={60} />
-                                            <p className="text-xl font-black uppercase tracking-[0.5em]">Cargando Eventos LPR...</p>
-                                        </div>
-                                    ) : (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                                            {lprEntries.map((event) => (
-                                                <motion.div
-                                                    key={event.id}
-                                                    initial={{ opacity: 0, scale: 0.9 }}
-                                                    animate={{ opacity: 1, scale: 1 }}
-                                                    className="p-8 rounded-[2.5rem] border-2 border-black bg-white text-black shadow-xl hover:shadow-2xl transition-all group"
-                                                >
-                                                    <div className="flex items-center justify-between mb-8">
-                                                        <div className="px-4 py-2 rounded-xl bg-black text-white text-[10px] font-black uppercase tracking-widest">
-                                                            LPR DETECTADO
-                                                        </div>
-                                                        <Car size={20} className="text-black/20 group-hover:text-black transition-colors" />
-                                                    </div>
-
-                                                    <div className="space-y-6">
-                                                        <div className="flex items-center gap-6">
-                                                            <div className="w-24 h-14 bg-slate-100 rounded-xl border-4 border-slate-200 flex items-center justify-center">
-                                                                <span className="text-2xl font-black tracking-tighter uppercase whitespace-nowrap">{event.plateDetected}</span>
+                                    <div className="w-full">
+                                        <table className="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr className="shadow-lg" style={{ backgroundColor: customHeaderColor }}>
+                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Foto</th>
+                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Matrícula</th>
+                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Vehículo</th>
+                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Propietario</th>
+                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Unidad</th>
+                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Sentido</th>
+                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Fecha/Hora</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50">
+                                                {isLprLoading ? (
+                                                    <tr>
+                                                        <td colSpan={7} className="py-40">
+                                                            <div className="flex flex-col items-center gap-6 opacity-20">
+                                                                <Loader2 className="animate-spin" size={60} />
+                                                                <p className="text-xl font-black uppercase tracking-[0.5em]">Cargando Eventos LPR...</p>
                                                             </div>
-                                                            <div className="flex-1 min-w-0">
-                                                                <p className="text-[10px] font-black uppercase tracking-widest mb-1 text-black/40">Propietario / Residente</p>
-                                                                <p className="text-xl font-black uppercase tracking-tight truncate">{event.user?.name || "No Identificado"}</p>
+                                                        </td>
+                                                    </tr>
+                                                ) : lprEntries.length > 0 ? (
+                                                    lprEntries.map((event) => (
+                                                        <tr key={event.id} className="hover:bg-slate-50/50 transition-colors group">
+                                                            <td className="px-6 py-4">
+                                                                <div
+                                                                    onClick={() => event.snapshotPath && setViewerData({
+                                                                        url: event.snapshotPath,
+                                                                        plate: event.plateDetected,
+                                                                        name: (event as any).user?.name,
+                                                                        unit: (event as any).user?.unit?.name,
+                                                                        direction: event.direction,
+                                                                        confidence: event.confidence,
+                                                                        timestamp: event.timestamp,
+                                                                        deviceName: event.deviceName
+                                                                    })}
+                                                                    className="w-16 h-12 rounded-lg bg-slate-100 overflow-hidden relative border border-black transition-all duration-300 cursor-zoom-in active:scale-95"
+                                                                >
+                                                                    {event.snapshotPath ? (
+                                                                        <Image src={event.snapshotPath} alt="LPR" fill className="object-cover" />
+                                                                    ) : (
+                                                                        <div className="w-full h-full flex items-center justify-center text-slate-300">
+                                                                            <ImageIcon size={16} />
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <div className="px-3 py-1 bg-slate-100 border-2 border-slate-200 rounded-lg inline-block">
+                                                                    <span className="text-sm font-black text-black uppercase tracking-tighter">{event.plateDetected || "--- ---"}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                {(() => {
+                                                                    const vehicle = event.user?.vehicles?.find((v: any) =>
+                                                                        v.plate.replace(/[^A-Z0-9]/gi, '') === (event.plateDetected || "").replace(/[^A-Z0-9]/gi, '')
+                                                                    );
+                                                                    return (
+                                                                        <span className="text-xs font-bold text-black/60 uppercase">
+                                                                            {vehicle ? `${vehicle.brand || ""} ${vehicle.model || ""}`.trim() || "---" : "---"}
+                                                                        </span>
+                                                                    );
+                                                                })()}
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <span className="text-xs font-bold text-black uppercase">{event.user?.name || "No Identificado"}</span>
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <span className="text-xs font-black text-[#B20D30] uppercase">{event.user?.unit?.name || "---"}</span>
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <div className={cn(
+                                                                    "inline-flex px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter",
+                                                                    event.direction === "ENTRY" ? "bg-emerald-50 text-emerald-600" : "bg-orange-50 text-orange-600"
+                                                                )}>
+                                                                    {event.direction === "ENTRY" ? "Ingreso" : "Egreso"}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-xs font-bold text-black whitespace-nowrap">
+                                                                        {new Date(event.timestamp).toLocaleDateString('es-UY', { day: '2-digit', month: '2-digit' })}
+                                                                    </span>
+                                                                    <span className="text-[10px] font-black text-black/40">
+                                                                        {new Date(event.timestamp).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' })}
+                                                                    </span>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                                ) : (
+                                                    <tr>
+                                                        <td colSpan={7} className="py-40">
+                                                            <div className="flex flex-col items-center gap-6 opacity-20">
+                                                                <Search size={80} />
+                                                                <p className="text-xl font-black uppercase tracking-[0.5em]">No se encontraron registros</p>
                                                             </div>
-                                                        </div>
-
-                                                        <div className="grid grid-cols-2 gap-4">
-                                                            <div>
-                                                                <p className="text-[10px] font-black uppercase tracking-widest mb-1 text-black/40">Lote / Unidad</p>
-                                                                <p className="text-sm font-black uppercase tracking-tighter">{event.user?.unit?.name || "---"}</p>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                <p className="text-[10px] font-black uppercase tracking-widest mb-1 text-black/40">Fecha y Hora</p>
-                                                                <p className="text-xs font-bold opacity-60 tabular-nums">
-                                                                    {new Date(event.timestamp).toLocaleString('es-UY', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                                                                </p>
-                                                            </div>
-                                                        </div>
-
-                                                        {event.direction && (
-                                                            <div className={cn(
-                                                                "w-full py-3 rounded-2xl flex items-center justify-center gap-3 border-2 transition-all",
-                                                                event.direction === "ENTRY" ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-600" : "bg-orange-500/5 border-orange-500/20 text-orange-600"
-                                                            )}>
-                                                                {event.direction === "ENTRY" ? <LogIn size={14} /> : <LogOut size={14} />}
-                                                                <span className="text-[9px] font-black uppercase tracking-[0.3em]">{event.direction === "ENTRY" ? "SENTIDO: INGRESO" : "SENTIDO: EGRESO"}</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </motion.div>
-                                            ))}
-
-                                            {lprEntries.length === 0 && (
-                                                <div className="col-span-full py-40 flex flex-col items-center gap-6 opacity-20">
-                                                    <Search size={80} />
-                                                    <p className="text-xl font-black uppercase tracking-[0.5em]">No se encontraron registros</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </motion.div>
                         )}
@@ -1662,7 +2162,7 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
                                     <div className="w-full">
                                         <table className="w-full text-left border-collapse">
                                             <thead>
-                                                <tr className="bg-black border-b-4 border-black shadow-lg">
+                                                <tr className="shadow-lg" style={{ backgroundColor: customHeaderColor }}>
                                                     <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Foto</th>
                                                     <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Matrícula</th>
                                                     <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Sujeto</th>
@@ -1676,7 +2176,14 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
                                                 {entries.map((entry) => (
                                                     <tr key={entry.id} className="hover:bg-slate-50/50 transition-colors group">
                                                         <td className="px-6 py-4">
-                                                            <div className="w-16 h-12 rounded-lg bg-slate-100 overflow-hidden relative border border-black transition-all duration-300">
+                                                            <div
+                                                                onClick={() => entry.photoPath && setViewerData({
+                                                                    url: entry.photoPath,
+                                                                    plate: entry.plate,
+                                                                    name: entry.name
+                                                                })}
+                                                                className="w-16 h-12 rounded-lg bg-slate-100 overflow-hidden relative border border-black transition-all duration-300 cursor-zoom-in active:scale-95"
+                                                            >
                                                                 {entry.photoPath ? (
                                                                     <Image src={entry.photoPath} alt="Log" fill className="object-cover" />
                                                                 ) : (
@@ -1701,18 +2208,20 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
                                                         <td className="px-6 py-4">
                                                             <div className={cn(
                                                                 "inline-flex px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter",
-                                                                entry.type === "ENTRY" ? "bg-emerald-50 text-emerald-600" : "bg-orange-50 text-orange-600"
+                                                                entry.type === "ALERTA" ? "bg-red-600 text-white animate-pulse" :
+                                                                    entry.type === "ENTRY" ? "bg-emerald-50 text-emerald-600" : "bg-orange-50 text-orange-600"
                                                             )}>
-                                                                {entry.type === "ENTRY" ? "Ingreso" : "Egreso"}
+                                                                {entry.type === "ALERTA" ? "Alerta" :
+                                                                    entry.type === "ENTRY" ? "Ingreso" : "Egreso"}
                                                             </div>
                                                         </td>
                                                         <td className="px-6 py-4">
                                                             <div className="flex flex-col">
                                                                 <span className="text-xs font-bold text-black whitespace-nowrap">
-                                                                    {new Date(entry.createdAt).toLocaleDateString('es-UY', { day: '2-digit', month: '2-digit' })}
+                                                                    {entry.createdAt ? new Date(entry.createdAt).toLocaleDateString('es-UY', { day: '2-digit', month: '2-digit' }) : "---"}
                                                                 </span>
                                                                 <span className="text-[10px] font-black text-black/40">
-                                                                    {new Date(entry.createdAt).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' })}
+                                                                    {entry.createdAt ? new Date(entry.createdAt).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' }) : "---"}
                                                                 </span>
                                                             </div>
                                                         </td>
@@ -1748,80 +2257,71 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
 
                 </div>
 
-                {/* FIXED FOOTER NAVIGATION - IMPROVED DESIGN */}
                 <footer className={cn(
-                    "fixed bottom-0 left-0 right-0 h-24 border-t-2 transition-all duration-500 flex items-center justify-between px-8 z-[100] shadow-[0_-20px_60px_rgba(0,0,0,0.08)]",
-                    isAlertMode
-                        ? "bg-red-600 border-white animate-pulse"
-                        : "bg-gradient-to-t from-white via-white to-white/95 backdrop-blur-2xl border-black"
+                    "fixed bottom-0 left-0 right-0 h-24 border-t-2 transition-all duration-500 flex items-center justify-between px-6 z-[100] shadow-[0_-20px_60px_rgba(0,0,0,0.08)]",
+                    isAlertMode ? "bg-red-600 border-white" : "bg-white/95 backdrop-blur-3xl border-white/50"
                 )}>
-                    <div className="flex items-center gap-5">
-                        <div className={cn(
-                            "w-16 h-16 flex items-center justify-center shrink-0 rounded-2xl border-2 transition-all duration-300 shadow-sm",
-                            isAlertMode ? "bg-white border-white" : "bg-gradient-to-br from-slate-50 to-white border-black"
-                        )}>
-                            <Image src="/logo-transparent.png" alt="Logo" width={100} height={100} className="object-contain" />
-                        </div>
-                        <div className="hidden xl:block">
-                            <h1 className={cn("text-base font-black tracking-tight uppercase leading-none", isAlertMode ? "text-white" : "text-black")}>OmniAccess</h1>
-                            <p className={cn("text-[8px] font-black uppercase tracking-widest mt-1", isAlertMode ? "text-white/60" : "text-[#B20D30]")}>Console v2.1</p>
-                        </div>
+                    {/* AVATAR + MENU */}
+                    <div className="relative">
+                        <motion.button
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => { setShowProfileMenu(!showProfileMenu); playTactileSound(); }}
+                            className="w-14 h-14 rounded-full bg-slate-100 border-4 border-white shadow-xl flex items-center justify-center overflow-hidden relative z-20"
+                        >
+                            {guardPhoto ? (
+                                <Image src={guardPhoto} alt="User" fill className="object-cover" />
+                            ) : (
+                                <UserIcon className="text-slate-400" size={24} />
+                            )}
+                        </motion.button>
+
+                        <AnimatePresence>
+                            {showProfileMenu && (
+                                <>
+                                    <div className="fixed inset-0 z-10" onClick={() => setShowProfileMenu(false)} />
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                                        animate={{ opacity: 1, y: -20, scale: 1 }}
+                                        exit={{ opacity: 0, y: 20, scale: 0.9 }}
+                                        className="absolute bottom-full left-0 mb-4 w-64 bg-white rounded-3xl shadow-2xl border-2 border-slate-100 overflow-hidden p-3 flex flex-col gap-2 z-30"
+                                    >
+                                        <div className="p-3 bg-slate-50 rounded-2xl mb-2">
+                                            <p className="text-xs font-bold uppercase text-slate-400">Sesión iniciada como</p>
+                                            <p className="text-sm font-black uppercase text-black truncate">{guardName || "Guardia"}</p>
+                                        </div>
+                                        <button className="flex items-center gap-3 p-4 hover:bg-slate-50 rounded-2xl transition-colors text-black"
+                                            onClick={() => { setShowCameraModal(true); setShowProfileMenu(false); }}>
+                                            <Camera size={20} /> <span className="text-xs font-black uppercase tracking-wider">Mi Foto</span>
+                                        </button>
+                                        <button className="flex items-center gap-3 p-4 hover:bg-slate-50 rounded-2xl transition-colors text-black"
+                                            onClick={() => { setShowSettingsModal(true); setShowProfileMenu(false); }}>
+                                            <Settings size={20} /> <span className="text-xs font-black uppercase tracking-wider">Configuración</span>
+                                        </button>
+                                        <div className="h-px bg-slate-100 mx-2" />
+                                        <button className="flex items-center gap-3 p-4 hover:bg-red-50 text-[#B20D30] rounded-2xl transition-colors"
+                                            onClick={handleLogout}>
+                                            <LogOut size={20} /> <span className="text-xs font-black uppercase tracking-wider">Cerrar Sesión</span>
+                                        </button>
+                                    </motion.div>
+                                </>
+                            )}
+                        </AnimatePresence>
                     </div>
 
                     <nav className={cn(
-                        "border-2 transition-all duration-300/80 rounded-[1.5rem] p-2 flex items-center gap-2 shadow-lg",
-                        isAlertMode ? "bg-white border-white" : "bg-gradient-to-br from-slate-100 to-slate-50 border-black"
+                        "transition-all duration-300 p-2 flex items-center gap-2 md:gap-4",
                     )}>
-                        <BottomTab icon={<FileText size={20} />} active={activeTab === "control"} onClick={() => handleTabChange("control")} label="Acceso" small alertActive={isAlertMode} />
-                        <BottomTab icon={<HistoryIcon size={20} />} active={activeTab === "history"} onClick={() => handleTabChange("history")} label="Historial" small alertActive={isAlertMode} />
-                        <BottomTab icon={<Car size={20} />} active={activeTab === "lpr"} onClick={() => handleTabChange("lpr")} label="LPR" small alertActive={isAlertMode} />
-                        <BottomTab icon={<Bell size={20} />} active={activeTab === "alerts"} onClick={() => handleTabChange("alerts")} label="Alertas" small alertActive={isAlertMode} />
+                        <BottomTab icon={customIcons.control ? <Image src={customIcons.control} width={24} height={24} className="object-contain" alt="Icon" /> : <FileText size={24} />} active={activeTab === "control"} onClick={() => handleTabChange("control")} label="Acceso" alertActive={isAlertMode} />
+                        <BottomTab icon={customIcons.history ? <Image src={customIcons.history} width={24} height={24} className="object-contain" alt="Icon" /> : <HistoryIcon size={24} />} active={activeTab === "history"} onClick={() => handleTabChange("history")} label="Historial" alertActive={isAlertMode} />
+                        <BottomTab icon={customIcons.lpr ? <Image src={customIcons.lpr} width={24} height={24} className="object-contain" alt="Icon" /> : <Car size={24} />} active={activeTab === "lpr"} onClick={() => handleTabChange("lpr")} label="LPR" alertActive={isAlertMode} />
+                        <BottomTab icon={customIcons.alerts ? <Image src={customIcons.alerts} width={24} height={24} className="object-contain" alt="Icon" /> : <Bell size={24} />} active={activeTab === "alerts"} onClick={() => handleTabChange("alerts")} label="Alertas" alertActive={isAlertMode} />
+                        <div className="w-px h-8 bg-black/5 mx-2" />
+                        <BottomTab icon={customIcons.map ? <Image src={customIcons.map} width={24} height={24} className="object-contain" alt="Icon" /> : <MapIcon size={24} />} active={activeTab === "map"} onClick={() => handleTabChange("map")} label="Mapa" alertActive={isAlertMode} />
                     </nav>
 
-                    <div className="flex items-center gap-6">
-                        <div className="hidden lg:flex flex-col items-end mr-3">
-                            <p className={cn("text-2xl font-black tabular-nums tracking-tighter leading-none mb-1", isAlertMode ? "text-white" : "text-[#B20D30]")}>{currentTime.toLocaleTimeString('es-UY', { hour12: false, hour: '2-digit', minute: '2-digit' })}</p>
-                            <p className={cn("text-[8px] font-black uppercase tracking-widest leading-none", isAlertMode ? "text-white/60" : "text-black/40")}>{currentTime.toLocaleDateString('es-UY', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => { playTactileSound(); }}
-                                className={cn(
-                                    "flex items-center gap-3 pl-2 pr-5 h-14 rounded-[1.25rem] border-2 transition-all duration-300 group active:scale-95 shadow-md",
-                                    isAlertMode
-                                        ? "bg-white border-white"
-                                        : "bg-gradient-to-br from-slate-50 to-white border-black hover:from-slate-100 hover:to-slate-50"
-                                )}
-                            >
-                                <div className={cn(
-                                    "w-10 h-10 rounded-xl flex items-center justify-center shadow-lg",
-                                    isAlertMode ? "bg-red-600" : "bg-gradient-to-br from-[#B20D30] to-[#E53935]"
-                                )}>
-                                    <span className="text-[10px] font-black text-white">{guardName?.substring(0, 2) || "GA"}</span>
-                                </div>
-                                <div className="text-left hidden sm:block">
-                                    <p className={cn("text-[10px] font-black uppercase leading-none tracking-tight", isAlertMode ? "text-red-600" : "text-black")}>{guardName || "GUARDIA"}</p>
-                                    <div className="flex items-center gap-1.5 mt-1">
-                                        <div className={cn("w-2 h-2 rounded-full animate-pulse shadow-sm", isAlertMode ? "bg-red-500 shadow-red-500/50" : "bg-emerald-500 shadow-emerald-500/50")} />
-                                        <p className={cn("text-[8px] font-black uppercase tracking-widest", isAlertMode ? "text-red-600" : "text-emerald-600")}>Online</p>
-                                    </div>
-                                </div>
-                            </button>
-
-                            <button
-                                onClick={handleLogout}
-                                className={cn(
-                                    "w-14 h-14 rounded-[1.25rem] border-2 transition-all duration-300 flex items-center justify-center transition-all active:scale-95",
-                                    isAlertMode
-                                        ? "bg-white border-white text-red-600"
-                                        : "bg-white border-black text-black/40 hover:text-[#B20D30] hover:border-[#B20D30]/20"
-                                )}
-                                title="Cerrar Sesión"
-                            >
-                                <LogOut size={20} />
-                            </button>
-                        </div>
+                    <div className="hidden lg:flex flex-col items-end">
+                        <p className={cn("text-xl font-black tabular-nums tracking-tighter leading-none mb-1", isAlertMode ? "text-white" : "text-[#B20D30]")}>{currentTime.toLocaleTimeString('es-UY', { hour12: false, hour: '2-digit', minute: '2-digit' })}</p>
+                        <p className={cn("text-[8px] font-black uppercase tracking-widest leading-none", isAlertMode ? "text-white/60" : "text-black/40")}>{currentTime.toLocaleDateString('es-UY', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
                     </div>
                 </footer>
 
@@ -1835,81 +2335,812 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
                     )}
                 </AnimatePresence>
 
+                {/* RESOLUTION / CANCEL MODAL */}
+                <AnimatePresence>
+                    {showResolutionModal && activeMission && (
+                        <div className="fixed inset-0 z-[500] bg-black/80 flex items-center justify-center p-6">
+                            <motion.div
+                                initial={{ scale: 0.9, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.9, opacity: 0 }}
+                                className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl text-center space-y-4"
+                            >
+                                <h2 className="text-2xl font-black uppercase text-black">Gestionar Incidente</h2>
+                                <p className="text-sm text-gray-500 uppercase font-bold">Seleccione una acción para finalizar</p>
+
+                                <div className="space-y-2 text-left">
+                                    <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Notas / Observaciones</label>
+                                    <textarea
+                                        value={backupDetail}
+                                        onChange={(e) => setBackupDetail(e.target.value)}
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold text-black focus:outline-none focus:border-black transition-all text-sm resize-none h-24 uppercase"
+                                        placeholder="Detalles del resultado..."
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-1 gap-3 mt-4">
+                                    <button onClick={() => {
+                                        socket?.emit('resolve_backup', {
+                                            requestId: activeMission.id,
+                                            bitacoraId: activeMission.bitacoraId,
+                                            outcome: 'SOLUCIONADO',
+                                            guardName: guardName,
+                                            notes: backupDetail || 'Intervención completada correctamente.'
+                                        });
+                                        setShowResolutionModal(false);
+                                        setBackupDetail("");
+                                    }} className="bg-emerald-600 hover:bg-emerald-700 text-white py-5 rounded-2xl font-black uppercase flex items-center justify-center gap-3 transition-all shadow-xl shadow-emerald-600/20 active:scale-95">
+                                        <CheckCircle2 size={24} /> Solucionado (Todo OK)
+                                    </button>
+
+                                    <button onClick={() => {
+                                        socket?.emit('resolve_backup', {
+                                            requestId: activeMission.id,
+                                            bitacoraId: activeMission.bitacoraId,
+                                            outcome: 'FALSA ALARMA',
+                                            guardName: guardName,
+                                            notes: backupDetail || 'No se detectó amenaza.'
+                                        });
+                                        setShowResolutionModal(false);
+                                        setBackupDetail("");
+                                    }} className="bg-amber-500 hover:bg-amber-600 text-white py-5 rounded-2xl font-black uppercase flex items-center justify-center gap-3 transition-all shadow-xl shadow-amber-500/20 active:scale-95">
+                                        <ShieldAlert size={24} /> Falsa Alarma
+                                    </button>
+
+                                    <div className="h-px bg-gray-100 my-4" />
+
+                                    <button onClick={() => {
+                                        if (activeMission.responderId === socket?.id) {
+                                            socket?.emit('cancel_backup', {
+                                                requestId: activeMission.id,
+                                                guardName: guardName,
+                                                reason: 'Apoyo retirado'
+                                            });
+                                        } else {
+                                            socket?.emit('cancel_backup', {
+                                                requestId: activeMission.id,
+                                                guardName: guardName,
+                                                reason: 'Cancelado por usuario'
+                                            });
+                                        }
+                                        setShowResolutionModal(false);
+                                        setBackupDetail("");
+                                    }} className="bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 p-4 rounded-xl font-black uppercase flex items-center justify-center gap-2 transition-colors">
+                                        <X size={20} /> {activeMission.responderId === socket?.id ? "Cancelar Apoyo" : "Cancelar Solicitud"}
+                                    </button>
+
+                                    <button onClick={() => setShowResolutionModal(false)} className="text-gray-400 font-bold uppercase text-xs py-2">Volver</button>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )}
+                </AnimatePresence>
+
+                {/* PROFILE CAMERA MODAL */}
+                <AnimatePresence>
+                    {showCameraModal && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-black z-[2000] flex flex-col items-center justify-center"
+                        >
+                            <div className="absolute top-8 left-1/2 -translate-x-1/2 z-10">
+                                <div className="bg-white/10 backdrop-blur-xl border border-white/20 px-8 py-4 rounded-3xl flex items-center gap-4">
+                                    <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                                    <span className="text-white font-black text-xl uppercase tracking-widest">Mi Foto de Perfil</span>
+                                </div>
+                            </div>
+
+                            <video ref={profileVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                            <canvas ref={profileCanvasRef} className="hidden" />
+
+                            <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex gap-6 z-10">
+                                <motion.button
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={captureProfilePhoto}
+                                    className="w-24 h-24 rounded-full bg-white border-8 border-white/30 shadow-2xl flex items-center justify-center hover:scale-110 transition-transform"
+                                >
+                                    <Camera size={32} className="text-black" />
+                                </motion.button>
+
+                                <motion.button
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => setShowCameraModal(false)}
+                                    className="w-20 h-20 rounded-full bg-red-600 border-4 border-white/30 shadow-2xl flex items-center justify-center hover:bg-red-700 transition-colors"
+                                >
+                                    <X size={28} className="text-white" />
+                                </motion.button>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* BACKUP REQUEST MODAL (SENDER) */}
+                <AnimatePresence>
+                    {showBackupModal && (
+                        <div className="fixed inset-0 z-[300] bg-black/80 flex items-center justify-center p-6 backdrop-blur-sm">
+                            <motion.div
+                                initial={{ scale: 0.9, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.9, opacity: 0 }}
+                                className="bg-white w-full max-w-lg rounded-[2rem] p-8 shadow-2xl relative overflow-hidden"
+                            >
+                                <div className="text-center mb-6 relative z-10">
+                                    <h2 className="text-3xl font-black uppercase text-[#B20D30] tracking-tighter">Solicitar Apoyo</h2>
+                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Seleccione el tipo de amenaza</p>
+                                </div>
+
+                                <div className="mb-6 relative z-10">
+                                    <label className="text-[10px] uppercase font-black text-gray-400 mb-2 block tracking-widest">Detalles Adicionales (Opcional)</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Ej: Hombre chaqueta roja, Toyota gris..."
+                                        value={backupDetail}
+                                        onChange={(e) => setBackupDetail(e.target.value)}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-black focus:outline-none focus:border-[#B20D30] transition-colors uppercase text-sm"
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4 relative z-10">
+                                    <button onClick={() => {
+                                        if (socket && backupLocation) {
+                                            const missionByMe = {
+                                                id: 'req-' + Date.now(),
+                                                type: 'INDIVIDUO SOSPECHOSO',
+                                                lat: backupLocation.lat, lng: backupLocation.lng,
+                                                requesterName: guardName || "Yo",
+                                                requesterId: socket.id,
+                                                status: 'PENDING',
+                                                details: backupDetail
+                                            };
+                                            socket.emit('request_backup', missionByMe);
+                                            setActiveMission(missionByMe);
+                                            setShowBackupModal(false);
+                                            setBackupDetail(""); // Reset
+                                            showNotification("SOLICITUD ENVIADA", "Alerta enviada a todas las unidades.", "info");
+                                        }
+                                    }} className="bg-red-50 hover:bg-red-100 border-2 border-transparent hover:border-[#B20D30]/20 py-6 rounded-2xl flex flex-col items-center gap-3 transition-all group active:scale-95">
+                                        <div className="w-16 h-16 bg-white shadow-lg rounded-full flex items-center justify-center text-[#B20D30] group-hover:scale-110 transition-transform">
+                                            <UserX size={32} />
+                                        </div>
+                                        <span className="text-sm font-black uppercase text-[#B20D30] leading-tight">Individuo<br />Sospechoso</span>
+                                    </button>
+
+                                    <button onClick={() => {
+                                        if (socket && backupLocation) {
+                                            const missionByMe = {
+                                                id: 'req-' + Date.now(),
+                                                type: 'VEHICULO SOSPECHOSO',
+                                                lat: backupLocation.lat, lng: backupLocation.lng,
+                                                requesterName: guardName || "Yo",
+                                                requesterId: socket.id,
+                                                status: 'PENDING',
+                                                details: backupDetail
+                                            };
+                                            socket.emit('request_backup', missionByMe);
+                                            setActiveMission(missionByMe);
+                                            setShowBackupModal(false);
+                                            setBackupDetail(""); // Reset
+                                            showNotification("SOLICITUD ENVIADA", "Alerta enviada a todas las unidades.", "info");
+                                        }
+                                    }} className="bg-slate-50 hover:bg-slate-100 border-2 border-transparent hover:border-slate-300 py-6 rounded-2xl flex flex-col items-center gap-3 transition-all group active:scale-95">
+                                        <div className="w-16 h-16 bg-white shadow-lg rounded-full flex items-center justify-center text-slate-700 group-hover:scale-110 transition-transform">
+                                            <CarFront size={32} />
+                                        </div>
+                                        <span className="text-sm font-black uppercase text-slate-700 leading-tight">Vehículo<br />Sospechoso</span>
+                                    </button>
+                                </div>
+
+                                <button onClick={() => setShowBackupModal(false)} className="mt-6 w-full py-3 text-xs font-bold uppercase text-gray-400 hover:text-black transition-colors">
+                                    Cancelar Operación
+                                </button>
+                            </motion.div>
+
+                        </div>
+                    )}
+                </AnimatePresence >
+
+                {/* INCOMING BACKUP ALERT (RECEIVER) */}
+                <AnimatePresence>
+                    {
+                        incomingBackup && (
+                            <div className="fixed inset-0 z-[400] bg-red-600/90 flex flex-col items-center justify-center p-8">
+                                <motion.div
+                                    initial={{ scale: 0.9, opacity: 0 }}
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    className="bg-white w-full max-w-lg rounded-3xl p-8 shadow-2xl text-center space-y-6 border-4 border-red-500"
+                                >
+                                    <div className="animate-pulse w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <ShieldAlert size={64} className="text-red-600" />
+                                    </div>
+
+                                    <div>
+                                        <h1 className="text-3xl font-black uppercase text-red-600 leading-none mb-2">SOLICITUD DE APOYO</h1>
+                                        <p className="text-xl font-bold text-black uppercase">{incomingBackup.type}</p>
+                                        <p className="text-sm font-bold text-gray-500 mt-2 uppercase">Solicitado por: <span className="text-black">{incomingBackup.requesterName}</span></p>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4 mt-8">
+                                        <button
+                                            onClick={() => setIncomingBackup(null)}
+                                            className="py-4 rounded-2xl border-2 border-gray-200 text-gray-500 font-black uppercase tracking-widest hover:bg-gray-50"
+                                        >
+                                            Ignorar
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                if (socket) {
+                                                    socket.emit('respond_backup', {
+                                                        requestId: incomingBackup.id,
+                                                        accepted: true,
+                                                        responderName: guardName || "Guardia"
+                                                    });
+                                                    setActiveMission({
+                                                        ...incomingBackup,
+                                                        status: 'ACCEPTED',
+                                                        responderId: socket.id
+                                                    });
+                                                    setIncomingBackup(null);
+                                                    handleTabChange('map'); // Switch to map immediately
+                                                }
+                                            }}
+                                            className="py-4 rounded-2xl bg-red-600 text-white font-black uppercase tracking-widest hover:bg-red-700 shadow-xl shadow-red-500/30"
+                                        >
+                                            RESPONDER
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            </div>
+                        )
+                    }
+                </AnimatePresence >
+
                 {/* AUDIO RECORDING HUB - NEW APPROACH */}
                 <AnimatePresence>
-                    {isRecording && (
+                    {
+                        isRecording && (
+                            <motion.div
+                                initial={{ opacity: 0, scale: 1.1 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.9 }}
+                                className="fixed inset-0 z-[1000] flex flex-col items-center justify-center p-8 backdrop-blur-3xl bg-black/80"
+                            >
+                                <motion.div
+                                    initial={{ opacity: 0, y: 40 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="flex flex-col items-center gap-12 max-w-2xl w-full"
+                                >
+                                    {/* REC Status Indicator */}
+                                    <div className="flex items-center gap-4 bg-red-600/20 px-8 py-3 rounded-2xl border border-red-500/30">
+                                        <motion.div
+                                            animate={{ opacity: [1, 0.4, 1] }}
+                                            transition={{ repeat: Infinity, duration: 1 }}
+                                            className="w-4 h-4 rounded-full bg-red-600 shadow-[0_0_15px_rgba(220,38,38,0.8)]"
+                                        />
+                                        <span className="text-white font-black text-xs uppercase tracking-[0.4em]">REC ON AIR</span>
+                                        <div className="h-4 w-px bg-white/10 mx-2" />
+                                        <span className="text-white font-black text-xl tabular-nums">{formatDuration(recordingDuration)}</span>
+                                    </div>
+
+                                    {/* Dynamic Visualizer */}
+                                    <div className="flex gap-2 items-center h-48">
+                                        {[...Array(32)].map((_, i) => (
+                                            <motion.div
+                                                key={i}
+                                                animate={{
+                                                    height: [10, 40 + Math.random() * 100, 10],
+                                                }}
+                                                transition={{
+                                                    repeat: Infinity,
+                                                    duration: 0.4 + Math.random() * 0.4,
+                                                    delay: i * 0.02
+                                                }}
+                                                className="w-1.5 min-h-[10px] bg-gradient-to-t from-red-600 to-white rounded-full opacity-80"
+                                            />
+                                        ))}
+                                    </div>
+
+                                    <div className="text-center">
+                                        <h3 className="text-4xl font-black text-white uppercase tracking-tighter mb-4">Capturando Nota de Audio</h3>
+                                        <p className="text-white/40 font-black text-[10px] uppercase tracking-[0.5em]">La grabación se adjuntará automáticamente al reporte</p>
+                                    </div>
+
+                                    {/* Main Controls */}
+                                    <div className="flex items-center gap-10 mt-6">
+                                        {/* Stop and Save */}
+                                        <motion.button
+                                            whileHover={{ scale: 1.1 }}
+                                            whileTap={{ scale: 0.9 }}
+                                            onClick={stopRecording}
+                                            className="w-28 h-28 rounded-[3rem] bg-white text-red-600 flex items-center justify-center shadow-[0_20px_50px_rgba(0,0,0,0.4)] group"
+                                        >
+                                            <div className="w-10 h-10 bg-red-600 rounded-xl transition-transform group-hover:scale-90" />
+                                        </motion.button>
+
+                                        {/* Cancel */}
+                                        <motion.button
+                                            whileHover={{ scale: 1.1 }}
+                                            whileTap={{ scale: 0.9 }}
+                                            onClick={() => { stopRecording(); setAudioUrl(null); setAudioBlob(null); }}
+                                            className="w-20 h-20 rounded-[2.5rem] bg-white/10 text-white border border-white/20 flex items-center justify-center hover:bg-white/20 transition-colors"
+                                        >
+                                            <X size={32} />
+                                        </motion.button>
+                                    </div>
+                                </motion.div>
+                            </motion.div>
+                        )
+                    }
+                </AnimatePresence >
+
+                {/* IMAGE VIEWER OVERLAY */}
+                <AnimatePresence>
+                    {
+                        viewerImage && (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="fixed inset-0 z-[2000] bg-black/90 backdrop-blur-xl flex items-center justify-center"
+                                onClick={() => setViewerImage(null)}
+                            >
+                                <motion.button
+                                    initial={{ opacity: 0, scale: 0.5 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    className="absolute top-8 right-8 w-14 h-14 bg-white/10 hover:bg-white/20 rounded-2xl flex items-center justify-center text-white transition-all z-50"
+                                    onClick={() => setViewerImage(null)}
+                                >
+                                    <X size={32} />
+                                </motion.button>
+
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 1 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="relative w-full h-full"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    <Image
+                                        src={viewerImage}
+                                        alt="Full view"
+                                        fill
+                                        className="object-contain"
+                                        priority
+                                    />
+
+                                    {/* LPR Data Overlay - Only show if we have LPR data */}
+                                    {viewerData && (viewerData.plate || viewerData.name || viewerData.unit) && (
+                                        <>
+                                            {/* Top Left - Plate and Basic Info */}
+                                            <motion.div
+                                                initial={{ opacity: 0, x: -20 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                transition={{ delay: 0.2 }}
+                                                className="absolute top-8 left-8 space-y-3"
+                                            >
+                                                {/* Plate Number - Large and Prominent */}
+                                                {viewerData.plate && (
+                                                    <div className="bg-gradient-to-br from-white via-slate-100 to-slate-200 px-8 py-4 rounded-2xl border-4 border-black shadow-2xl">
+                                                        <div className="text-[10px] font-black text-slate-600 uppercase tracking-[0.3em] mb-1">Matrícula Detectada</div>
+                                                        <div className="text-4xl font-black text-black uppercase tracking-[0.2em]">{viewerData.plate}</div>
+                                                    </div>
+                                                )}
+
+                                                {/* Direction Badge */}
+                                                {viewerData.direction && (
+                                                    <div className={cn(
+                                                        "inline-flex items-center gap-2 px-4 py-2 rounded-xl font-black text-sm uppercase tracking-wider shadow-lg",
+                                                        viewerData.direction === "ENTRY"
+                                                            ? "bg-emerald-500 text-white"
+                                                            : "bg-orange-500 text-white"
+                                                    )}>
+                                                        {viewerData.direction === "ENTRY" ? <LogIn size={18} /> : <LogOut size={18} />}
+                                                        {viewerData.direction === "ENTRY" ? "Entrada" : "Salida"}
+                                                    </div>
+                                                )}
+
+                                                {/* Confidence Score */}
+                                                {viewerData.confidence !== undefined && (
+                                                    <div className="bg-black/80 backdrop-blur-md px-4 py-2 rounded-xl border border-white/20">
+                                                        <div className="text-[9px] font-black text-white/60 uppercase tracking-wider mb-1">Confianza</div>
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="flex-1 h-2 bg-white/20 rounded-full overflow-hidden">
+                                                                <div
+                                                                    className={cn(
+                                                                        "h-full rounded-full transition-all",
+                                                                        viewerData.confidence >= 90 ? "bg-emerald-500" :
+                                                                            viewerData.confidence >= 70 ? "bg-yellow-500" : "bg-red-500"
+                                                                    )}
+                                                                    style={{ width: `${viewerData.confidence}%` }}
+                                                                />
+                                                            </div>
+                                                            <span className="text-sm font-black text-white">{viewerData.confidence}%</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </motion.div>
+
+                                            {/* Top Right - Owner Info */}
+                                            <motion.div
+                                                initial={{ opacity: 0, x: 20 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                transition={{ delay: 0.3 }}
+                                                className="absolute top-8 right-8 space-y-3 max-w-sm"
+                                            >
+                                                {/* Owner Card */}
+                                                {viewerData.name && (
+                                                    <div className="bg-black/80 backdrop-blur-md px-6 py-4 rounded-2xl border border-white/20 shadow-2xl">
+                                                        <div className="flex items-center gap-3 mb-3">
+                                                            <div className="w-10 h-10 rounded-full bg-blue-500/20 border-2 border-blue-500/50 flex items-center justify-center">
+                                                                <UserIcon size={20} className="text-blue-400" />
+                                                            </div>
+                                                            <div className="text-[10px] font-black text-white/60 uppercase tracking-wider">Propietario</div>
+                                                        </div>
+                                                        <div className="text-xl font-black text-white uppercase tracking-wide">{viewerData.name}</div>
+                                                    </div>
+                                                )}
+
+                                                {/* Unit/Lot Info */}
+                                                {viewerData.unit && (
+                                                    <div className="bg-black/80 backdrop-blur-md px-6 py-4 rounded-2xl border border-white/20 shadow-2xl">
+                                                        <div className="flex items-center gap-3 mb-2">
+                                                            <Home size={18} className="text-emerald-400" />
+                                                            <div className="text-[10px] font-black text-white/60 uppercase tracking-wider">Lote / Unidad</div>
+                                                        </div>
+                                                        <div className="text-lg font-black text-white uppercase">{viewerData.unit}</div>
+                                                    </div>
+                                                )}
+
+                                                {/* Device Info */}
+                                                {viewerData.deviceName && (
+                                                    <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10">
+                                                        <div className="flex items-center gap-2">
+                                                            <Camera size={14} className="text-white/40" />
+                                                            <span className="text-[10px] font-bold text-white/60 uppercase tracking-wider">{viewerData.deviceName}</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </motion.div>
+
+                                            {/* Bottom - Analysis Summary */}
+                                            <motion.div
+                                                initial={{ opacity: 0, y: 20 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ delay: 0.4 }}
+                                                className="absolute bottom-8 left-8 right-8"
+                                            >
+                                                <div className="bg-gradient-to-r from-black/90 via-black/80 to-black/90 backdrop-blur-xl px-8 py-5 rounded-2xl border border-white/20 shadow-2xl">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-6">
+                                                            <div>
+                                                                <div className="text-[9px] font-black text-white/50 uppercase tracking-wider mb-1">Análisis Rápido</div>
+                                                                <div className="text-sm font-bold text-white">
+                                                                    {viewerData.name && viewerData.unit
+                                                                        ? "✓ Residente Identificado - Acceso Autorizado"
+                                                                        : viewerData.name
+                                                                            ? "✓ Usuario Registrado"
+                                                                            : "⚠ Matrícula No Registrada"}
+                                                                </div>
+                                                            </div>
+                                                            {viewerData.timestamp && (
+                                                                <div className="border-l border-white/20 pl-6">
+                                                                    <div className="text-[9px] font-black text-white/50 uppercase tracking-wider mb-1">Timestamp</div>
+                                                                    <div className="text-sm font-mono font-bold text-white">
+                                                                        {new Date(viewerData.timestamp).toLocaleString('es-AR', {
+                                                                            day: '2-digit',
+                                                                            month: '2-digit',
+                                                                            year: 'numeric',
+                                                                            hour: '2-digit',
+                                                                            minute: '2-digit',
+                                                                            second: '2-digit'
+                                                                        })}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em]">
+                                                            Toca para cerrar
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        </>
+                                    )}
+                                </motion.div>
+
+                                {/* Actions overlay for Viewer - Only in Control (Home) tab */}
+                                {activeTab === 'control' && viewerData && (viewerData.plate || viewerData.name === "Desconocido" || !viewerData.name) && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="absolute left-1/2 -translate-x-1/2 bottom-28 flex gap-4"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <button
+                                            onClick={() => handleQuickCreateClick({
+                                                plate: viewerData.plate !== '--- ---' ? viewerData.plate : undefined,
+                                                cara: viewerData.url.startsWith('/api/files/') ? viewerData.url.replace('/api/files/', '') : viewerData.url
+                                            })}
+                                            disabled={loadingQuickCreateData}
+                                            className="h-20 px-12 rounded-[2rem] bg-emerald-500/40 backdrop-blur-3xl border-2 border-emerald-500/30 text-white font-black text-lg uppercase tracking-widest shadow-2xl flex items-center gap-4 transition-all hover:bg-emerald-500/60 active:scale-95 disabled:opacity-50"
+                                        >
+                                            {loadingQuickCreateData ? <Loader2 size={32} className="animate-spin" /> : <Plus size={32} />}
+                                            Registrar Nuevo Usuario
+                                        </button>
+                                    </motion.div>
+                                )}
+                            </motion.div>
+                        )
+                    }
+                </AnimatePresence >
+
+                {/* Normalization Modal */}
+                <AnimatePresence>
+                    {
+                        showNormalizationModal && (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="fixed inset-0 z-[3000] bg-black/80 backdrop-blur-xl flex items-center justify-center p-6"
+                                onClick={() => {
+                                    setShowNormalizationModal(false);
+                                    setNormalizationText("");
+                                }}
+                            >
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.9 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.9 }}
+                                    className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-8"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    <div className="flex items-center gap-4 mb-6">
+                                        <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center">
+                                            <CheckCircle2 size={32} className="text-emerald-600" />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-2xl font-black uppercase tracking-tight text-black">Normalizar Alerta</h2>
+                                            <p className="text-sm text-black/60 font-bold">Describe brevemente la situación</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="mb-6">
+                                        <label className="block text-xs font-black uppercase tracking-wider text-black/60 mb-2">
+                                            Explicación de la Alerta
+                                        </label>
+                                        <textarea
+                                            value={normalizationText}
+                                            onChange={(e) => setNormalizationText(e.target.value)}
+                                            placeholder="Ej: Falsa alarma, botón presionado accidentalmente..."
+                                            className="w-full h-32 px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl font-medium text-black placeholder:text-black/30 focus:border-emerald-500 focus:outline-none resize-none"
+                                            autoFocus
+                                        />
+                                    </div>
+
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => {
+                                                setShowNormalizationModal(false);
+                                                setNormalizationText("");
+                                            }}
+                                            className="flex-1 h-14 bg-slate-100 hover:bg-slate-200 rounded-xl font-black uppercase tracking-wider text-sm text-black transition-all"
+                                        >
+                                            Cancelar
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                toggleAlertMode(false, normalizationText);
+                                                setShowNormalizationModal(false);
+                                                setNormalizationText("");
+                                            }}
+                                            disabled={!normalizationText.trim()}
+                                            className="flex-1 h-14 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-xl font-black uppercase tracking-wider text-sm text-white transition-all shadow-lg shadow-emerald-600/20"
+                                        >
+                                            Confirmar Normalización
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            </motion.div>
+                        )
+                    }
+                </AnimatePresence >
+
+                {/* Settings Modal */}
+                <AnimatePresence>
+                    {showSettingsModal && (
                         <motion.div
-                            initial={{ opacity: 0, scale: 1.1 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.9 }}
-                            className="fixed inset-0 z-[1000] flex flex-col items-center justify-center p-8 backdrop-blur-3xl bg-black/80"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[3000] bg-black/80 backdrop-blur-xl flex items-center justify-center p-6"
+                            onClick={() => setShowSettingsModal(false)}
                         >
                             <motion.div
-                                initial={{ opacity: 0, y: 40 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="flex flex-col items-center gap-12 max-w-2xl w-full"
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.9 }}
+                                className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-8 overflow-y-auto max-h-[90vh]"
+                                onClick={(e) => e.stopPropagation()}
                             >
-                                {/* REC Status Indicator */}
-                                <div className="flex items-center gap-4 bg-red-600/20 px-8 py-3 rounded-2xl border border-red-500/30">
-                                    <motion.div
-                                        animate={{ opacity: [1, 0.4, 1] }}
-                                        transition={{ repeat: Infinity, duration: 1 }}
-                                        className="w-4 h-4 rounded-full bg-red-600 shadow-[0_0_15px_rgba(220,38,38,0.8)]"
-                                    />
-                                    <span className="text-white font-black text-xs uppercase tracking-[0.4em]">REC ON AIR</span>
-                                    <div className="h-4 w-px bg-white/10 mx-2" />
-                                    <span className="text-white font-black text-xl tabular-nums">{formatDuration(recordingDuration)}</span>
+                                <div className="flex items-center gap-4 mb-6">
+                                    <div className="w-16 h-16 rounded-2xl bg-black text-white flex items-center justify-center">
+                                        <Settings size={32} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-2xl font-black uppercase tracking-tight text-black">Configuración</h2>
+                                        <p className="text-sm text-black/60 font-bold">Personalización de la interfaz</p>
+                                    </div>
                                 </div>
 
-                                {/* Dynamic Visualizer */}
-                                <div className="flex gap-2 items-center h-48">
-                                    {[...Array(32)].map((_, i) => (
-                                        <motion.div
-                                            key={i}
-                                            animate={{
-                                                height: [10, 40 + Math.random() * 100, 10],
-                                            }}
-                                            transition={{
-                                                repeat: Infinity,
-                                                duration: 0.4 + Math.random() * 0.4,
-                                                delay: i * 0.02
-                                            }}
-                                            className="w-1.5 min-h-[10px] bg-gradient-to-t from-red-600 to-white rounded-full opacity-80"
-                                        />
-                                    ))}
+                                <div className="space-y-6">
+                                    <div className="space-y-4">
+                                        <Label className="text-xs font-black uppercase tracking-wider text-black/60">Logo Central (Sin bordes)</Label>
+                                        <div className="flex gap-6 items-center bg-slate-50 p-6 rounded-[2rem] border-2 border-slate-100">
+                                            <div className="w-24 h-24 relative shrink-0">
+                                                <Image src={customLogo || "/logo-transparent.png"} alt="Preview" fill className="object-contain" />
+                                            </div>
+                                            <div className="flex-1 space-y-3">
+                                                <Input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    onChange={async (e) => {
+                                                        const file = e.target.files?.[0];
+                                                        if (file) {
+                                                            const formData = new FormData();
+                                                            formData.append("file", file);
+                                                            const res = await uploadBrandingFile(formData);
+                                                            if (res.success) setCustomLogo(res.url!);
+                                                        }
+                                                    }}
+                                                    className="h-12 border-2 border-slate-200 rounded-xl bg-white"
+                                                />
+                                                <p className="text-[10px] text-black/40 font-bold uppercase tracking-widest">Sube tu logo en formato PNG transparente</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <Label className="text-xs font-black uppercase tracking-wider text-black/60">Color de Títulos de Tablas</Label>
+                                        <div className="flex gap-4 flex-wrap">
+                                            {[
+                                                { color: "#000000", name: "Negro (Default)" },
+                                                { color: "#B20D30", name: "Rojo Seguridad" },
+                                                { color: "#1e293b", name: "Slate 800" },
+                                                { color: "#166534", name: "Verde Bosque" },
+                                                { color: "#1e40af", name: "Azul Cobalto" },
+                                            ].map((c) => (
+                                                <button
+                                                    key={c.color}
+                                                    onClick={() => setCustomHeaderColor(c.color)}
+                                                    className={cn(
+                                                        "w-12 h-12 rounded-full border-4 shadow-sm transition-all flex items-center justify-center",
+                                                        customHeaderColor === c.color ? "border-black scale-110" : "border-white"
+                                                    )}
+                                                    style={{ backgroundColor: c.color }}
+                                                    title={c.name}
+                                                >
+                                                    {customHeaderColor === c.color && <CheckCircle2 className="text-white" size={20} />}
+                                                </button>
+                                            ))}
+                                            <div className="flex items-center gap-2 ml-4">
+                                                <input
+                                                    type="color"
+                                                    value={customHeaderColor}
+                                                    onChange={(e) => setCustomHeaderColor(e.target.value)}
+                                                    className="w-12 h-12 rounded-full cursor-pointer border-4 border-white shadow-sm"
+                                                />
+                                                <span className="text-[10px] font-black uppercase text-black/40">Personalizado</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-4 pt-4 border-t border-slate-100">
+                                        <Label className="text-xs font-black uppercase tracking-wider text-black">Iconos de la Aplicación</Label>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            {[
+                                                { key: "control", label: "Control de Acceso (Home)" },
+                                                { key: "history", label: "Bitácora (Historial)" },
+                                                { key: "lpr", label: "LPR (Cámaras)" },
+                                                { key: "alerts", label: "Alertas y Pánico" },
+                                                { key: "map", label: "Mapa de Seguridad" },
+                                            ].map((tab) => (
+                                                <div key={tab.key} className="space-y-1 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <Label className="text-[10px] font-black uppercase tracking-wider text-black/60">{tab.label}</Label>
+                                                        {customIcons[tab.key] && (
+                                                            <div className="w-6 h-6 relative">
+                                                                <Image src={customIcons[tab.key]} alt="Icon" fill className="object-contain" />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <Input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        onChange={async (e) => {
+                                                            const file = e.target.files?.[0];
+                                                            if (file) {
+                                                                const formData = new FormData();
+                                                                formData.append("file", file);
+                                                                const res = await uploadBrandingFile(formData);
+                                                                if (res.success) setCustomIcons({ ...customIcons, [tab.key]: res.url! });
+                                                            }
+                                                        }}
+                                                        className="h-10 text-[10px] rounded-lg border-2 border-slate-200 bg-white"
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
 
-                                <div className="text-center">
-                                    <h3 className="text-4xl font-black text-white uppercase tracking-tighter mb-4">Capturando Nota de Audio</h3>
-                                    <p className="text-white/40 font-black text-[10px] uppercase tracking-[0.5em]">La grabación se adjuntará automáticamente al reporte</p>
-                                </div>
-
-                                {/* Main Controls */}
-                                <div className="flex items-center gap-10 mt-6">
-                                    {/* Stop and Save */}
-                                    <motion.button
-                                        whileHover={{ scale: 1.1 }}
-                                        whileTap={{ scale: 0.9 }}
-                                        onClick={stopRecording}
-                                        className="w-28 h-28 rounded-[3rem] bg-white text-red-600 flex items-center justify-center shadow-[0_20px_50px_rgba(0,0,0,0.4)] group"
+                                <div className="flex gap-4 mt-10">
+                                    <button
+                                        disabled={isSavingBranding}
+                                        onClick={() => {
+                                            setCustomLogo(logo);
+                                            setCustomHeaderColor(headerColor);
+                                            setCustomIcons(initialIcons);
+                                            setShowSettingsModal(false);
+                                        }}
+                                        className="flex-1 h-16 bg-slate-100 hover:bg-slate-200 rounded-2xl font-black uppercase tracking-widest text-xs text-black transition-all disabled:opacity-50"
                                     >
-                                        <div className="w-10 h-10 bg-red-600 rounded-xl transition-transform group-hover:scale-90" />
-                                    </motion.button>
-
-                                    {/* Cancel */}
-                                    <motion.button
-                                        whileHover={{ scale: 1.1 }}
-                                        whileTap={{ scale: 0.9 }}
-                                        onClick={() => { stopRecording(); setAudioUrl(null); setAudioBlob(null); }}
-                                        className="w-20 h-20 rounded-[2.5rem] bg-white/10 text-white border border-white/20 flex items-center justify-center hover:bg-white/20 transition-colors"
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        disabled={isSavingBranding}
+                                        onClick={async () => {
+                                            setIsSavingBranding(true);
+                                            try {
+                                                const res = await saveGuardBranding({
+                                                    "GUARD_MAIN_LOGO": customLogo || "",
+                                                    "GUARD_TABLE_HEADER_COLOR": customHeaderColor,
+                                                    "GUARD_APP_ICONS": JSON.stringify(customIcons)
+                                                });
+                                                if (res.success) {
+                                                    toast.success("Configuración de marca actualizada con éxito");
+                                                    setShowSettingsModal(false);
+                                                    window.location.reload();
+                                                } else {
+                                                    toast.error("Error al guardar: " + res.message);
+                                                }
+                                            } catch (e) {
+                                                toast.error("Error de red al guardar");
+                                            } finally {
+                                                setIsSavingBranding(false);
+                                            }
+                                        }}
+                                        className="flex-1 h-16 bg-black hover:bg-neutral-800 rounded-2xl font-black uppercase tracking-widest text-xs text-white transition-all shadow-xl disabled:opacity-50 flex items-center justify-center gap-3"
                                     >
-                                        <X size={32} />
-                                    </motion.button>
+                                        {isSavingBranding ? <Loader2 className="animate-spin" size={18} /> : null}
+                                        {isSavingBranding ? "Guardando..." : "Guardar Cambios"}
+                                    </button>
                                 </div>
                             </motion.div>
                         </motion.div>
                     )}
                 </AnimatePresence>
+
+                {
+                    quickCreateData && (
+                        <UserFormDialog
+                            open={showQuickCreate}
+                            onOpenChange={setShowQuickCreate}
+                            units={quickCreateData.units}
+                            groups={quickCreateData.groups}
+                            devices={quickCreateData.devices}
+                            parkingSlots={quickCreateData.parkingSlots}
+                            onSuccess={() => {
+                                setShowQuickCreate(false);
+                                toast.success("Usuario creado con éxito");
+                            }}
+                            initialData={quickCreateContext}
+                        />
+                    )
+                }
             </main >
 
             <style jsx global>{`
@@ -1921,6 +3152,7 @@ export default function GuardConsole({ initialEntries, logo, units }: GuardConso
         </div >
     );
 }
+
 function BottomTab({ icon, active, onClick, label, small, alertActive }: any) {
     return (
         <motion.button
@@ -2290,8 +3522,8 @@ function NotificationOverlay({ type, title, message, onClose }: { type: string, 
             exit={{ opacity: 0 }}
             onClick={onClose}
             className={cn(
-                "fixed inset-0 z-[1000] flex flex-col items-center justify-center p-8 backdrop-blur-3xl",
-                isAlert ? "bg-red-600/95" : "bg-black/90"
+                "fixed inset-0 z-[1000] flex flex-col items-center justify-center p-8 backdrop-blur-md transition-colors duration-500",
+                type === "success" ? "bg-emerald-600/95" : "bg-[#B20D30]/95"
             )}
         >
             <motion.div
@@ -2300,10 +3532,7 @@ function NotificationOverlay({ type, title, message, onClose }: { type: string, 
                 exit={{ scale: 0.8, y: 20 }}
                 className="flex flex-col items-center text-center max-w-2xl"
             >
-                <div className={cn(
-                    "w-32 h-32 rounded-[3rem] flex items-center justify-center mb-10 shadow-2xl relative",
-                    isAlert ? "bg-white text-red-600" : "bg-white text-black"
-                )}>
+                <div className="w-32 h-32 rounded-[3rem] flex items-center justify-center mb-10 shadow-2xl relative bg-white text-[#B20D30]">
                     {type === "success" && <CheckCircle2 size={64} strokeWidth={2.5} />}
                     {type === "error" && <X size={64} strokeWidth={2.5} />}
                     {type === "info" && <UserCheck size={64} strokeWidth={2.5} />}

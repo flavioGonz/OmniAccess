@@ -585,3 +585,108 @@ export async function importFaceBatch(id: string, faces: any[]) {
         return { success: false, message: error.message };
     }
 }
+
+export async function syncPlatesToAllDevices() {
+    try {
+        // Get all LPR devices
+        const devices = await prisma.device.findMany({
+            where: {
+                deviceType: "LPR_CAMERA",
+                brand: "HIKVISION"
+            }
+        });
+
+        if (devices.length === 0) {
+            return { success: false, message: "No hay dispositivos LPR compatibles" };
+        }
+
+        // Get all plates from database
+        const plates = await prisma.credential.findMany({
+            where: { type: "PLATE" },
+            include: {
+                user: {
+                    select: {
+                        name: true,
+                        unit: {
+                            select: {
+                                name: true
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        const results = [];
+        const driver = new HikvisionDriver();
+
+        for (const device of devices) {
+            try {
+                // Get current plates from camera
+                let currentPlates: any[] = [];
+                try {
+                    const cameraData = await driver.getPlatesFromCamera(device);
+                    currentPlates = cameraData || [];
+                } catch (err) {
+                    console.warn(`Could not fetch current plates from ${device.name}:`, err);
+                }
+
+                // Clear camera list
+                console.log(`[SyncAll] Wiping ${device.name} (${device.ip})...`);
+                try {
+                    await driver.clearWhiteList(device);
+                } catch (wipeError) {
+                    console.warn(`[SyncAll] Could not wipe ${device.name}:`, wipeError);
+                }
+
+                // Sync all plates
+                let successCount = 0;
+                let failCount = 0;
+
+                for (const plate of plates) {
+                    try {
+                        await driver.upsertCredential(plate, device);
+                        successCount++;
+                    } catch (err) {
+                        failCount++;
+                        console.error(`[SyncAll] Failed to sync plate ${plate.value} to ${device.name}:`, err);
+                    }
+                }
+
+                results.push({
+                    deviceId: device.id,
+                    deviceName: device.name,
+                    deviceIp: device.ip,
+                    success: true,
+                    previousCount: currentPlates.length,
+                    syncedCount: successCount,
+                    failedCount: failCount,
+                    totalPlates: plates.length
+                });
+
+            } catch (error: any) {
+                results.push({
+                    deviceId: device.id,
+                    deviceName: device.name,
+                    deviceIp: device.ip,
+                    success: false,
+                    error: error.message
+                });
+            }
+        }
+
+        revalidatePath("/admin/devices");
+        revalidatePath("/admin/users");
+
+        return {
+            success: true,
+            totalDevices: devices.length,
+            totalPlates: plates.length,
+            results
+        };
+
+    } catch (error: any) {
+        console.error("[SyncAll] Error:", error);
+        return { success: false, message: error.message };
+    }
+}

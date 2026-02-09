@@ -64,6 +64,12 @@ type UserWithRelations = User & {
 
 interface UserFormDialogProps {
     user?: UserWithRelations;
+    initialData?: {
+        name?: string;
+        dni?: string;
+        plate?: string;
+        cara?: string;
+    };
     units: Unit[];
     groups: AccessGroup[];
     devices: any[];
@@ -82,7 +88,7 @@ const VEHICLE_TYPES = [
     { value: 'MOTORCYCLE', label: 'Motocicleta', icon: Bike },
 ];
 
-export function UserFormDialog({ user, units, groups, devices, parkingSlots = [], onSuccess, open, onOpenChange }: UserFormDialogProps) {
+export function UserFormDialog({ user, initialData, units, groups, devices, parkingSlots = [], onSuccess, open, onOpenChange }: UserFormDialogProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [previewUrl, setPreviewUrl] = useState<string | null>(user?.cara || null);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -106,12 +112,19 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
     useEffect(() => {
         if (open) {
             setActiveTab("general");
-            let path = user?.cara || null;
+            let path = user?.cara || initialData?.cara || null;
             if (path && !path.startsWith('http') && !path.startsWith('/')) {
                 path = '/' + path;
             }
             setPreviewUrl(path);
-            setPlateValue(user?.credentials?.find(c => c.type === 'PLATE')?.value || user?.vehicles?.[0]?.plate || "");
+
+            setPlateValue(
+                user?.credentials?.find(c => c.type === 'PLATE')?.value ||
+                user?.vehicles?.[0]?.plate ||
+                initialData?.plate ||
+                ""
+            );
+
             setPinValue(user?.credentials?.find(c => c.type === 'PIN')?.value || "");
             setSelectedFile(null);
             setSelectedGroupIds(user?.accessGroups?.map(g => g.id) || []);
@@ -119,8 +132,14 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
             setSelectedDeviceIds([]); // Reset on open
             setSelectedFaceDeviceIds([]); // Reset on open
             setDeviceSyncStatuses({});
+
+            // Set initial name/dni if provided and not editing
+            if (!isEdit && initialData) {
+                // We'll use defaultValue in the inputs for name/dni, 
+                // but for plateValue we use state because it's controlled.
+            }
         }
-    }, [open, user]);
+    }, [open, user, initialData]);
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         if (event.target.files && event.target.files[0]) {
@@ -283,34 +302,42 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-3xl p-0 bg-neutral-900 border-neutral-800 overflow-hidden sm:rounded-xl gap-0 shadow-2xl">
+            <DialogContent className="max-w-4xl p-0 bg-[#0a0a0a] border-white/10 overflow-hidden rounded-2xl gap-0 shadow-[0_20px_60px_rgba(0,0,0,0.8)] transition-all duration-300">
                 <div className="flex flex-col md:flex-row h-full min-h-[500px]">
 
                     {/* Left Side: Form with Tabs */}
-                    <div className="flex-1 bg-neutral-950/95 flex flex-col h-full overflow-hidden">
+                    <div className="flex-1 bg-gradient-to-br from-neutral-950 via-neutral-900 to-neutral-950 flex flex-col h-full overflow-hidden">
                         <form onSubmit={handleSubmit} noValidate className="flex flex-col h-full">
-                            <div className="px-6 pt-6 pb-2">
-                                <DialogHeader className="space-y-1">
-                                    <DialogTitle className="text-lg font-bold text-white flex items-center gap-2.5 tracking-tight">
-                                        {isEdit ? <BadgeCheck className="text-blue-500" size={24} /> : <Users className="text-emerald-500" size={24} />}
-                                        {isEdit ? "Perfil de Usuario" : "Registro Maestro"}
+                            {initialData?.cara && !selectedFile && (
+                                <input type="hidden" name="cara" value={initialData.cara} />
+                            )}
+                            <div className="px-6 pt-6 pb-3 border-b border-white/5">
+                                <DialogHeader className="space-y-2">
+                                    <DialogTitle className="text-xl font-black text-white flex items-center gap-3 tracking-tight">
+                                        <div className={cn(
+                                            "p-2 rounded-lg",
+                                            isEdit ? "bg-blue-500/10 border border-blue-500/20" : "bg-emerald-500/10 border border-emerald-500/20"
+                                        )}>
+                                            {isEdit ? <BadgeCheck className="text-blue-400" size={20} /> : <Users className="text-emerald-400" size={20} />}
+                                        </div>
+                                        {isEdit ? "Perfil de Usuario" : "Nuevo Registro"}
                                     </DialogTitle>
-                                    <DialogDescription className="text-neutral-500 text-xs font-medium leading-relaxed">
-                                        Administración centralizada de identidad, residencia y accesos.
+                                    <DialogDescription className="text-neutral-400 text-xs leading-relaxed pl-11">
+                                        Gestión integral de identidad, residencia y credenciales de acceso
                                     </DialogDescription>
                                 </DialogHeader>
                             </div>
 
                             <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-                                <div className="px-6 pb-2">
-                                    <TabsList className="w-full grid grid-cols-3 bg-neutral-900 border border-neutral-800 h-9 p-0.5">
-                                        <TabsTrigger value="general" className="text-[10px] font-black uppercase tracking-wider data-[state=active]:bg-neutral-800 data-[state=active]:text-white text-neutral-500">
+                                <div className="px-6 pt-3 pb-2">
+                                    <TabsList className="w-full grid grid-cols-3 bg-black/40 border border-white/5 h-10 p-1 rounded-lg">
+                                        <TabsTrigger value="general" className="text-[10px] font-bold uppercase tracking-wider data-[state=active]:bg-white/10 data-[state=active]:text-white text-neutral-500 rounded-md transition-all duration-200">
                                             General
                                         </TabsTrigger>
-                                        <TabsTrigger value="credentials" className="text-[10px] font-black uppercase tracking-wider data-[state=active]:bg-neutral-800 data-[state=active]:text-white text-neutral-500">
+                                        <TabsTrigger value="credentials" className="text-[10px] font-bold uppercase tracking-wider data-[state=active]:bg-white/10 data-[state=active]:text-white text-neutral-500 rounded-md transition-all duration-200">
                                             Credenciales
                                         </TabsTrigger>
-                                        <TabsTrigger value="sync" className="text-[10px] font-black uppercase tracking-wider data-[state=active]:bg-neutral-800 data-[state=active]:text-white text-neutral-500">
+                                        <TabsTrigger value="sync" className="text-[10px] font-bold uppercase tracking-wider data-[state=active]:bg-white/10 data-[state=active]:text-white text-neutral-500 rounded-md transition-all duration-200">
                                             Sincronización
                                         </TabsTrigger>
                                     </TabsList>
@@ -332,7 +359,7 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
                                                     </Label>
                                                     <Input
                                                         name="name"
-                                                        defaultValue={user?.name}
+                                                        defaultValue={user?.name || initialData?.name}
                                                         placeholder="Nombre Apellido"
                                                         required
                                                         className="bg-neutral-900 border-neutral-800 focus:border-blue-500/50 h-8 rounded-lg text-xs transition-all"
@@ -377,7 +404,7 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
                                                     </Label>
                                                     <Input
                                                         name="dni"
-                                                        defaultValue={user?.dni || ""}
+                                                        defaultValue={user?.dni || initialData?.dni}
                                                         placeholder="Opcional"
                                                         className="bg-neutral-900 border-neutral-800 focus:border-blue-500/50 h-8 rounded-lg text-xs transition-all"
                                                     />
@@ -389,23 +416,23 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
                                                 <DoorOpen size={12} /> Residencia & Ubicación
                                             </div>
 
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 p-3 rounded-lg bg-neutral-900/30 border border-neutral-800/50">
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-neutral-400 text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
-                                                        <DoorOpen size={12} /> Unidad / Edificio
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 p-4 rounded-xl bg-black/20 border border-white/5">
+                                                <div className="space-y-2">
+                                                    <Label className="text-neutral-300 text-[11px] font-semibold tracking-wide flex items-center gap-2">
+                                                        <DoorOpen size={14} className="text-blue-400" /> Lote / Unidad
                                                     </Label>
                                                     <Select
                                                         name="unitId"
                                                         value={selectedUnitId}
                                                         onValueChange={setSelectedUnitId}
                                                     >
-                                                        <SelectTrigger className="bg-neutral-900 border-neutral-800 h-8 rounded-lg text-xs">
-                                                            <SelectValue />
+                                                        <SelectTrigger className="bg-black/40 border-white/10 h-9 rounded-lg text-xs hover:border-white/20 transition-colors">
+                                                            <SelectValue placeholder="Seleccionar lote..." />
                                                         </SelectTrigger>
-                                                        <SelectContent className="bg-neutral-900 border-neutral-800 text-white rounded-lg max-h-[200px]">
-                                                            <SelectItem value="none">Sin Asignación</SelectItem>
+                                                        <SelectContent className="bg-neutral-900 border-white/10 text-white rounded-xl max-h-[200px]">
+                                                            <SelectItem value="none" className="text-neutral-500">Sin Asignación</SelectItem>
                                                             {units.map(u => (
-                                                                <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                                                                <SelectItem key={u.id} value={u.id} className="hover:bg-white/5">{u.name}</SelectItem>
                                                             ))}
                                                         </SelectContent>
                                                     </Select>
@@ -806,14 +833,14 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
                     </div>
 
                     {/* Right Side: Photo Background Block */}
-                    <div className="relative w-full md:flex-1 bg-[#0d0d0d] overflow-hidden flex flex-col group">
+                    <div className="relative w-full md:flex-1 bg-black overflow-hidden flex flex-col group">
                         {previewUrl ? (
                             <Image
                                 src={previewUrl}
                                 alt="User Face"
                                 fill
                                 unoptimized
-                                className="object-cover transition-transform duration-1000 group-hover:scale-110 opacity-90 group-hover:opacity-100"
+                                className="object-cover transition-all duration-700 ease-out group-hover:scale-105 opacity-95 group-hover:opacity-100"
                             />
                         ) : (
                             <div className="flex-1 flex flex-col items-center justify-center text-neutral-800 space-y-4 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-neutral-800/20 via-transparent to-transparent">
@@ -825,7 +852,7 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
                         )}
 
                         {/* Scan Effect */}
-                        <div className="absolute inset-0 bg-gradient-to-b from-blue-500/10 via-transparent to-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                        <div className="absolute inset-0 bg-gradient-to-b from-blue-500/5 via-transparent to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
 
                         {/* Overlay Gradient */}
                         <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black via-black/40 to-transparent pointer-events-none" />
@@ -834,10 +861,10 @@ export function UserFormDialog({ user, units, groups, devices, parkingSlots = []
                             <Button
                                 type="button"
                                 onClick={() => fileInputRef.current?.click()}
-                                className="bg-white text-black hover:bg-white/90 shadow-2xl border-0 font-black rounded-2xl py-6 px-10 transform transition-transform hover:scale-105 active:scale-95 mb-6"
+                                className="bg-white text-black hover:bg-white/95 shadow-2xl border-0 font-bold rounded-xl py-5 px-8 transform transition-all duration-200 hover:scale-105 active:scale-95 mb-6"
                             >
-                                <Upload size={20} className="mr-3" />
-                                {previewUrl ? "REEMPLAZAR" : "VINCULAR CARA"}
+                                <Upload size={18} className="mr-2" />
+                                {previewUrl ? "Cambiar Foto" : "Subir Foto"}
                             </Button>
 
                             <div className="flex items-center gap-2 px-4 py-2 bg-neutral-900/50 backdrop-blur-xl rounded-full border border-white/5">

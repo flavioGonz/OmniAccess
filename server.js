@@ -29,6 +29,50 @@ const crypto = require("crypto");
 const { uploadToS3 } = require("./lib-s3");
 const { getVehicleColorName, getVehicleBrandName } = require("./hikvision-codes");
 const { handleWahaWebhook } = require("./waha-handler");
+const webpush = require('web-push');
+
+// Configure Web Push
+if (process.env.VAPID_PRIVATE_KEY) {
+    try {
+        webpush.setVapidDetails(
+            process.env.VAPID_SUBJECT || 'mailto:admin@omniaccess.com',
+            process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+            process.env.VAPID_PRIVATE_KEY
+        );
+        console.log("✅ Web Push Configured");
+    } catch (e) {
+        console.error("❌ Web Push Config Error:", e.message);
+    }
+}
+
+const sendPushToAll = async (payload) => {
+    try {
+        const subsPath = path.join(__dirname, 'push_subs.json');
+        if (!fs.existsSync(subsPath)) return;
+
+        const data = fs.readFileSync(subsPath, 'utf-8');
+        const subscriptions = JSON.parse(data);
+
+        console.log(`[PUSH] Sending to ${subscriptions.length} devices...`);
+
+        const notificationPayload = JSON.stringify(payload);
+
+        const promises = subscriptions.map(sub =>
+            webpush.sendNotification(sub, notificationPayload)
+                .catch(err => {
+                    if (err.statusCode === 410 || err.statusCode === 404) {
+                        // In a real app, we would remove the subscription here
+                        return;
+                    }
+                    console.error("[PUSH] Send error:", err.message);
+                })
+        );
+
+        await Promise.all(promises);
+    } catch (error) {
+        console.error("[PUSH] Broadcast error:", error);
+    }
+};
 
 // Configure axios defaults for device communication
 const agent = new https.Agent({
@@ -681,6 +725,12 @@ const DEBOUNCE_TIME = 5000;
 
 // Global Alert State
 let isAlertActive = false;
+
+// Global Guard Locations Map
+const guardLocations = new Map();
+
+// Global Active Missions (Incidents)
+const activeMissions = new Map();
 
 // Debug Logs History (In-memory)
 const debugLogsHistory = [];
@@ -2275,6 +2325,16 @@ io.on("connection", (socket) => {
     // Send initial alert status
     socket.emit("alert_status", { active: isAlertActive });
 
+    // Send current guard locations immediately
+    if (guardLocations.size > 0) {
+        socket.emit("guard_locations", Array.from(guardLocations.values()));
+    }
+
+    // Send active missions immediately
+    if (activeMissions.size > 0) {
+        socket.emit("active_missions", Array.from(activeMissions.values()));
+    }
+
     // Register guard tablet presence and broadcast to admin
     socket.on("guard_presence", (data) => {
         // Prioritize the IP reported by the client if it exists (local IP detection)
@@ -2287,6 +2347,134 @@ io.on("connection", (socket) => {
         });
     });
 
+    // --- GPS TRACKING ---
+    socket.on("guard_location_update", (data) => {
+        // data: { lat, lng, accuracy, guardName, timestamp }
+        guardLocations.set(socket.id, { ...data, socketId: socket.id });
+        io.emit("guard_locations", Array.from(guardLocations.values()));
+    });
+
+    // --- BACKUP REQUESTS (SOLICITUD DE APOYO) ---
+    socket.on("request_backup", async (data) => {
+        // data: { type: 'INDIVIDUO' | 'VEHICULO', lat, lng, requesterName, details }
+        console.log(`[BACKUP] Request from ${data.requesterName}: ${data.type}`);
+
+        let bitacoraId = null;
+        try {
+            const entry = await prisma.bitacora.create({
+                data: {
+                    type: "ALERTA",
+                    plate: "SOS",
+                    name: (data.type || "SOLICITUD APOYO").toUpperCase(),
+                    notes: `Solicitud iniciada por ${data.requesterName}. Detalles: ${data.details || 'Sin detalles'}`,
+                    guardName: data.requesterName,
+                    latitude: data.lat,
+                    longitude: data.lng,
+                    timestamp: new Date()
+                }
+            });
+            bitacoraId = entry.id;
+        } catch (e) {
+            console.error("Error logging backup request:", e);
+        }
+
+        const mission = {
+            id: data.id || 'req-' + Date.now(),
+            bitacoraId: bitacoraId,
+            ...data,
+            requesterId: socket.id,
+            timestamp: Date.now(),
+            status: 'PENDING'
+        };
+
+        activeMissions.set(mission.id, mission);
+
+        // Broadcast to all
+        io.emit("backup_requested", mission);
+
+        // Also notify admin consoles
+        socket.broadcast.emit("admin_alert", {
+            type: "BACKUP_REQUEST",
+            message: `Solicitud de apoyo: ${data.type} por ${data.requesterName}`,
+            location: { lat: data.lat, lng: data.lng }
+        });
+    });
+
+    socket.on("respond_backup", (data) => {
+        // data: { requestId, accepted: true/false, responderName }
+        console.log(`[BACKUP] Response from ${data.responderName}: ${data.accepted ? 'ACCEPTED' : 'REJECTED'}`);
+
+        const mission = activeMissions.get(data.requestId);
+        if (mission) {
+            mission.status = data.accepted ? 'ACCEPTED' : 'PENDING';
+            mission.responderName = data.responderName;
+            mission.responderId = socket.id;
+            activeMissions.set(data.requestId, mission);
+        }
+
+        // Notify everyone Update status
+        io.emit("backup_status_update", {
+            ...data,
+            responderId: socket.id
+        });
+    });
+
+    socket.on("resolve_backup", async (data) => {
+        // data: { requestId, bitacoraId, outcome: 'FALSA_ALARMA' | 'SOLUCIONADO', notes, guardName }
+        console.log(`[BACKUP] Resolved by ${data.guardName}: ${data.outcome}`);
+
+        try {
+            if (data.bitacoraId) {
+                // Update existing record
+                await prisma.bitacora.update({
+                    where: { id: data.bitacoraId },
+                    data: {
+                        notes: `[RESUELTO: ${data.outcome}] ${data.notes || ''}`
+                    }
+                });
+            } else {
+                // Fallback: Create new if no ID provided
+                await prisma.bitacora.create({
+                    data: {
+                        type: "ALERTA",
+                        plate: "SOS",
+                        name: "RESOLUCIÓN",
+                        notes: `Incidente resuelto (${data.outcome}). Detalles: ${data.notes || ''}`,
+                        guardName: data.guardName,
+                        timestamp: new Date()
+                    }
+                });
+            }
+        } catch (e) {
+            console.error("Error resolving backup in DB:", e);
+        }
+
+        activeMissions.delete(data.requestId);
+
+        io.emit("backup_resolved", {
+            requestId: data.requestId,
+            outcome: data.outcome,
+            resolverName: data.guardName
+        });
+    });
+
+    socket.on("cancel_backup", (data) => {
+        console.log(`[BACKUP] Cancelled by ${data.guardName}`);
+        activeMissions.delete(data.requestId);
+        io.emit("backup_cancelled", {
+            requestId: data.requestId,
+            cancelledBy: data.guardName
+        });
+    });
+
+    socket.on("disconnect", () => {
+        if (guardLocations.has(socket.id)) {
+            guardLocations.delete(socket.id);
+            io.emit("guard_locations", Array.from(guardLocations.values()));
+        }
+        console.log(`Socket client disconnected: ${socket.id}`);
+    });
+
     socket.on("new_bitacora", (data) => {
         io.emit("new_bitacora", data);
     });
@@ -2295,21 +2483,99 @@ io.on("connection", (socket) => {
         isAlertActive = data.active;
         console.log(`[ALERT] Alert mode set to: ${isAlertActive} by ${data.triggeredBy || socket.id}`);
 
+        if (isAlertActive) {
+            const loc = guardLocations.get(socket.id);
+            const missionId = 'panic-' + socket.id;
+
+            let bitacoraId = null;
+            try {
+                const entry = await prisma.bitacora.create({
+                    data: {
+                        type: "ALERTA",
+                        plate: "PÁNICO",
+                        name: (data.triggeredBy || "GUARDIA").toUpperCase(),
+                        notes: `BOTÓN DE PÁNICO ACTIVADO.`,
+                        guardName: data.triggeredBy || "Invitado",
+                        latitude: loc ? loc.lat : null,
+                        longitude: loc ? loc.lng : null,
+                        timestamp: new Date()
+                    }
+                });
+                bitacoraId = entry.id;
+            } catch (e) { console.error("Error logging panic:", e); }
+
+            // "Join" with backup requests for the map
+            const mission = {
+                id: missionId,
+                bitacoraId: bitacoraId,
+                type: 'BOTÓN DE PÁNICO',
+                lat: loc ? loc.lat : null,
+                lng: loc ? loc.lng : null,
+                requesterName: data.triggeredBy || "Guardia",
+                requesterId: socket.id,
+                status: 'PENDING',
+                details: 'PÁNICO ACTIVADO',
+                isPanic: true,
+                timestamp: Date.now()
+            };
+
+            activeMissions.set(missionId, mission);
+            io.emit("backup_requested", mission);
+        } else {
+            // If deactivating, we should probably delete the panic mission
+            activeMissions.delete('panic-' + socket.id);
+            io.emit("backup_cancelled", {
+                requestId: 'panic-' + socket.id,
+                cancelledBy: data.triggeredBy || "Guardia"
+            });
+        }
+
         // Log to database for permanent record
         try {
+            const loc = guardLocations.get(socket.id);
+            const notes = isAlertActive
+                ? `[BOTÓN DE PÁNICO] Activado por ${data.triggeredBy || 'Guardia'}.`
+                : `[SISTEMA NORMALIZADO] Desactivado por ${data.triggeredBy || 'Guardia'}. ${data.explanation ? `Motivo: ${data.explanation}` : ''}`;
+
             await prisma.bitacora.create({
                 data: {
-                    type: isAlertActive ? "ALERTA_ACTIVADA" : "ALERTA_DESACTIVADA",
-                    notes: `Modo de alerta ${isAlertActive ? 'activado' : 'desactivado'} desde consola.`,
-                    guardName: data.triggeredBy || "Sistema",
+                    type: "ALERTA",
+                    plate: isAlertActive ? "PÁNICO" : "NORMAL",
+                    name: (data.triggeredBy || "GUARDIA").toUpperCase(),
+                    notes: notes,
+                    guardName: data.triggeredBy || "Invitado",
+                    latitude: loc ? loc.lat : null,
+                    longitude: loc ? loc.lng : null,
                     timestamp: new Date()
                 }
             });
-        } catch (error) {
-            console.error("Error logging alert to bitacora:", error);
+        } catch (e) {
+            console.error("Error logging alert status change:", e);
         }
 
-        io.emit("alert_status", { active: isAlertActive, triggeredBy: data.triggeredBy });
+        io.emit("alert_status", {
+            active: isAlertActive,
+            triggeredBy: data.triggeredBy,
+            explanation: data.explanation || ""
+        });
+
+        // SEND PUSH
+        const pushPayload = isAlertActive ? {
+            title: "⚠️ ALERTA DE SEGURIDAD",
+            body: `Modo de alerta activado por ${data.triggeredBy || "un compañero"}.`,
+            icon: "/logo-transparent.png",
+            tag: "security-alert",
+            vibrate: [200, 100, 200, 100, 200],
+            data: { url: '/guard' }
+        } : {
+            title: "SISTEMA NORMALIZADO",
+            body: data.explanation ? `Alerta desactivada. Motivo: ${data.explanation}` : "La alerta ha sido desactivada.",
+            icon: "/logo-transparent.png",
+            tag: "security-alert",
+            data: { url: '/guard' }
+        };
+
+        sendPushToAll(pushPayload);
     });
 });
 

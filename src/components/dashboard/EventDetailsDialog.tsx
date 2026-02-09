@@ -34,6 +34,11 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { getCarLogo } from "@/lib/car-logos";
 import { getRelatedSessionEvents } from "@/app/actions/history";
+import { getQuickCreateData } from "@/app/actions/users";
+import { UserFormDialog } from "@/components/UserFormDialog";
+import { UserPlus, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { Unit, AccessGroup } from "@prisma/client";
 
 interface EventDetailsDialogProps {
     event: any;
@@ -56,6 +61,16 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
     // Session / Sequence State
     const [sessionEvents, setSessionEvents] = useState<any[]>([]);
     const [loadingSession, setLoadingSession] = useState(false);
+
+    // Quick Create States
+    const [showQuickCreate, setShowQuickCreate] = useState(false);
+    const [quickCreateData, setQuickCreateData] = useState<{
+        units: Unit[];
+        groups: AccessGroup[];
+        devices: any[];
+        parkingSlots: any[];
+    } | null>(null);
+    const [loadingQuickCreateData, setLoadingQuickCreateData] = useState(false);
 
     const isGrant = event.decision === "GRANT";
 
@@ -152,6 +167,26 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
     const dateObj = new Date(event.timestamp);
     const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const dateStr = dateObj.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    const handleQuickCreateClick = async () => {
+        if (quickCreateData) {
+            setShowQuickCreate(true);
+            return;
+        }
+
+        setLoadingQuickCreateData(true);
+        try {
+            const data = await getQuickCreateData();
+            // @ts-ignore - parkingSlots added to action but not strictly typed here yet
+            setQuickCreateData(data);
+            setShowQuickCreate(true);
+        } catch (error) {
+            console.error("Error fetching quick create data:", error);
+            toast.error("Error al cargar datos de creación rápida");
+        } finally {
+            setLoadingQuickCreateData(false);
+        }
+    };
 
     return (
         <Dialog onOpenChange={setIsOpen}>
@@ -534,7 +569,19 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
                             ) : (
                                 <div className="bg-neutral-900 rounded-xl p-8 border border-dashed border-neutral-800 text-center">
                                     <UserIcon size={40} className="text-neutral-700 mx-auto mb-3" />
-                                    <p className="text-sm font-bold text-neutral-600 uppercase">Desconocido</p>
+                                    <p className="text-sm font-bold text-neutral-600 uppercase mb-4">Desconocido</p>
+                                    <button
+                                        onClick={handleQuickCreateClick}
+                                        disabled={loadingQuickCreateData}
+                                        className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95"
+                                    >
+                                        {loadingQuickCreateData ? (
+                                            <Loader2 size={14} className="animate-spin" />
+                                        ) : (
+                                            <UserPlus size={14} />
+                                        )}
+                                        Registrar Nuevo Usuario
+                                    </button>
                                 </div>
                             )}
                         </div>
@@ -647,6 +694,28 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
                             <button className="w-full p-4 bg-neutral-800 hover:bg-neutral-700 rounded text-center text-white font-bold" onClick={() => setShowPlateActionModal(false)}>Cerrar</button>
                         </div>
                     </div>
+                )}
+
+                {/* Quick Create User Dialog */}
+                {quickCreateData && (
+                    <UserFormDialog
+                        open={showQuickCreate}
+                        onOpenChange={setShowQuickCreate}
+                        units={quickCreateData.units}
+                        groups={quickCreateData.groups}
+                        devices={quickCreateData.devices}
+                        parkingSlots={quickCreateData.parkingSlots}
+                        onSuccess={() => {
+                            setShowQuickCreate(false);
+                            toast.success("Usuario creado con éxito");
+                            // Ideally refresh the current view or mark as identified
+                        }}
+                        initialData={{
+                            plate: plateText !== 'No Leída' ? plateText : undefined,
+                            cara: event.snapshotPath || meta.FaceImage,
+                            name: meta.Rostro || undefined
+                        }}
+                    />
                 )}
             </DialogContent>
         </Dialog>

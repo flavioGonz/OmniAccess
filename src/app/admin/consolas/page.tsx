@@ -2,73 +2,48 @@
 
 import React, { useState, useEffect } from "react";
 import {
-    Monitor,
     Activity,
     Shield,
     Plus,
-    User,
-    Building2,
     ExternalLink,
-    Filter,
-    Calendar,
     Siren,
-    Clock,
-    Camera,
-    ChevronRight,
     MapPin,
-    Eye,
-    Play,
     X,
-    History,
-    Search,
-    RefreshCcw,
-    Smartphone,
     UserCheck,
-    Briefcase,
-    Landmark,
-    Flame,
-    Car,
-    Bike,
     CheckCircle2,
-    Loader2
+    UserX,
+    CarFront
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import SystemFlow from "@/components/dashboard/SystemFlow";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { getBitacoraEntries } from "@/app/actions/bitacora";
 import { io } from "socket.io-client";
-import { toast } from "sonner";
+import dynamic from 'next/dynamic';
+const LiveGuardMap = dynamic(() => import('@/components/LiveGuardMap'), { ssr: false });
 
 export default function ConsolasAdminPage() {
-    const [activeConsoles, setActiveConsoles] = useState<any[]>([]);
-    const [bitacoraHistory, setBitacoraHistory] = useState<any[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
     const [isAlertMode, setIsAlertMode] = useState(false);
     const [notification, setNotification] = useState<{ type: "success" | "error" | "info" | "alert", title: string, message: string } | null>(null);
+    const [guardLocations, setGuardLocations] = useState<any[]>([]);
+    const [showFullMap, setShowFullMap] = useState(false);
     const socketRef = React.useRef<any>(null);
+    const isFirstRun = React.useRef(true);
 
     const showNotification = (title: string, message: string, type: "success" | "error" | "info" | "alert" = "success", duration: number = 3000) => {
         setNotification({ type, title, message });
         setTimeout(() => setNotification(null), duration);
     };
 
+    // BACKUP / ALERTS STATE
+    const [activeMissions, setActiveMissions] = useState<any[]>([]);
+    const [showBackupModal, setShowBackupModal] = useState(false);
+    const [backupLocation, setBackupLocation] = useState<{ lat: number, lng: number } | null>(null);
+    const [backupDetail, setBackupDetail] = useState("");
+
     // Initial load and Socket setup
     useEffect(() => {
-        async function loadData() {
-            try {
-                const entries = await getBitacoraEntries();
-                setBitacoraHistory(entries);
-            } catch (error) {
-                console.error("Error loading bitacora:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        }
-
-        loadData();
-
         // Socket connection for real-time presence
         const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
         const isStandardPort = window.location.port === '' || window.location.port === '80' || window.location.port === '443';
@@ -78,55 +53,98 @@ export default function ConsolasAdminPage() {
         const socket = io(socketUrl);
         socketRef.current = socket;
 
-        socket.on('guard_presence', (data: any) => {
-            setActiveConsoles(prev => {
-                const existingIndex = prev.findIndex(c => c.guardName === data.guardName);
-                const consoleData = {
-                    ...data,
-                    lastSeen: new Date(),
-                    status: 'online'
-                };
-
-                if (existingIndex >= 0) {
-                    const newConsoles = [...prev];
-                    newConsoles[existingIndex] = consoleData;
-                    return newConsoles;
-                }
-                return [...prev, consoleData];
-            });
-        });
-
-        socket.on('new_bitacora', (entry: any) => {
-            setBitacoraHistory(prev => [entry, ...prev]);
+        socket.on('guard_locations', (data: any) => {
+            setGuardLocations(data);
         });
 
         socket.on('alert_status', (data: any) => {
-            setIsAlertMode(data.active);
-            if (!data.active) {
-                showNotification("SISTEMA NORMALIZADO", "La alerta de seguridad ha sido desactivada correctamente.", "success");
-            } else {
-                showNotification("ALERTA ACTIVADA", `El modo de alerta ha sido activado por ${data.triggeredBy || "un compañero"}.`, "alert", 5000);
+            if (isFirstRun.current) {
+                setIsAlertMode(data.active);
+                isFirstRun.current = false;
+                return;
             }
+
+            setIsAlertMode(prevMode => {
+                if (prevMode && !data.active) {
+                    showNotification("SISTEMA NORMALIZADO", "La alerta de seguridad ha sido desactivada correctamente.", "success");
+                } else if (!prevMode && data.active) {
+                    showNotification("ALERTA ACTIVADA", `El modo de alerta ha sido activado por ${data.triggeredBy || "un compañero"}.`, "alert", 5000);
+
+                    // Play alert sound
+                    const audio = new Audio('/sounds/alert.mp3');
+                    audio.volume = 1.0;
+                    audio.play().catch(err => console.log('Audio play failed:', err));
+
+                    // Vibrate if supported
+                    if ('vibrate' in navigator) {
+                        navigator.vibrate([200, 100, 200, 100, 200]);
+                    }
+
+                    // Show PWA notification
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                        new Notification('🚨 ALERTA DE SEGURIDAD', {
+                            body: `Modo de alerta activado por ${data.triggeredBy || "un compañero"}`,
+                            icon: '/icon-192.png',
+                            badge: '/icon-192.png',
+                            requireInteraction: true,
+                            tag: 'security-alert'
+                        });
+                    } else if ('Notification' in window && Notification.permission !== 'denied') {
+                        // Request permission
+                        Notification.requestPermission().then(permission => {
+                            if (permission === 'granted') {
+                                new Notification('🚨 ALERTA DE SEGURIDAD', {
+                                    body: `Modo de alerta activado por ${data.triggeredBy || "un compañero"}`,
+                                    icon: '/icon-192.png',
+                                    badge: '/icon-192.png',
+                                    requireInteraction: true,
+                                    tag: 'security-alert'
+                                });
+                            }
+                        });
+                    }
+                }
+                return data.active;
+            });
+        });
+
+        // MISSION & BACKUP LISTENERS
+        socket.on('active_missions', (data: any[]) => {
+            setActiveMissions(data);
+        });
+
+        socket.on('backup_requested', (data: any) => {
+            setActiveMissions(prev => {
+                if (prev.some(m => m.id === data.id)) return prev;
+                return [...prev, data];
+            });
+            showNotification("NUEVA ALERTA", "Se ha reportado un incidente.", "alert");
+        });
+
+        socket.on('backup_status_update', (data: any) => {
+            setActiveMissions(prev => prev.map(m =>
+                m.id === data.requestId
+                    ? { ...m, status: data.accepted ? 'ACCEPTED' : 'REJECTED', responderId: data.responderId, responderName: data.responderName }
+                    : m
+            ));
+        });
+
+        socket.on('backup_resolved', (data: any) => {
+            setActiveMissions(prev => prev.filter(m => m.id !== data.requestId));
+            showNotification("RESUELTO", `Incidente cerrado por ${data.resolverName}`, "success");
+        });
+
+        socket.on('backup_cancelled', (data: any) => {
+            setActiveMissions(prev => prev.filter(m => m.id !== data.requestId));
+        });
+
+        socket.on('backup_cancelled_by_user', (data: any) => {
+            setActiveMissions(prev => prev.filter(m => m.id !== data.requestId));
         });
 
         return () => {
             socket.disconnect();
         };
-    }, []);
-
-    // Cleanup stale consoles (not seen in 30 seconds)
-    useEffect(() => {
-        const timer = setInterval(() => {
-            setActiveConsoles(prev =>
-                prev.filter(c => {
-                    const lastSeen = new Date(c.lastSeen).getTime();
-                    const now = new Date().getTime();
-                    return (now - lastSeen) < 30000;
-                })
-            );
-        }, 10000);
-
-        return () => clearInterval(timer);
     }, []);
 
     useEffect(() => {
@@ -135,262 +153,101 @@ export default function ConsolasAdminPage() {
         };
     }, []);
 
-    const formatTime = (date: Date | string) => {
-        const d = new Date(date);
-        return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
-    };
-
     const [showQuickRegister, setShowQuickRegister] = useState(false);
     const [quickPlate, setQuickPlate] = useState("");
     const [quickName, setQuickName] = useState("");
     const [quickUnit, setQuickUnit] = useState("");
+    <div className="flex h-screen overflow-hidden transition-all duration-700 relative bg-[#0a0a0c]">
 
-    const [searchTerm, setSearchTerm] = useState("");
-    const [filterDate, setFilterDate] = useState("");
-    const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
-    const [selectedAudio, setSelectedAudio] = useState<string | null>(null);
+        {/* Main Layout: Flow on left, Quick Action on right */}
+        <div className="flex-1 flex overflow-hidden">
+            {/* Left: Network Topology */}
+            <div className="flex-1 relative border-r border-neutral-800 overflow-hidden group/flow">
+                <SystemFlow mode="consoles" />
 
-    const filteredHistory = bitacoraHistory.filter(entry => {
-        const matchesSearch =
-            (entry.plate?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
-            (entry.name?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
-            (entry.destination?.toLowerCase() || "").includes(searchTerm.toLowerCase());
-
-        const matchesDate = !filterDate || new Date(entry.timestamp).toISOString().split('T')[0] === filterDate;
-
-        return matchesSearch && matchesDate;
-    });
-
-    const historyEntries = filteredHistory.filter(h => h.type === 'ENTRY');
-    const historyExits = filteredHistory.filter(h => h.type === 'EXIT');
-
-    const QuickActionCard = ({ entry }: { entry: any }) => (
-        <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="group relative h-40 rounded-2xl overflow-hidden bg-neutral-800/40 border border-neutral-700/50 hover:border-blue-500/50 transition-all"
-        >
-            {/* Background Photo */}
-            {entry.photoPath ? (
-                <img
-                    src={entry.photoPath}
-                    alt="Capture"
-                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                />
-            ) : (
-                <div className="absolute inset-0 bg-neutral-900 flex items-center justify-center">
-                    <Camera size={24} className="text-neutral-800" />
-                </div>
-            )}
-
-            {/* Gradient Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
-
-            {/* Content Overlay */}
-            <div className="absolute inset-0 p-3 flex flex-col justify-between">
-                <div className="flex justify-between items-start">
-                    <div className="bg-black/60 backdrop-blur-md px-2 py-1 rounded-lg border border-white/10">
-                        <p className="text-[10px] font-black text-white uppercase tracking-widest">{entry.plate || '--- ---'}</p>
+                {/* Floating Info Overlay */}
+                <div className="absolute top-6 left-6 z-50 p-4 transition-all duration-500">
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-400 border border-blue-500/20">
+                                <Activity className="animate-pulse" size={16} />
+                            </div>
+                            <span className="text-xs font-black uppercase tracking-widest text-white/80">
+                                Estado del Sistema
+                            </span>
+                        </div>
                     </div>
-                    <div className="bg-black/60 backdrop-blur-md px-2 py-1 rounded-lg border border-white/10 flex items-center gap-1">
-                        <Clock size={8} className="text-neutral-400" />
-                        <p className="text-[9px] font-black text-white">{formatTime(entry.timestamp)}</p>
-                    </div>
+
+                    <p className="text-[11px] font-bold leading-relaxed text-neutral-400">
+                        Visualización en tiempo real de la infraestructura operativa y consolas conectadas.
+                    </p>
                 </div>
 
-                <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-white truncate drop-shadow-md">{entry.name || 'Invitado'}</p>
-                    <p className="text-[8px] font-bold text-neutral-400 uppercase tracking-tighter truncate drop-shadow-md">{entry.destination || '---'}</p>
-                </div>
-            </div>
-
-            {/* Hover Actions */}
-            <div className="absolute inset-0 bg-blue-600/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 backdrop-blur-[2px]">
-                {entry.photoPath && (
-                    <button
-                        onClick={() => setSelectedPhoto(entry.photoPath)}
-                        className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-110 transition-transform shadow-xl"
+                {/* Floating Quick Actions Container */}
+                <div className="absolute bottom-6 right-6 z-50 flex flex-col gap-4">
+                    {/* Panic Button */}
+                    <motion.button
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => {
+                            if (socketRef.current) {
+                                socketRef.current.emit('alert_toggle', {
+                                    active: !isAlertMode,
+                                    triggeredBy: "Administrador"
+                                });
+                            }
+                        }}
+                        className={cn(
+                            "w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all border-2",
+                            isAlertMode
+                                ? "bg-white text-red-600 border-red-600 animate-pulse"
+                                : "bg-red-600 hover:bg-red-500 text-white border-red-400/20"
+                        )}
                     >
-                        <Eye size={18} />
-                    </button>
-                )}
-                {entry.audioPath && (
-                    <button
-                        onClick={() => setSelectedAudio(entry.audioPath)}
-                        className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center hover:scale-110 transition-transform shadow-xl"
+                        <Siren size={24} className={isAlertMode ? "animate-bounce" : ""} />
+                    </motion.button>
+
+                    {/* Floating Quick Register Button */}
+                    <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setShowQuickRegister(true)}
+                        className="bg-blue-600 hover:bg-blue-500 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-2xl shadow-blue-500/30 border-2 border-blue-400/20"
                     >
-                        <Play size={18} className="fill-current" />
-                    </button>
-                )}
-            </div>
-        </motion.div>
-    );
+                        <Plus size={24} className="font-black" />
+                    </motion.button>
 
-    return (
-        <div className="flex h-screen overflow-hidden transition-all duration-700 relative bg-[#0a0a0c]">
-
-            {/* Main Layout: Flow on left, Quick Action on right */}
-            <div className="flex-1 flex overflow-hidden">
-                {/* Left: Network Topology */}
-                <div className="flex-1 relative border-r border-neutral-800 overflow-hidden group/flow">
-                    <SystemFlow mode="consoles" />
-
-                    {/* Floating Info Overlay */}
-                    <div className="absolute top-6 left-6 z-50 backdrop-blur-md border border-neutral-800 p-6 rounded-[2.5rem] max-w-sm transition-all duration-500 bg-black/60 hover:bg-black/80">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-blue-500/20 rounded-xl flex items-center justify-center text-blue-400 border border-blue-500/30">
-                                    <Activity className="animate-pulse" size={16} />
-                                </div>
-                                <span className="text-xs font-black uppercase tracking-widest text-white/80">
-                                    Estado del Sistema
-                                </span>
-                            </div>
-                        </div>
-
-                        <p className="text-[11px] font-bold leading-relaxed text-neutral-400">
-                            Visualización en tiempo real de la infraestructura operativa y consolas conectadas.
-                        </p>
-                    </div>
-
-                    {/* Floating Quick Actions Container */}
-                    <div className="absolute bottom-6 right-6 z-50 flex flex-col gap-4">
-                        {/* Panic Button */}
-                        <motion.button
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            onClick={() => {
-                                if (socketRef.current) {
-                                    socketRef.current.emit('alert_toggle', {
-                                        active: !isAlertMode,
-                                        triggeredBy: "Administrador"
-                                    });
-                                }
-                            }}
-                            className={cn(
-                                "w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all border-2",
-                                isAlertMode
-                                    ? "bg-white text-red-600 border-red-600 animate-pulse"
-                                    : "bg-red-600 hover:bg-red-500 text-white border-red-400/20"
-                            )}
-                        >
-                            <Siren size={24} className={isAlertMode ? "animate-bounce" : ""} />
-                        </motion.button>
-
-                        {/* Floating Quick Register Button */}
-                        <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => setShowQuickRegister(true)}
-                            className="bg-blue-600 hover:bg-blue-500 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-2xl shadow-blue-500/30 border-2 border-blue-400/20"
-                        >
-                            <Plus size={24} className="font-black" />
-                        </motion.button>
-                    </div>
+                    {/* Floating View All Button */}
+                    <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => window.location.href = "/admin/bitacora"}
+                        className="bg-neutral-800 hover:bg-neutral-700 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-2xl border-2 border-neutral-700/50"
+                    >
+                        <ExternalLink size={24} />
+                    </motion.button>
+                    {/* Floating Map Toggle - Moved from bottom left */}
+                    <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setShowFullMap(true)}
+                        className="bg-neutral-800 hover:bg-neutral-700 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-2xl border-2 border-neutral-700/50"
+                    >
+                        <MapPin size={24} />
+                    </motion.button>
                 </div>
-
-                {/* Right: Quick Operational Panel */}
-                <aside className="w-[450px] overflow-y-auto custom-scrollbar p-8 flex flex-col gap-8 transition-all duration-500 bg-neutral-900 border-l border-neutral-800">
-
-                    {/* Historial de Bitácora (New) */}
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between px-2">
-                            <h3 className="text-xs font-black text-neutral-400 uppercase tracking-widest flex items-center gap-2">
-                                <History size={14} className="text-amber-500" /> Historial de Bitácora
-                            </h3>
-                            <button
-                                onClick={() => window.location.href = "/admin/bitacora"}
-                                className="text-[10px] font-black text-blue-500 hover:text-blue-400 uppercase tracking-tighter transition-colors flex items-center gap-1"
-                            >
-                                <ExternalLink size={10} />
-                                Ver Todo
-                            </button>
-                        </div>
-
-                        {/* Search and Filters */}
-                        <div className="flex gap-2 px-2">
-                            <div className="relative flex-1 group">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600 group-focus-within:text-blue-500 transition-colors" size={12} />
-                                <Input
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    placeholder="Buscar..."
-                                    className="pl-8 bg-neutral-950 border-neutral-800 h-9 text-[10px] font-bold text-white placeholder:text-neutral-700 rounded-xl focus:border-blue-500/50 focus:ring-0 transition-all"
-                                />
-                            </div>
-
-                            <div className="relative w-32 group">
-                                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600 transition-colors group-focus-within:text-blue-500" size={12} />
-                                <Input
-                                    type="date"
-                                    value={filterDate}
-                                    onChange={(e) => setFilterDate(e.target.value)}
-                                    className="pl-8 bg-neutral-950 border-neutral-800 h-9 text-[9px] font-black text-neutral-400 focus:border-blue-500/50 focus:ring-0 rounded-xl appearance-none uppercase"
-                                />
-                            </div>
-
-                            {(searchTerm || filterDate) && (
-                                <button
-                                    onClick={() => { setSearchTerm(""); setFilterDate(""); }}
-                                    className="px-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-400 rounded-xl transition-colors shrink-0 h-9"
-                                >
-                                    <X size={14} />
-                                </button>
-                            )}
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            {/* Column Entradas */}
-                            <div className="space-y-4">
-                                <div className="px-2 py-1 bg-blue-500/10 rounded-lg border border-blue-500/20 text-center">
-                                    <span className="text-[8px] font-black text-blue-400 uppercase tracking-[0.2em]">Entradas</span>
-                                </div>
-                                <div className="space-y-3">
-                                    {isLoading ? (
-                                        Array(2).fill(0).map((_, i) => (
-                                            <div key={i} className="bg-neutral-800/20 h-40 rounded-2xl animate-pulse" />
-                                        ))
-                                    ) : historyEntries.length > 0 ? (
-                                        historyEntries.slice(0, 5).map((entry) => (
-                                            <QuickActionCard key={entry.id} entry={entry} />
-                                        ))
-                                    ) : (
-                                        <p className="text-[9px] text-neutral-600 text-center py-4 font-bold uppercase">Sin entradas</p>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Column Salidas */}
-                            <div className="space-y-4">
-                                <div className="px-2 py-1 bg-amber-500/10 rounded-lg border border-amber-500/20 text-center">
-                                    <span className="text-[8px] font-black text-amber-400 uppercase tracking-[0.2em]">Salidas</span>
-                                </div>
-                                <div className="space-y-3">
-                                    {isLoading ? (
-                                        Array(2).fill(0).map((_, i) => (
-                                            <div key={i} className="bg-neutral-800/20 h-40 rounded-2xl animate-pulse" />
-                                        ))
-                                    ) : historyExits.length > 0 ? (
-                                        historyExits.slice(0, 5).map((entry) => (
-                                            <QuickActionCard key={entry.id} entry={entry} />
-                                        ))
-                                    ) : (
-                                        <p className="text-[9px] text-neutral-600 text-center py-4 font-bold uppercase">Sin salidas</p>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-
-                </aside>
             </div>
 
+            {/* Right: Quick Operational Panel */}
+
+        </div>
 
 
-            {/* Quick Register Modal */}
-            <AnimatePresence>
-                {showQuickRegister && (
+
+        {/* Quick Register Modal */}
+        <AnimatePresence>
+            {
+                showQuickRegister && (
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -467,12 +324,14 @@ export default function ConsolasAdminPage() {
                             </div>
                         </motion.div>
                     </motion.div>
-                )}
-            </AnimatePresence>
+                )
+            }
+        </AnimatePresence>
 
-            {/* Photo Lightbox */}
-            <AnimatePresence>
-                {selectedPhoto && (
+        {/* Photo Lightbox */}
+        <AnimatePresence>
+            {
+                selectedPhoto && (
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -499,12 +358,14 @@ export default function ConsolasAdminPage() {
                             </button>
                         </motion.div>
                     </motion.div>
-                )}
-            </AnimatePresence>
+                )
+            }
+        </AnimatePresence>
 
-            {/* Audio Player Modal */}
-            <AnimatePresence>
-                {selectedAudio && (
+        {/* Audio Player Modal */}
+        <AnimatePresence>
+            {
+                selectedAudio && (
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -527,19 +388,157 @@ export default function ConsolasAdminPage() {
                             </button>
                         </div>
                     </motion.div>
-                )}
-            </AnimatePresence>
+                )
+            }
+        </AnimatePresence>
 
-            {/* NOTIFICATION OVERLAY SCREEN */}
-            <AnimatePresence>
-                {notification && (
+
+
+        {/* FULL SCREEN MAP MODAL */}
+        <AnimatePresence>
+            {
+                showFullMap && (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="fixed inset-0 z-[100] bg-black flex flex-col"
+                    >
+                        <div className="flex-1 w-full h-full relative">
+                            {/* Close Button */}
+                            <div className="absolute top-6 right-6 z-[200]">
+                                <button onClick={() => setShowFullMap(false)} className="bg-white text-black p-4 rounded-full hover:bg-gray-200 transition-colors shadow-xl">
+                                    <X size={32} />
+                                </button>
+                            </div>
+
+                            <LiveGuardMap
+                                myLocation={null}
+                                guards={guardLocations}
+                                socketId={socketRef.current?.id}
+                                onLongPress={(latlng) => {
+                                    setBackupLocation(latlng);
+                                    setShowBackupModal(true);
+                                }}
+                                backupMissions={activeMissions}
+                            />
+
+                            {/* Overlay Title - Glassmorphism */}
+                            <div className="absolute top-6 left-6 z-[100] bg-white/30 backdrop-blur-xl px-8 py-6 rounded-3xl shadow-2xl border border-white/20 border-l-8 border-l-[#B20D30]">
+                                <h2 className="text-4xl font-black uppercase text-black tracking-tighter">Mapa Táctico</h2>
+                                <p className="text-sm font-bold text-gray-800 uppercase tracking-widest mt-1">Monitoreo en Tiempo Real</p>
+                            </div>
+                        </div>
+                    </motion.div>
+                )
+            }
+        </AnimatePresence>
+
+        {/* BACKUP REQUEST MODAL (ADMIN) */}
+        <AnimatePresence>
+            {
+                showBackupModal && (
+                    <div className="fixed inset-0 z-[300] bg-black/80 flex items-center justify-center p-6 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="bg-white w-full max-w-lg rounded-[2rem] p-8 shadow-2xl relative overflow-hidden"
+                        >
+                            <div className="text-center mb-6 relative z-10">
+                                <h2 className="text-3xl font-black uppercase text-[#B20D30] tracking-tighter">Reportar Incidente</h2>
+                                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Consola de Administración</p>
+                            </div>
+
+                            <div className="mb-6 relative z-10">
+                                <label className="text-[10px] uppercase font-black text-gray-400 mb-2 block tracking-widest">Detalles Adicionales</label>
+                                <input
+                                    type="text"
+                                    placeholder="Descripción del sospechoso..."
+                                    value={backupDetail}
+                                    onChange={(e) => setBackupDetail(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-black focus:outline-none focus:border-[#B20D30] transition-colors uppercase text-sm"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 relative z-10">
+                                <button onClick={() => {
+                                    if (socketRef.current && backupLocation) {
+                                        const mission = {
+                                            id: 'req-admin-' + Date.now(),
+                                            type: 'INDIVIDUO SOSPECHOSO',
+                                            lat: backupLocation.lat, lng: backupLocation.lng,
+                                            requesterName: "Administrador",
+                                            requesterId: socketRef.current.id,
+                                            status: 'PENDING',
+                                            details: backupDetail
+                                        };
+                                        socketRef.current.emit('request_backup', mission);
+                                        // Add locally if not listening to own emit (depends on server impl, safe to add if unique)
+                                        setActiveMissions(prev => {
+                                            if (prev.some(m => m.id === mission.id)) return prev;
+                                            return [...prev, mission];
+                                        });
+                                        setShowBackupModal(false);
+                                        setBackupDetail("");
+                                        showNotification("ENVIADO", "Alerta administrativa generada.", "info");
+                                    }
+                                }} className="bg-red-50 hover:bg-red-100 border-2 border-transparent hover:border-[#B20D30]/20 py-6 rounded-2xl flex flex-col items-center gap-3 transition-all group active:scale-95">
+                                    <div className="w-16 h-16 bg-white shadow-lg rounded-full flex items-center justify-center text-[#B20D30] group-hover:scale-110 transition-transform">
+                                        <UserX size={32} />
+                                    </div>
+                                    <span className="text-sm font-black uppercase text-[#B20D30] leading-tight">Individuo<br />Sospechoso</span>
+                                </button>
+
+                                <button onClick={() => {
+                                    if (socketRef.current && backupLocation) {
+                                        const mission = {
+                                            id: 'req-admin-' + Date.now(),
+                                            type: 'VEHICULO SOSPECHOSO',
+                                            lat: backupLocation.lat, lng: backupLocation.lng,
+                                            requesterName: "Administrador",
+                                            requesterId: socketRef.current.id,
+                                            status: 'PENDING',
+                                            details: backupDetail
+                                        };
+                                        socketRef.current.emit('request_backup', mission);
+                                        setActiveMissions(prev => {
+                                            if (prev.some(m => m.id === mission.id)) return prev;
+                                            return [...prev, mission];
+                                        });
+                                        setShowBackupModal(false);
+                                        setBackupDetail("");
+                                        showNotification("ENVIADO", "Alerta administrativa generada.", "info");
+                                    }
+                                }} className="bg-slate-50 hover:bg-slate-100 border-2 border-transparent hover:border-slate-300 py-6 rounded-2xl flex flex-col items-center gap-3 transition-all group active:scale-95">
+                                    <div className="w-16 h-16 bg-white shadow-lg rounded-full flex items-center justify-center text-slate-700 group-hover:scale-110 transition-transform">
+                                        <CarFront size={32} />
+                                    </div>
+                                    <span className="text-sm font-black uppercase text-slate-700 leading-tight">Vehículo<br />Sospechoso</span>
+                                </button>
+                            </div>
+
+                            <button onClick={() => setShowBackupModal(false)} className="mt-6 w-full py-3 text-xs font-bold uppercase text-gray-400 hover:text-black transition-colors">
+                                Cancelar
+                            </button>
+                        </motion.div>
+                    </div>
+                )
+            }
+        </AnimatePresence>
+
+        {/* NOTIFICATION OVERLAY SCREEN */}
+        <AnimatePresence>
+            {
+                notification && (
                     <NotificationOverlay
                         {...notification}
                         onClose={() => setNotification(null)}
                     />
-                )}
-            </AnimatePresence>
-        </div >
+                )
+            }
+        </AnimatePresence>
+    </div>
     );
 }
 
@@ -554,7 +553,7 @@ function NotificationOverlay({ type, title, message, onClose }: { type: string, 
             onClick={onClose}
             className={cn(
                 "fixed inset-0 z-[1000] flex flex-col items-center justify-center p-8 backdrop-blur-3xl",
-                isAlert ? "bg-red-600/95" : "bg-black/90"
+                isAlert ? "bg-red-600/95" : (type === "success" ? "bg-emerald-600/95" : "bg-black/90")
             )}
         >
             <motion.div
@@ -565,7 +564,7 @@ function NotificationOverlay({ type, title, message, onClose }: { type: string, 
             >
                 <div className={cn(
                     "w-32 h-32 rounded-[3rem] flex items-center justify-center mb-10 shadow-2xl relative",
-                    isAlert ? "bg-white text-red-600" : "bg-white text-black"
+                    isAlert ? "bg-white text-red-600" : (type === "success" ? "bg-white text-emerald-600" : "bg-white text-black")
                 )}>
                     {type === "success" && <CheckCircle2 size={64} strokeWidth={2.5} />}
                     {type === "error" && <X size={64} strokeWidth={2.5} />}

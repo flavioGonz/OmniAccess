@@ -57,6 +57,7 @@ import { UserFormDialog } from "@/components/UserFormDialog";
 import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { ExportUsersButton } from "@/components/ExportUsersButton";
 import { ImportUsersDialog } from "@/components/ImportUsersDialog";
+import { SyncToDevicesDialog } from "@/components/SyncToDevicesDialog";
 import { cn } from "@/lib/utils";
 
 // Mock User with relations until prisma generate is ready
@@ -222,6 +223,8 @@ export default function UsersPage() {
                             <ExportUsersButton users={users} />
                             <div className="w-px h-4 bg-white/10 mx-1" />
                             <ImportUsersDialog onSuccess={() => { loadData(); fetchSyncMap(); }} />
+                            <div className="w-px h-4 bg-white/10 mx-1" />
+                            <SyncToDevicesDialog onSuccess={() => { loadData(); fetchSyncMap(); }} />
                         </div>
 
                         <Button

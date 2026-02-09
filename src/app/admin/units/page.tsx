@@ -862,14 +862,14 @@ export default function UnitsPage() {
                                 {activeEditTab === 'location' && (
                                     <>
                                         {/* Input flotante sobre el mapa - SIN bordes redondeados */}
-                                        <div className="absolute top-4 left-4 right-4 z-10">
+                                        <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/80 via-black/50 to-transparent p-4 pb-8">
                                             <div className="relative">
-                                                <MapPinIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600" size={14} />
+                                                <MapPinIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400" size={16} />
                                                 <Input
                                                     value={formData.address}
                                                     onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                                                    placeholder="Ej: Av. Principal 123, Ciudad, Provincia"
-                                                    className="bg-neutral-950/95 backdrop-blur-sm border-white/20 hover:border-blue-500/50 focus:border-blue-500 h-10 rounded-none text-sm pl-9 shadow-xl transition-colors"
+                                                    placeholder="Dirección completa de la propiedad..."
+                                                    className="bg-black/60 backdrop-blur-md border-white/20 hover:border-blue-500/50 focus:border-blue-500 h-11 text-sm pl-10 shadow-2xl transition-all font-medium"
                                                 />
                                             </div>
                                         </div>
@@ -879,6 +879,7 @@ export default function UnitsPage() {
                                             <LocationPicker
                                                 coords={formData.coordinates}
                                                 onChange={(val) => setFormData({ ...formData, coordinates: val })}
+                                                fullScreen={true}
                                             />
                                         </div>
                                     </>

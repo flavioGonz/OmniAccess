@@ -93,6 +93,15 @@ El servidor de webhooks (10000) emite eventos críticos a los que el Front-end s
 - `guard_presence`: Estado en tiempo real de las tablets (incluye IP local auto-detectada).
 - `new_bitacora`: Notificación inmediata de un nuevo registro manual realizado por un guardia.
 
+### 🚨 Eventos de Emergencia y Coordinación
+- `guard_locations`: Actualización de coordenadas GPS de todos los guardias activos.
+- `alert_status`: Estado global del modo de alerta (normal/emergencia).
+- `active_missions`: Lista de misiones de respaldo activas.
+- `backup_requested`: Notificación de nueva solicitud de apoyo.
+- `backup_status_update`: Cambio de estado en una misión (aceptada/rechazada).
+- `backup_resolved`: Notificación de misión resuelta.
+
+
 ---
 
 ## 🏎️ Sistema de Drivers

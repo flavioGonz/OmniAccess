@@ -308,7 +308,8 @@ export async function POST(req: NextRequest) {
                         id: true,
                         name: true,
                         cara: true,
-                        unit: true
+                        unit: true,
+                        vehicles: true
                     }
                 },
                 device: true,

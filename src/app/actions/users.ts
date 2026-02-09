@@ -38,12 +38,23 @@ export async function deleteUser(id: string) {
     revalidatePath("/admin/users");
 }
 
+export async function getQuickCreateData() {
+    const [units, groups, devices, parkingSlots] = await Promise.all([
+        prisma.unit.findMany({ orderBy: { name: 'asc' } }),
+        prisma.accessGroup.findMany({ include: { devices: true }, orderBy: { name: 'asc' } }),
+        prisma.device.findMany({ orderBy: { name: 'asc' } }),
+        prisma.parkingSlot.findMany({ include: { user: true }, orderBy: { label: 'asc' } })
+    ]);
+    return { units, groups, devices, parkingSlots };
+}
+
 export async function createUser(formData: FormData) {
     const name = formData.get("name") as string;
     const email = formData.get("email") as string;
     const phone = formData.get("phone") as string;
     const role = formData.get("role") as UserRole;
     const unitId = formData.get("unitId") as string;
+    const cara = formData.get("cara") as string; // Optional snapshot path
 
     // Optional fields
     const plate = formData.get("plate") as string;
@@ -59,6 +70,7 @@ export async function createUser(formData: FormData) {
         email,
         phone: phone || null,
         role,
+        cara: cara || null,
         apartment: apartment || null,
         parkingSlotId: (parkingSlotId && parkingSlotId !== "none") ? parkingSlotId : null,
     };

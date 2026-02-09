@@ -16,9 +16,10 @@ const icon = typeof window !== 'undefined' ? L.icon({
 interface LocationPickerProps {
     coords: string;
     onChange: (val: string) => void;
+    fullScreen?: boolean;
 }
 
-export default function LocationPicker({ coords, onChange }: LocationPickerProps) {
+export default function LocationPicker({ coords, onChange, fullScreen = false }: LocationPickerProps) {
     const [lat, lng] = coords.split(',').map(n => parseFloat(n.trim()));
     const [isMounted, setIsMounted] = useState(false);
 
@@ -35,10 +36,10 @@ export default function LocationPicker({ coords, onChange }: LocationPickerProps
         return null;
     }
 
-    if (!isMounted) return <div className="h-64 w-full bg-neutral-900 animate-pulse rounded-xl" />;
+    if (!isMounted) return <div className={`h-64 w-full bg-neutral-900 animate-pulse ${fullScreen ? '' : 'rounded-xl'}`} />;
 
     return (
-        <div className="h-64 w-full rounded-xl overflow-hidden border border-white/10 relative">
+        <div className={`w-full ${fullScreen ? 'h-full' : 'h-64 rounded-xl'} overflow-hidden border border-white/10 relative`}>
             <MapContainer center={[lat || -34.6037, lng || -58.3816]} zoom={15} style={{ height: '100%', width: '100%' }}>
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" className="grayscale contrast-125 brightness-75" />
                 <Marker
