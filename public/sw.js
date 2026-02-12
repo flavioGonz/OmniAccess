@@ -3,8 +3,8 @@ self.addEventListener('push', function (event) {
         const data = event.data.json();
         const options = {
             body: data.body,
-            icon: '/icons/sildan-icon-dot.png',
-            badge: '/icons/sildan-icon-dot.png',
+            icon: '/iconos/sildan-pwa.png',
+            badge: '/iconos/sildan-icon-dot.png',
             vibrate: data.vibrate || [100, 50, 100],
             data: {
                 dateOfArrival: Date.now(),
@@ -42,15 +42,13 @@ self.addEventListener('notificationclick', function (event) {
     }
 
     // Open the app/url
+    const targetUrl = event.notification.data?.url || '/guard';
+
     event.waitUntil(
         clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
-            // Check if there's already a tab open
-            // Start with '/guard' as priority
-            const targetUrl = '/guard';
-
+            // Check if already on targetUrl, or just switch to existing tab
             for (let i = 0; i < clientList.length; i++) {
                 const client = clientList[i];
-                // Check if already on guard, or just switch to existing tab
                 if (urlMatches(client.url, targetUrl) && 'focus' in client) {
                     return client.focus();
                 }

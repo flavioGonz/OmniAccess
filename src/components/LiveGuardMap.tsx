@@ -148,12 +148,16 @@ function MissionMarker({ mission, onAlertClick, myLocation, guards, socketId }: 
     // Let's assume parent passes adequate data or we use what we have.
     // For now, let's trust the props or fallback:
 
-    const finalResponderLoc = mission.responderLocation
+    const rawResponderLoc = mission.responderLocation
         ? mission.responderLocation
         : (
             (guards.find(g => g.socketId === mission.responderId)) ||
             (socketId && mission.responderId === socketId ? myLocation : null)
         );
+
+    const finalResponderLoc = (rawResponderLoc && typeof rawResponderLoc.lat !== 'undefined' && typeof rawResponderLoc.lng !== 'undefined' && !isNaN(Number(rawResponderLoc.lat)) && !isNaN(Number(rawResponderLoc.lng)))
+        ? { lat: Number(rawResponderLoc.lat), lng: Number(rawResponderLoc.lng) }
+        : null;
 
     // If I am the responder, myLocation should be used? 
     // The issue is MissionMarker doesn't know 'socketId'. 
@@ -196,21 +200,34 @@ function MissionMarker({ mission, onAlertClick, myLocation, guards, socketId }: 
         popupAnchor: [0, -76],
     });
 
-    const missionStats = mission.status === 'ACCEPTED' && finalResponderLoc ? (() => {
-        const R = 6371e3; // metres
-        const φ1 = finalResponderLoc.lat * Math.PI / 180;
-        const φ2 = mission.lat * Math.PI / 180;
-        const Δφ = (mission.lat - finalResponderLoc.lat) * Math.PI / 180;
-        const Δλ = (mission.lng - finalResponderLoc.lng) * Math.PI / 180;
-        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        const distance = R * c * 1.4; // 1.4 factor for urban streets simulation
+    const [missionStats, setMissionStats] = useState<{ distance: number, time: number } | null>(null);
+    const [routeCoords, setRouteCoords] = useState<any[]>([]);
 
-        // Speed: 30km/h = 8.33 m/s (Vehicle)
-        const speed = 8.33;
-        const timeSeconds = distance / speed;
-        return { distance: Math.round(distance), time: Math.ceil(timeSeconds / 60) };
-    })() : null;
+    useEffect(() => {
+        if (mission.status === 'ACCEPTED' && finalResponderLoc) {
+            // OSRM Public Demo for Prototype
+            const url = `https://router.project-osrm.org/route/v1/driving/${finalResponderLoc.lng},${finalResponderLoc.lat};${mission.lng},${mission.lat}?overview=full&geometries=geojson`;
+
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.routes && data.routes.length > 0) {
+                        const route = data.routes[0];
+                        setMissionStats({
+                            distance: Math.round(route.distance), // meters
+                            time: Math.round(route.duration / 60) // minutes
+                        });
+                        // GeoJSON uses [lng, lat], Leaflet uses [lat, lng]
+                        const coords = route.geometry.coordinates.map((c: any) => [c[1], c[0]]);
+                        setRouteCoords(coords);
+                    }
+                })
+                .catch(err => console.error("OSRM Error:", err));
+        } else {
+            setMissionStats(null);
+            setRouteCoords([]);
+        }
+    }, [mission.status, finalResponderLoc?.lat, finalResponderLoc?.lng, mission.lat, mission.lng]);
 
     return (
         <>
@@ -242,13 +259,10 @@ function MissionMarker({ mission, onAlertClick, myLocation, guards, socketId }: 
             </Marker>
 
             {/* Route Line if Accepted */}
-            {mission.status === 'ACCEPTED' && finalResponderLoc && (
+            {mission.status === 'ACCEPTED' && routeCoords.length > 0 && (
                 <>
                     <Polyline
-                        positions={[
-                            [finalResponderLoc.lat, finalResponderLoc.lng],
-                            [mission.lat, mission.lng]
-                        ]}
+                        positions={routeCoords}
                         pathOptions={{
                             color: '#2563EB', // Solid Blue
                             weight: 6,
@@ -259,7 +273,7 @@ function MissionMarker({ mission, onAlertClick, myLocation, guards, socketId }: 
                     />
 
                     {/* Info Box Overlay for Stats (Always visible when routing) */}
-                    {missionStats && (
+                    {missionStats && finalResponderLoc && (
                         <Marker position={[
                             (mission.lat + finalResponderLoc.lat) / 2, // Midpoint
                             (mission.lng + finalResponderLoc.lng) / 2
@@ -279,10 +293,34 @@ function MissionMarker({ mission, onAlertClick, myLocation, guards, socketId }: 
 export default function LiveGuardMap({ myLocation, guards, socketId, onLongPress, backupMission, backupMissions, onAlertClick }: GuardMapProps) {
     // Default to Montevideo if no location
     const defaultCenter = { lat: -34.9011, lng: -56.1645 }; // Montevideo
-    const center = myLocation || (guards.length > 0 ? { lat: guards[0].lat, lng: guards[0].lng } : defaultCenter);
 
-    // Normalize missions to array
-    const missions = backupMissions || (backupMission ? [backupMission] : []);
+    // Safely extract coordinates ensuring we never pass undefined to Leaflet
+    const getSafeCoords = (loc: any) => {
+        if (!loc) return null;
+        const lat = parseFloat(loc.lat);
+        const lng = parseFloat(loc.lng);
+        if (isNaN(lat) || isNaN(lng)) return null;
+        return { lat, lng };
+    };
+
+    const mySafeLoc = getSafeCoords(myLocation);
+    const validGuards = guards
+        .map(g => ({ ...g, ...getSafeCoords(g) }))
+        .filter(g => g.lat !== undefined && g.lng !== undefined && !isNaN(g.lat) && !isNaN(g.lng));
+
+    const firstGuardSafeLoc = validGuards.length > 0 ? { lat: validGuards[0].lat, lng: validGuards[0].lng } : null;
+
+    const center = mySafeLoc || firstGuardSafeLoc || defaultCenter;
+
+    // Normalize missions to array and filter valid ones
+    const rawMissions = backupMissions || (backupMission ? [backupMission] : []);
+    const validMissions = rawMissions.filter(m => {
+        const safe = getSafeCoords(m);
+        if (!safe) return false;
+        m.lat = safe.lat;
+        m.lng = safe.lng;
+        return true;
+    });
 
     return (
         <MapContainer center={[center.lat, center.lng]} zoom={15} style={{ height: '100%', width: '100%', zIndex: 0 }} zoomControl={false}>
@@ -306,11 +344,11 @@ export default function LiveGuardMap({ myLocation, guards, socketId, onLongPress
             />
 
             <MapEvents onLongPress={onLongPress} />
-            <UserLocationControl myLocation={myLocation} />
-            <AutoFitBounds guards={guards} myLocation={myLocation} />
+            <UserLocationControl myLocation={mySafeLoc} />
+            <AutoFitBounds guards={validGuards} myLocation={mySafeLoc} />
 
-            {myLocation && (
-                <Marker position={[myLocation.lat, myLocation.lng]} icon={guardIcon}>
+            {mySafeLoc && (
+                <Marker position={[mySafeLoc.lat, mySafeLoc.lng]} icon={guardIcon}>
                     <Popup>
                         <strong>USTED</strong><br />
                         Tablet de Guardia
@@ -319,7 +357,7 @@ export default function LiveGuardMap({ myLocation, guards, socketId, onLongPress
             )}
 
             {/* Other Guards */}
-            {guards.filter(g => g.socketId !== socketId).map((g, idx) => (
+            {validGuards.filter(g => g.socketId !== socketId).map((g, idx) => (
                 <Marker key={g.socketId || idx} position={[g.lat, g.lng]} icon={guardIcon}>
                     <Popup>
                         <strong>{g.guardName || "Guardia"}</strong>
@@ -328,13 +366,13 @@ export default function LiveGuardMap({ myLocation, guards, socketId, onLongPress
             ))}
 
             {/* BACKUP MISSIONS RENDER */}
-            {missions.map((mission, idx) => (
+            {validMissions.map((mission, idx) => (
                 <MissionMarker
                     key={mission.id || idx}
                     mission={mission}
                     onAlertClick={onAlertClick}
-                    myLocation={myLocation}
-                    guards={guards}
+                    myLocation={mySafeLoc}
+                    guards={validGuards}
                     socketId={socketId}
                 />
             ))}

@@ -67,6 +67,8 @@ type FullAccessEvent = AccessEvent & {
     bitacora: any | null;
 };
 
+import { getSocketUrl } from "@/lib/socket-config";
+
 export default function HistoryPage() {
     const [events, setEvents] = useState<FullAccessEvent[]>([]);
     const [totalEvents, setTotalEvents] = useState(0);
@@ -169,11 +171,7 @@ export default function HistoryPage() {
 
     // Socket.io Integration
     useEffect(() => {
-        const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
-        const isStandardPort = window.location.port === '' || window.location.port === '80' || window.location.port === '443';
-        const socketUrl = isStandardPort
-            ? `${protocol}://${window.location.hostname}`
-            : `${protocol}://${window.location.hostname}:10000`;
+        const socketUrl = getSocketUrl();
         const socket = io(socketUrl, {
             transports: ["websocket", "polling"],
         });

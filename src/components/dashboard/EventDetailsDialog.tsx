@@ -681,7 +681,7 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
 
                         {/* Footer */}
                         <div className="bg-neutral-900 border-t border-neutral-800 p-4 text-center shrink-0">
-                            <p className="text-[9px] font-black text-neutral-700 uppercase tracking-widest">LPR SecureAccess v3.0</p>
+                            <p className="text-[9px] font-black text-neutral-700 uppercase tracking-widest">LPR Omniaccess v3.0</p>
                         </div>
                     </div>
                 </div>

@@ -725,6 +725,7 @@ const DEBOUNCE_TIME = 5000;
 
 // Global Alert State
 let isAlertActive = false;
+let globalLastAlertUpdateTime = 0;
 
 // Global Guard Locations Map
 const guardLocations = new Map();
@@ -927,8 +928,8 @@ const handleWebhook = async (req, res, logPrefix) => {
             }
 
             // Debug Data Enrichment
-            debugData.credentialValue = personName;
-            debugData.status = 200;
+            // debugData.credentialValue = personName;
+            // debugData.status = 200;
 
             // --- Find Device ---
             const macAddress = jsonData.macAddress || alarmData.macAddress || jsonData.mac || null;
@@ -1119,8 +1120,8 @@ const handleWebhook = async (req, res, logPrefix) => {
                 return;
             }
 
-            // If it's a known non-plate message, we still emit debug but don't log error
-            addDebugLog({ ...debugData, status: 200, credentialValue: "NON-ANPR" });
+            // If it's a known non-plate message, we don't log or emit debug to avoid spam
+            // addDebugLog({ ...debugData, status: 200, credentialValue: "NON-ANPR" });
 
             console.warn(`${logPrefix} ℹ️ Webhook received without plate (possible test or non-ANPR event)`);
             res.writeHead(200);
@@ -1370,12 +1371,12 @@ const handleWebhook = async (req, res, logPrefix) => {
         }
 
         // Finalize debug emission for ACTUAL events
-        addDebugLog({
-            ...debugData,
-            status: 200,
-            deviceName: device?.name,
-            deviceMac: macAddress || device?.mac
-        });
+        // addDebugLog({
+        //     ...debugData,
+        //     status: 200,
+        //     deviceName: device?.name,
+        //     deviceMac: macAddress || device?.mac
+        // });
 
         // Create Event Logic
         // ACCESS LOGIC: Prioritize Camera Decision (allowList/whiteList)
@@ -2398,6 +2399,16 @@ io.on("connection", (socket) => {
             message: `Solicitud de apoyo: ${data.type} por ${data.requesterName}`,
             location: { lat: data.lat, lng: data.lng }
         });
+
+        // Broadcast Push Notification
+        sendPushToAll({
+            title: "⚠️ SOLICITUD DE APOYO",
+            body: `${data.type} reportado por ${data.requesterName}.`,
+            icon: "/iconos/sildan-pwa.png",
+            tag: "mission-alert",
+            vibrate: [200, 100, 200, 100, 200],
+            data: { url: '/guard', missionId: mission.id } // Opens /guard (tablet version defaults)
+        });
     });
 
     socket.on("respond_backup", (data) => {
@@ -2480,55 +2491,24 @@ io.on("connection", (socket) => {
     });
 
     socket.on("alert_toggle", async (data) => {
-        isAlertActive = data.active;
-        console.log(`[ALERT] Alert mode set to: ${isAlertActive} by ${data.triggeredBy || socket.id}`);
-
-        if (isAlertActive) {
-            const loc = guardLocations.get(socket.id);
-            const missionId = 'panic-' + socket.id;
-
-            let bitacoraId = null;
-            try {
-                const entry = await prisma.bitacora.create({
-                    data: {
-                        type: "ALERTA",
-                        plate: "PÁNICO",
-                        name: (data.triggeredBy || "GUARDIA").toUpperCase(),
-                        notes: `BOTÓN DE PÁNICO ACTIVADO.`,
-                        guardName: data.triggeredBy || "Invitado",
-                        latitude: loc ? loc.lat : null,
-                        longitude: loc ? loc.lng : null,
-                        timestamp: new Date()
-                    }
-                });
-                bitacoraId = entry.id;
-            } catch (e) { console.error("Error logging panic:", e); }
-
-            // "Join" with backup requests for the map
-            const mission = {
-                id: missionId,
-                bitacoraId: bitacoraId,
-                type: 'BOTÓN DE PÁNICO',
-                lat: loc ? loc.lat : null,
-                lng: loc ? loc.lng : null,
-                requesterName: data.triggeredBy || "Guardia",
-                requesterId: socket.id,
-                status: 'PENDING',
-                details: 'PÁNICO ACTIVADO',
-                isPanic: true,
-                timestamp: Date.now()
-            };
-
-            activeMissions.set(missionId, mission);
-            io.emit("backup_requested", mission);
-        } else {
-            // If deactivating, we should probably delete the panic mission
-            activeMissions.delete('panic-' + socket.id);
-            io.emit("backup_cancelled", {
-                requestId: 'panic-' + socket.id,
-                cancelledBy: data.triggeredBy || "Guardia"
-            });
+        const now = Date.now();
+        if (now - globalLastAlertUpdateTime < 3000) {
+            console.warn(`[ALERT] Global alert toggle throttled. Source: ${socket.id}, TriggeredBy: ${data.triggeredBy}`);
+            return;
         }
+
+        const previousState = isAlertActive;
+        isAlertActive = !!data.active;
+
+        // If state didn't change, return (prevents notification flood)
+        if (previousState === isAlertActive) {
+            console.log(`[ALERT] Alert toggle ignored (no change). Source: ${socket.id}`);
+            return;
+        }
+
+        globalLastAlertUpdateTime = now;
+
+        console.log(`[ALERT] Alert mode set to: ${isAlertActive} by ${data.triggeredBy || socket.id}`);
 
         // Log to database for permanent record
         try {
@@ -2540,7 +2520,7 @@ io.on("connection", (socket) => {
             await prisma.bitacora.create({
                 data: {
                     type: "ALERTA",
-                    plate: isAlertActive ? "PÁNICO" : "NORMAL",
+                    plate: isAlertActive ? "PÁNICO" : "Manual",
                     name: (data.triggeredBy || "GUARDIA").toUpperCase(),
                     notes: notes,
                     guardName: data.triggeredBy || "Invitado",
@@ -2563,14 +2543,14 @@ io.on("connection", (socket) => {
         const pushPayload = isAlertActive ? {
             title: "⚠️ ALERTA DE SEGURIDAD",
             body: `Modo de alerta activado por ${data.triggeredBy || "un compañero"}.`,
-            icon: "/logo-transparent.png",
+            icon: "/iconos/sildan-pwa.png",
             tag: "security-alert",
             vibrate: [200, 100, 200, 100, 200],
             data: { url: '/guard' }
         } : {
             title: "SISTEMA NORMALIZADO",
             body: data.explanation ? `Alerta desactivada. Motivo: ${data.explanation}` : "La alerta ha sido desactivada.",
-            icon: "/logo-transparent.png",
+            icon: "/iconos/sildan-pwa.png",
             tag: "security-alert",
             data: { url: '/guard' }
         };

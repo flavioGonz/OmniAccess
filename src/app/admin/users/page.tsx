@@ -64,6 +64,7 @@ import { cn } from "@/lib/utils";
 interface UserWithRelations {
     id: string;
     name: string;
+    username: string | null;
     email: string | null;
     phone: string | null;
     dni: string | null;

@@ -277,7 +277,7 @@ export default function BitacoraPage() {
                                         {entry.notes && (
                                             <div className="mt-4 p-4 bg-neutral-950/50 rounded-2xl border border-neutral-800/50">
                                                 <p className="text-[10px] text-neutral-500 italic leading-relaxed line-clamp-2">
-                                                    "{entry.notes}"
+                                                    &quot;{entry.notes}&quot;
                                                 </p>
                                             </div>
                                         )}
@@ -330,7 +330,7 @@ export default function BitacoraPage() {
                                                             onClick={() => setSelectedPhoto(entry.photoPath)}
                                                             className="w-10 h-10 rounded-xl bg-neutral-800 border border-neutral-700 overflow-hidden flex items-center justify-center hover:shadow-lg transition-all"
                                                         >
-                                                            <img src={entry.photoPath} className="w-full h-full object-cover" />
+                                                            <img src={entry.photoPath} className="w-full h-full object-cover" alt="Capture" />
                                                         </button>
                                                     ) : (
                                                         <div className="w-10 h-10 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-center text-neutral-800">
@@ -425,6 +425,7 @@ export default function BitacoraPage() {
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.9, opacity: 0 }}
                             src={selectedPhoto}
+                            alt="Full Size Capture"
                             className="max-w-full max-h-full object-contain rounded-3xl shadow-2xl border border-white/5"
                         />
                     </motion.div>

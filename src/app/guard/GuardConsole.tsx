@@ -55,7 +55,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { createBitacoraEntry, deleteBitacoraEntry, getBitacoraPage } from "@/app/actions/bitacora";
 import { getAccessEvents, getPlateAnalysis } from "@/app/actions/history";
-import { getQuickCreateData } from "@/app/actions/users";
+import { getQuickCreateData, getGuardsList } from "@/app/actions/users";
 import { UserFormDialog } from "@/components/UserFormDialog";
 import { toast } from "sonner";
 import Image from "next/image";
@@ -63,9 +63,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { io } from "socket.io-client";
 import { useInView } from "react-intersection-observer";
 import { saveGuardBranding, uploadBrandingFile } from "@/app/actions/settings";
+import axios from "axios";
+import { getSocketUrl } from "@/lib/socket-config";
 
 import dynamic from 'next/dynamic';
 const LiveGuardMap = dynamic(() => import('@/components/LiveGuardMap'), { ssr: false });
+const OCRScanner = dynamic(() => import('@/components/OCRScannerTF'), { ssr: false });
 
 interface GuardConsoleProps {
     initialEntries: any[];
@@ -73,12 +76,13 @@ interface GuardConsoleProps {
     headerColor: string;
     initialIcons: Record<string, string>;
     units: any[];
+    guards: any[];
 }
 
 type TabType = "control" | "history" | "alerts" | "lpr" | "map";
 
 
-export default function GuardConsole({ initialEntries, logo, headerColor, initialIcons, units }: GuardConsoleProps) {
+export default function GuardConsole({ initialEntries, logo, headerColor, initialIcons, units, guards }: GuardConsoleProps) {
     const [activeTab, setActiveTab] = useState<TabType>("control");
     const [entries, setEntries] = useState(initialEntries);
     const [type, setType] = useState<"ENTRY" | "EXIT">("ENTRY");
@@ -93,11 +97,11 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
     const [company, setCompany] = useState("");
     const [socket, setSocket] = useState<any>(null);
     const [monitoringMissions, setMonitoringMissions] = useState<any[]>([]); // For observing multiple ongoing alerts
-    const [guardName, setGuardName] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
     const [isCameraActive, setIsCameraActive] = useState(false);
-    const [currentTime, setCurrentTime] = useState(new Date());
+    const [isOCRActive, setIsOCRActive] = useState(false);
+    const [currentTime, setCurrentTime] = useState<Date | null>(null);
     const [showSuccessOverlay, setShowSuccessOverlay] = useState(false);
     const [showAlarmSplash, setShowAlarmSplash] = useState(false);
     const isFirstAlertStatusReceived = useRef(false);
@@ -110,16 +114,23 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
     const [hasMoreHistory, setHasMoreHistory] = useState(true);
     const [isHistoryLoading, setIsHistoryLoading] = useState(false);
     const [notification, setNotification] = useState<{ type: "success" | "error" | "info" | "alert", title: string, message: string } | null>(null);
+    const [selectedEntry, setSelectedEntry] = useState<any>(null);
 
     // LPR History state
     const [lprEntries, setLprEntries] = useState<any[]>([]);
     const [isLprLoading, setIsLprLoading] = useState(false);
     const [lprSearch, setLprSearch] = useState("");
     const [lprDate, setLprDate] = useState(new Date().toISOString().split('T')[0]);
+    const [lprDirection, setLprDirection] = useState<"ALL" | "ENTRY" | "EXIT">("ALL");
 
     // Alerts History state
     const [alertsSearch, setAlertsSearch] = useState("");
     const [alertsDate, setAlertsDate] = useState(new Date().toISOString().split('T')[0]);
+
+    // Filter modal states
+    const [showLprFilterModal, setShowLprFilterModal] = useState(false);
+    const [showAlertsFilterModal, setShowAlertsFilterModal] = useState(false);
+    const [showHistoryFilterModal, setShowHistoryFilterModal] = useState(false);
 
     // Image Viewer state
     const [viewerData, setViewerData] = useState<{
@@ -130,7 +141,10 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
         direction?: string,
         confidence?: number,
         timestamp?: string,
-        deviceName?: string
+        deviceName?: string,
+        vehicleBrand?: string,
+        vehicleModel?: string,
+        device?: any
     } | null>(null);
     const viewerImage = viewerData?.url || null;
     const setViewerImage = (url: string | null) => setViewerData(url ? { url } : null);
@@ -138,6 +152,7 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
     // Plate Analysis state
     const [plateAnalysis, setPlateAnalysis] = useState<any>(null);
     const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+    const [zoomImage, setZoomImage] = useState<string | null>(null);
 
     // Quick Create States
     const [showQuickCreate, setShowQuickCreate] = useState(false);
@@ -156,7 +171,27 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
     const [customIcons, setCustomIcons] = useState<Record<string, string>>(initialIcons);
     const [isSavingBranding, setIsSavingBranding] = useState(false);
 
+    // Guard List State
+    const [showGuardList, setShowGuardList] = useState(false);
+    const [guardsList, setGuardsList] = useState<any[]>([]);
+    const [loadingGuards, setLoadingGuards] = useState(false);
+
+    // State for login
+    const [loginUser, setLoginUser] = useState("");
+    const [loginPass, setLoginPass] = useState("");
+
+    const [guardName, setGuardName] = useState("");
     const [guardPhoto, setGuardPhoto] = useState<string | null>(null);
+    const guardNameRef = useRef("");
+    const guardPhotoRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        guardNameRef.current = guardName;
+    }, [guardName]);
+
+    useEffect(() => {
+        guardPhotoRef.current = guardPhoto;
+    }, [guardPhoto]);
 
     useEffect(() => {
         // We still support local guard photo, but branding is now server-side
@@ -164,13 +199,23 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
         if (savedPhoto) setGuardPhoto(savedPhoto);
     }, []);
 
+    // Initial Login Check
+    useEffect(() => {
+        // If not configured, prompts configuration.
+        // Guard name is stored in localStorage by "configuration" flow
+        const savedName = localStorage.getItem("guard_name");
+        if (savedName) setGuardName(savedName);
+    }, []);
+
     // Refs for socket listeners to access current state
     const lprSearchRef = useRef(lprSearch);
     const lprDateRef = useRef(lprDate);
+    const lprDirectionRef = useRef(lprDirection);
     const activeTabRef = useRef(activeTab);
 
     useEffect(() => { lprSearchRef.current = lprSearch; }, [lprSearch]);
     useEffect(() => { lprDateRef.current = lprDate; }, [lprDate]);
+    useEffect(() => { lprDirectionRef.current = lprDirection; }, [lprDirection]);
     useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
 
     // MAP & GPS STATES
@@ -291,19 +336,8 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
     };
 
     useEffect(() => {
-        // Use the same protocol as the page (http or https)
-        const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
-
-        // Auto-detect if we need port 10000 or if we're behind a proxy
-        // If accessing via standard ports (80/443), assume proxy is handling routing
-        // Otherwise, use port 10000 directly
-        const isStandardPort = window.location.port === '' || window.location.port === '80' || window.location.port === '443';
-        const socketUrl = isStandardPort
-            ? `${protocol}://${window.location.hostname}`  // Behind proxy
-            : `${protocol}://${window.location.hostname}:10000`;  // Direct access
-
-        console.log('🔌 Connecting to socket:', socketUrl, '(Standard port:', isStandardPort, ')');
-        const newSocket = io(socketUrl);
+        console.log('🔌 Connecting to socket:', getSocketUrl());
+        const newSocket = io(getSocketUrl());
         setSocket(newSocket);
 
         // Attempt to get Local IP via WebRTC
@@ -328,11 +362,24 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
         // Emit presence every 4 seconds for a tighter keepalive
         const heartBeat = setInterval(() => {
             if (newSocket.connected) {
+                // Try to extract some useful device info from userAgent
+                const ua = navigator.userAgent;
+                let deviceInfo = "Tablet";
+                if (ua.includes("Samsung")) deviceInfo = "Samsung Tablet";
+                else if (ua.includes("Huawei")) deviceInfo = "Huawei Tablet";
+                else if (ua.includes("iPad")) deviceInfo = "iPad";
+                else if (ua.includes("Android")) {
+                    const match = ua.match(/\(([^;]+);/);
+                    if (match && match[1]) deviceInfo = match[1].split('Build')[0].trim();
+                }
+
                 newSocket.emit('guard_presence', {
-                    guardName: guardName || 'Invitado',
+                    guardName: guardNameRef.current || localStorage.getItem("guard_name") || 'Invitado',
                     status: 'online',
                     timestamp: new Date().toISOString(),
-                    reportedIp: detectedLocalIp // Send the IP we found
+                    reportedIp: detectedLocalIp, // Send the IP we found
+                    deviceInfo: deviceInfo,
+                    guardPhoto: guardPhotoRef.current || localStorage.getItem("guard_photo")
                 });
             }
         }, 4000);
@@ -349,7 +396,7 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
 
             if (data.active) {
                 if ("Notification" in window && Notification.permission === "granted") {
-                    new Notification("⚠️ ALERTA DE SEGURIDAD", {
+                    new Notification("⚠️ ALERTA DE SEGURIDAD - OMNIACCESS GUARD", {
                         body: `Modo de alerta activado por ${data.triggeredBy || "un compañero"}.`,
                         icon: "/icons/sildan-icon-dot.png",
                         tag: "security-alert"
@@ -387,7 +434,10 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                 (event.user?.name || "").toUpperCase().includes(search) ||
                 (event.user?.unit?.name || "").toUpperCase().includes(search);
 
-            if (isLpr && isSameDate && matchesSearch && (event.accessType === "PLATE" || event.plateDetected)) {
+            const dirFilter = lprDirectionRef.current;
+            const matchesDirection = dirFilter === "ALL" || event.direction === dirFilter;
+
+            if (isLpr && isSameDate && matchesSearch && matchesDirection && (event.accessType === "PLATE" || event.plateDetected)) {
                 setLprEntries(prev => {
                     if (prev.find(e => e.id === event.id)) return prev;
                     return [event, ...prev];
@@ -484,7 +534,7 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
             if (watchId !== null) navigator.geolocation.clearWatch(watchId);
             newSocket.disconnect();
         };
-    }, [guardName]);
+    }, []); // Only establish once
 
 
     // Notification Permission Request
@@ -493,6 +543,20 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
             Notification.requestPermission();
         }
     }, []);
+
+    const handleOCRDetected = (detectedPlate: string, imageBlob: Blob) => {
+        setPlate(detectedPlate);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setCapturedPhoto(reader.result as string);
+        };
+        reader.readAsDataURL(imageBlob);
+        setIsOCRActive(false);
+        playTactileSound();
+        if ("vibrate" in navigator) {
+            navigator.vibrate([100, 50, 100]);
+        }
+    };
 
     const handleQuickCreateClick = async (data: { plate?: string, cara?: string, name?: string }) => {
         setQuickCreateContext(data);
@@ -511,6 +575,20 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
             toast.error("Error al cargar datos de creación rápida");
         } finally {
             setLoadingQuickCreateData(false);
+        }
+    };
+
+    const handleOpenGuardList = async () => {
+        setLoadingGuards(true);
+        setShowGuardList(true);
+        try {
+            const guards = await getGuardsList();
+            setGuardsList(guards);
+        } catch (e) {
+            console.error(e);
+            toast.error("Error al cargar lista de guardias");
+        } finally {
+            setLoadingGuards(false);
         }
     };
 
@@ -636,24 +714,58 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
     const [showIdentityOverlay, setShowIdentityOverlay] = useState(true);
     const [tempGuardName, setTempGuardName] = useState("");
 
-    const handleConfirmIdentity = () => {
-        if (tempGuardName.trim()) {
-            saveGuardName(tempGuardName);
+    const handleManualLogin = (e: React.FormEvent) => {
+        e.preventDefault();
+
+        const guard = guards.find(g => (g.username || g.name).toLowerCase() === loginUser.toLowerCase());
+
+        if (guard && guard.password === loginPass) {
+            setGuardName(guard.name);
+            const photoUrl = guard.cara ? (guard.cara.startsWith('/') ? guard.cara : `/api/files/${guard.cara}`) : null;
+            setGuardPhoto(photoUrl);
+            if (typeof window !== 'undefined') {
+                localStorage.setItem("bitacora_guard_name", guard.name);
+                if (photoUrl) localStorage.setItem("bitacora_guard_photo", photoUrl);
+            }
+            playTactileSound();
+            toast.success(`Bienvenido, ${guard.name}`);
+
+            // Reset form
+            setLoginUser("");
+            setLoginPass("");
+        } else {
+            playTactileSound();
+            toast.error("Credenciales incorrectas");
+        }
+    };
+
+    const handleConfirmIdentity = (guard: any) => {
+        const pinCheck = prompt(`Ingrese PIN de seguridad para ${guard.name}:`);
+        if (pinCheck && pinCheck === guard.password) {
+            setGuardName(guard.name);
+            setGuardPhoto(guard.cara);
+            localStorage.setItem("bitacora_guard_name", guard.name);
+            if (guard.cara) localStorage.setItem("bitacora_guard_photo", guard.cara);
             setShowIdentityOverlay(false);
             setShowProfileMenu(false); // Ensure menu is closed
-            showNotification("BIENVENIDO", `Sesión iniciada como ${tempGuardName}. GuardConsole v2.1 activo.`, "success");
+            showNotification("BIENVENIDO", `Sesión iniciada como ${guard.name}.`, "success");
+        } else if (pinCheck) {
+            showNotification("PIN INCORRECTO", "El PIN ingresado no es válido.", "error");
         }
     };
 
     const handleLogout = () => {
         setGuardName("");
+        setGuardPhoto(null);
         localStorage.removeItem("bitacora_guard_name");
+        localStorage.removeItem("bitacora_guard_photo");
         setShowIdentityOverlay(true);
         showNotification("SESIÓN CERRADA", "Se ha finalizado la sesión del guardia exitosamente.", "info");
     };
 
     // Clock
     useEffect(() => {
+        setCurrentTime(new Date());
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
@@ -746,6 +858,7 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                         type: 'PLATE',
                         take: 50,
                         search: lprSearch,
+                        direction: lprDirection !== "ALL" ? lprDirection : undefined,
                         from,
                         to
                     });
@@ -759,7 +872,7 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
         };
         const timer = setTimeout(fetchLPR, 500);
         return () => clearTimeout(timer);
-    }, [activeTab, lprSearch, lprDate]);
+    }, [activeTab, lprSearch, lprDate, lprDirection]);
 
     // TACTILE SOUND UTILITY
     const playTactileSound = () => {
@@ -914,6 +1027,45 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
         }
     };
 
+    const handleAnnexPanic = async () => {
+        if (isSubmitting) return;
+        setIsSubmitting(true);
+        try {
+            const formData = new FormData();
+            formData.append("type", "ALERTA");
+            formData.append("plate", "PÁNICO");
+            formData.append("notes", `[ANEXO PÁNICO] ${notes.trim()}`);
+            formData.append("name", "ANEXO DE INFORMACIÓN");
+            formData.append("guardName", (guardName || "Guardia").trim());
+
+            if (capturedPhoto) {
+                const blob = await (await fetch(capturedPhoto)).blob();
+                formData.append("photo", blob, "panic_photo.jpg");
+            }
+            if (audioBlob) {
+                formData.append("audio", audioBlob, "panic_audio.webm");
+            }
+
+            const finalLocation = myLocation || location;
+            if (finalLocation) {
+                formData.append("latitude", finalLocation.lat.toString());
+                formData.append("longitude", finalLocation.lng.toString());
+            }
+
+            await axios.post('/api/bitacora', formData);
+            setNotes("");
+            setCapturedPhoto(null);
+            setAudioUrl(null);
+            setAudioBlob(null);
+            showNotification("INFORMACIÓN ANEXADA", "Los detalles se han guardado exitosamente.", "success");
+        } catch (e) {
+            console.error("Error annexing info:", e);
+            showNotification("ERROR", "No se pudo guardar la información adicional.", "error");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     const handleSubmit = async () => {
         // Solo validar que haya matrícula
         if (!plate.trim()) {
@@ -1025,36 +1177,49 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                 />
                             </motion.div>
 
-                            <div className="bg-white border-2 border-slate-100 transition-all duration-300 p-10 rounded-[4rem] shadow-2xl w-full flex flex-col items-center gap-10">
-                                <div className="text-center">
+                            <div className="bg-white border-2 border-slate-100 transition-all duration-300 p-10 rounded-[4rem] shadow-2xl w-full flex flex-col items-center gap-6">
+                                <div className="text-center mb-4">
                                     <div className="flex items-center justify-center gap-3 mb-4">
-                                        <div className="w-12 h-12 bg-black rounded-2xl flex items-center justify-center">
+                                        <div className="w-12 h-12 bg-[#B20D30] rounded-2xl flex items-center justify-center">
                                             <Shield className="text-white" size={24} />
                                         </div>
-                                        <h1 className="text-4xl font-black text-black uppercase tracking-tighter">SecureAccess</h1>
+                                        <h1 className="text-4xl font-black text-black uppercase tracking-tighter">Omniaccess Guard</h1>
                                     </div>
                                     <p className="text-[12px] text-black/40 font-black uppercase tracking-[0.4em]">Consola de Seguridad</p>
                                 </div>
 
-                                <div className="w-full space-y-3">
-                                    <Label className="text-[11px] font-black uppercase text-black ml-4 tracking-widest">Operario de Turno</Label>
-                                    <Input
-                                        placeholder="Ingrese su nombre..."
-                                        value={tempGuardName}
-                                        onChange={(e) => setTempGuardName(e.target.value)}
-                                        className="h-20 rounded-[1.75rem] border-2 border-black transition-all duration-300 bg-white text-2xl font-black text-black text-center focus:border-black transition-all shadow-sm"
-                                        autoFocus
-                                        onKeyDown={(e) => e.key === 'Enter' && handleConfirmIdentity()}
-                                    />
-                                </div>
+                                <div className="w-full max-w-md">
+                                    <form onSubmit={handleManualLogin} className="space-y-6">
+                                        <div className="space-y-4">
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-black uppercase text-slate-400 tracking-widest ml-1">Usuario</label>
+                                                <Input
+                                                    value={loginUser}
+                                                    onChange={(e) => setLoginUser(e.target.value)}
+                                                    placeholder="Ingrese su usuario..."
+                                                    className="h-16 rounded-2xl bg-slate-50 border-slate-200 font-bold text-lg"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-black uppercase text-slate-400 tracking-widest ml-1">Contraseña</label>
+                                                <Input
+                                                    type="password"
+                                                    value={loginPass}
+                                                    onChange={(e) => setLoginPass(e.target.value)}
+                                                    placeholder="Ingrese su clave..."
+                                                    className="h-16 rounded-2xl bg-slate-50 border-slate-200 font-bold text-lg"
+                                                />
+                                            </div>
+                                        </div>
 
-                                <Button
-                                    onClick={handleConfirmIdentity}
-                                    disabled={!tempGuardName.trim()}
-                                    className="w-full h-20 rounded-[1.75rem] bg-black text-white text-sm font-black uppercase tracking-[0.2em] hover:bg-neutral-900 transition-all shadow-xl shadow-black/10 active:scale-95"
-                                >
-                                    Iniciar Sistema <ChevronRight className="ml-2" size={20} />
-                                </Button>
+                                        <button
+                                            type="submit"
+                                            className="w-full h-16 bg-[#B20D30] hover:bg-[#d9123c] text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-900/20 active:scale-95 transition-all flex items-center justify-center gap-3 text-lg"
+                                        >
+                                            <LogIn size={24} /> Ingresar
+                                        </button>
+                                    </form>
+                                </div>
                             </div>
 
                             <p className="mt-12 text-[10px] font-black text-black/20 uppercase tracking-[0.5em]">Security Systems Architecture</p>
@@ -1250,10 +1415,64 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                             <motion.div
                                 animate={{ opacity: [0.4, 1, 0.4] }}
                                 transition={{ repeat: Infinity, duration: 2 }}
-                                className="px-6 py-2 bg-red-600 text-white rounded-full text-[10px] font-black uppercase tracking-[0.3em]"
+                                className="px-6 py-2 bg-red-600 text-white rounded-full text-[10px] font-black uppercase tracking-[0.3em] mb-4"
                             >
                                 Protocolo de Seguridad Activo
                             </motion.div>
+
+                            {/* PANIC ANNEXING TOOLS */}
+                            <div className="flex items-center gap-6 mt-4">
+                                <motion.button
+                                    whileHover={{ scale: 1.1 }}
+                                    whileTap={{ scale: 0.9 }}
+                                    onClick={() => setIsOCRActive(true)}
+                                    className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-md border border-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-all"
+                                >
+                                    <Camera size={28} />
+                                </motion.button>
+                                <motion.button
+                                    whileHover={{ scale: 1.1 }}
+                                    whileTap={{ scale: 0.9 }}
+                                    onClick={startRecording}
+                                    className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-md border border-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-all"
+                                >
+                                    <Mic size={28} />
+                                </motion.button>
+                                <motion.button
+                                    whileHover={{ scale: 1.1 }}
+                                    whileTap={{ scale: 0.9 }}
+                                    onClick={() => {
+                                        const note = prompt("Escriba información adicional:");
+                                        if (note) setNotes(prev => prev + (prev ? " | " : "") + note);
+                                    }}
+                                    className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-md border border-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-all"
+                                >
+                                    <FileText size={28} />
+                                </motion.button>
+                            </div>
+
+                            {/* PREVIEW OF ANNEXED INFO */}
+                            {(capturedPhoto || audioUrl || notes) && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="mt-6 flex flex-col items-center gap-4"
+                                >
+                                    <div className="flex gap-3">
+                                        {capturedPhoto && <div className="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center text-white shadow-lg"><Camera size={20} /></div>}
+                                        {audioUrl && <div className="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center text-white shadow-lg"><Mic size={20} /></div>}
+                                        {notes && <div className="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center text-white shadow-lg"><FileText size={20} /></div>}
+                                    </div>
+                                    <button
+                                        onClick={handleAnnexPanic}
+                                        disabled={isSubmitting}
+                                        className="px-8 py-3 bg-white text-emerald-600 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
+                                    >
+                                        {isSubmitting ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
+                                        Subir Información
+                                    </button>
+                                </motion.div>
+                            )}
                         </motion.div>
                     </motion.div>
                 )}
@@ -1331,7 +1550,7 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                             </motion.div>
                         )}
                         {activeTab === "control" && (
-                            <motion.div key="control" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.02 }} transition={{ duration: 0.2 }} className="h-full w-full overflow-y-auto p-4 md:p-8 pb-64 custom-scrollbar">
+                            <motion.div key="control" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.02 }} transition={{ duration: 0.2 }} className="h-full w-full overflow-y-auto p-4 pr-20 md:p-8 pb-64 custom-scrollbar">
 
                                 <div className="max-w-7xl mx-auto flex flex-col gap-10">
                                     {/* TOP TOGGLE (ENTRY/EXIT) */}
@@ -1342,14 +1561,14 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                             whileTap={{ scale: 0.98 }}
                                             onClick={() => { playTactileSound(); setType("ENTRY"); }}
                                             className={cn(
-                                                "flex-1 h-28 rounded-[2rem] border-2 flex flex-col items-center justify-center gap-2 transition-all relative overflow-hidden group",
+                                                "flex-1 h-20 md:h-28 rounded-[1.5rem] md:rounded-[2rem] border-2 flex flex-col items-center justify-center gap-1 md:gap-2 transition-all relative overflow-hidden group",
                                                 type === "ENTRY"
                                                     ? "bg-gradient-to-br from-[#B20D30] to-[#E53935] border-[#B20D30] text-white shadow-xl shadow-[#B20D30]/20"
                                                     : "bg-white border-black transition-all duration-300 text-black/40 hover:bg-slate-50"
                                             )}
                                         >
-                                            <LogIn size={28} className={type === "ENTRY" ? "text-white" : "text-black/20"} />
-                                            <span className="font-black text-[10px] uppercase tracking-[0.3em]">Registro de Ingreso</span>
+                                            <LogIn size={24} className={cn("md:w-7 md:h-7", type === "ENTRY" ? "text-white" : "text-black/20")} />
+                                            <span className="font-black text-[9px] md:text-[10px] uppercase tracking-[0.2em] md:tracking-[0.3em]">Registro de Ingreso</span>
                                             {type === "ENTRY" && <div className="absolute top-0 right-0 w-12 h-12 bg-white/10 rounded-full -mr-6 -mt-6" />}
                                         </motion.button>
 
@@ -1363,14 +1582,14 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                             whileTap={{ scale: 0.98 }}
                                             onClick={() => { playTactileSound(); setType("EXIT"); }}
                                             className={cn(
-                                                "flex-1 h-28 rounded-[2rem] border-2 flex flex-col items-center justify-center gap-2 transition-all relative overflow-hidden group",
+                                                "flex-1 h-20 md:h-28 rounded-[1.5rem] md:rounded-[2rem] border-2 flex flex-col items-center justify-center gap-1 md:gap-2 transition-all relative overflow-hidden group",
                                                 type === "EXIT"
                                                     ? "bg-gradient-to-br from-orange-600 to-amber-500 border-orange-600 text-white shadow-xl shadow-orange-600/20"
                                                     : "bg-white border-black transition-all duration-300 text-black/40 hover:bg-slate-50"
                                             )}
                                         >
-                                            <LogOut size={28} className={type === "EXIT" ? "text-white" : "text-black/20"} />
-                                            <span className="font-black text-[10px] uppercase tracking-[0.3em]">Registro de Salida</span>
+                                            <LogOut size={24} className={cn("md:w-7 md:h-7", type === "EXIT" ? "text-white" : "text-black/20")} />
+                                            <span className="font-black text-[9px] md:text-[10px] uppercase tracking-[0.2em] md:tracking-[0.3em]">Registro de Salida</span>
                                             {type === "EXIT" && <div className="absolute top-0 right-0 w-12 h-12 bg-white/10 rounded-full -mr-6 -mt-6" />}
                                         </motion.button>
                                     </div>
@@ -1383,7 +1602,13 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                                 <div className="flex flex-col gap-10">
                                                     <div className="flex-1 w-full space-y-6">
                                                         <div className="flex justify-center overflow-hidden py-4">
-                                                            <TactilePlateInput value={plate} onChange={setPlate} />
+                                                            <div className="relative flex items-center">
+                                                                <TactilePlateInput
+                                                                    value={plate}
+                                                                    onChange={setPlate}
+                                                                    onCameraClick={() => { setIsOCRActive(true); playTactileSound(); }}
+                                                                />
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1412,38 +1637,38 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                                             whileTap={{ scale: 0.99 }}
                                                             onClick={() => setShowUnitPicker(true)}
                                                             className={cn(
-                                                                "w-full h-24 rounded-[2rem] border border-black/20 flex items-center justify-between px-8 transition-all relative overflow-hidden group",
+                                                                "w-full h-16 md:h-24 rounded-[1.5rem] md:rounded-[2rem] border border-black/20 flex items-center justify-between px-6 md:px-8 transition-all relative overflow-hidden group",
                                                                 selectedUnit
                                                                     ? "bg-[#B20D30]/5 border-[#B20D30] shadow-lg shadow-[#B20D30]/5"
                                                                     : "bg-white border-black transition-all duration-300"
                                                             )}
                                                         >
-                                                            <div className="flex items-center gap-6">
+                                                            <div className="flex items-center gap-4 md:gap-6">
                                                                 <div className={cn(
-                                                                    "w-14 h-14 rounded-2xl flex items-center justify-center transition-colors",
+                                                                    "w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl flex items-center justify-center transition-colors",
                                                                     selectedUnit ? "bg-[#B20D30] text-white" : "bg-slate-100 text-black/20"
                                                                 )}>
-                                                                    <Home size={24} />
+                                                                    <Home size={20} className="md:w-6 md:h-6" />
                                                                 </div>
                                                                 <div className="text-left">
                                                                     {selectedUnit ? (
                                                                         <>
-                                                                            <p className="text-xl font-black text-black uppercase tracking-tight">{selectedUnit.name}</p>
-                                                                            <p className="text-[10px] font-black text-[#B20D30] uppercase tracking-widest">{selectedUnit.number || "LT"}</p>
+                                                                            <p className="text-base md:text-xl font-black text-black uppercase tracking-tight">{selectedUnit.name}</p>
+                                                                            <p className="text-[9px] md:text-[10px] font-black text-[#B20D30] uppercase tracking-widest">{selectedUnit.number || "LT"}</p>
                                                                         </>
                                                                     ) : (
                                                                         <>
-                                                                            <p className="text-lg font-black text-black/30 uppercase tracking-tighter">Pendiente Seleccionar</p>
-                                                                            <p className="text-[9px] font-black text-black/20 uppercase tracking-widest">Toca para abrir el panel de unidades</p>
+                                                                            <p className="text-sm md:text-lg font-black text-black/30 uppercase tracking-tighter">Pendiente Seleccionar</p>
+                                                                            <p className="text-[8px] md:text-[9px] font-black text-black/20 uppercase tracking-widest">Toca para abrir el panel de unidades</p>
                                                                         </>
                                                                     )}
                                                                 </div>
                                                             </div>
                                                             <div className={cn(
-                                                                "w-10 h-10 rounded-full flex items-center justify-center transition-all",
+                                                                "w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center transition-all",
                                                                 selectedUnit ? "bg-[#B20D30]/10 text-[#B20D30]" : "bg-slate-50 text-black/10"
                                                             )}>
-                                                                <ChevronRight size={20} />
+                                                                <ChevronRight size={16} className="md:w-5 md:h-5" />
                                                             </div>
                                                         </motion.button>
                                                     </div>
@@ -1489,52 +1714,13 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                     </div>
                                 </div>
 
-                                {/* CAMERA OVERLAY - FULLSCREEN */}
+                                {/* CAMERA OVERLAY - REPLACED BY OCR */}
                                 <AnimatePresence>
-                                    {isCameraActive && (
-                                        <motion.div
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            exit={{ opacity: 0 }}
-                                            className="fixed inset-0 bg-black z-[200] flex flex-col items-center justify-center"
-                                        >
-                                            {/* Header */}
-                                            <div className="absolute top-8 left-1/2 -translate-x-1/2 z-10">
-                                                <div className="bg-white/10 backdrop-blur-xl border border-white/20 px-8 py-4 rounded-3xl flex items-center gap-4">
-                                                    <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                                                    <span className="text-white font-black text-xl uppercase tracking-widest">Capturando Fotografía</span>
-                                                </div>
-                                            </div>
-
-                                            {/* Video Feed - Fullscreen */}
-                                            <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
-
-                                            {/* Hidden canvas for photo capture */}
-                                            <canvas ref={canvasRef} className="hidden" />
-
-                                            {/* Controls */}
-                                            <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex gap-6 z-10">
-                                                {/* Capture Button */}
-                                                <motion.button
-                                                    whileHover={{ scale: 1.05 }}
-                                                    whileTap={{ scale: 0.95 }}
-                                                    onClick={takePhoto}
-                                                    className="w-24 h-24 rounded-full bg-white border-8 border-white/30 shadow-2xl flex items-center justify-center hover:scale-110 transition-transform"
-                                                >
-                                                    <Camera size={32} className="text-black" />
-                                                </motion.button>
-
-                                                {/* Cancel Button */}
-                                                <motion.button
-                                                    whileHover={{ scale: 1.05 }}
-                                                    whileTap={{ scale: 0.95 }}
-                                                    onClick={() => setIsCameraActive(false)}
-                                                    className="w-20 h-20 rounded-full bg-red-600 border-4 border-white/30 shadow-2xl flex items-center justify-center hover:bg-red-700 transition-colors"
-                                                >
-                                                    <X size={28} className="text-white" />
-                                                </motion.button>
-                                            </div>
-                                        </motion.div>
+                                    {isOCRActive && (
+                                        <OCRScanner
+                                            onDetected={handleOCRDetected}
+                                            onClose={() => setIsOCRActive(false)}
+                                        />
                                     )}
                                 </AnimatePresence>
 
@@ -1680,72 +1866,18 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                 </AnimatePresence>
 
                                 {/* CONTROL BAR (Classification, Unit, Vehicle, Media, Finish) */}
-                                <div className="fixed top-1/2 -translate-y-1/2 right-6 z-[90]">
+                                <div className="fixed top-1/2 -translate-y-1/2 right-2 md:right-6 z-[90]">
                                     <div className={cn(
-                                        "flex flex-col gap-3 p-3 rounded-[3rem] border shadow-[0_10px_60px_-10px_rgba(0,0,0,0.15)] ring-1 ring-black/5 transition-all duration-500",
+                                        "flex flex-col gap-2 md:gap-3 p-2 md:p-3 rounded-[2rem] md:rounded-[3rem] border shadow-[0_10px_60px_-10px_rgba(0,0,0,0.15)] ring-1 ring-black/5 transition-all duration-500",
                                         isAlertMode
                                             ? "bg-red-600 border-red-400 animate-pulse shadow-[0_0_50px_rgba(220,38,38,0.5)]"
                                             : "bg-white/40 backdrop-blur-2xl border-white/40"
                                     )}>
-                                        {/* Panic / Alert Button - Hold to Activate */}
-                                        <div className="relative">
-                                            <motion.button
-                                                style={{ touchAction: "none" }}
-                                                whileHover={{ scale: 1.1 }}
-                                                whileTap={{ scale: 0.9 }}
-                                                onClick={(e) => {
-                                                    if (isAlertMode) {
-                                                        toggleAlertMode();
-                                                        playTactileSound();
-                                                    }
-                                                }}
-                                                onMouseDown={(e) => {
-                                                    if (!isAlertMode) startPanicHold();
-                                                }}
-                                                onMouseUp={(e) => {
-                                                    if (!isAlertMode) cancelPanicHold();
-                                                }}
-                                                onMouseLeave={(e) => {
-                                                    if (!isAlertMode) cancelPanicHold();
-                                                }}
-                                                onTouchStart={(e) => {
-                                                    // Prevent default to avoid scrolling while holding
-                                                    // e.preventDefault(); // CAUTION: e.preventDefault() on touchstart might block click depending on browser
-                                                    // but we do want to block scroll.
-                                                    if (!isAlertMode) {
-                                                        startPanicHold();
-                                                    }
-                                                }}
-                                                onTouchEnd={(e) => {
-                                                    if (!isAlertMode) cancelPanicHold();
-                                                }}
-                                                className={cn(
-                                                    "w-16 h-16 rounded-[1.8rem] flex items-center justify-center transition-all shadow-lg relative z-10 select-none",
-                                                    isAlertMode ? "bg-white text-red-600 animate-bounce" : "bg-red-500 text-white"
-                                                )}
-                                            >
-                                                <Siren size={28} className={isAlertMode ? "animate-pulse" : ""} />
-                                            </motion.button>
 
-                                            {/* Progress Ring for Hold */}
-                                            {panicHoldProgress > 0 && !isAlertMode && (
-                                                <svg className="absolute inset-[-4px] w-[72px] h-[72px] rotate-[-90deg] pointer-events-none">
-                                                    <circle
-                                                        cx="36"
-                                                        cy="36"
-                                                        r="34"
-                                                        stroke="currentColor"
-                                                        strokeWidth="4"
-                                                        fill="transparent"
-                                                        className="text-red-600"
-                                                        strokeDasharray={213.6}
-                                                        strokeDashoffset={213.6 - (213.6 * panicHoldProgress) / 100}
-                                                    />
-                                                </svg>
-                                            )}
-                                        </div>
 
-                                        <div className={cn("h-px mx-2", isAlertMode ? "bg-white/20" : "bg-black/10")} />
+                                        {/* Panic Button REMOVED from Sidebar - Moved to Footer Center */}
+                                        {/* <div className="relative">...</div> */}
+                                        {/* <div className={cn("h-px mx-2", isAlertMode ? "bg-white/20" : "bg-black/10")} /> */}
 
 
                                         {/* Classification Button - Dynamic Icon */}
@@ -1753,14 +1885,14 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                             whileHover={{ scale: 1.05 }}
                                             whileTap={{ scale: 0.95 }}
                                             onClick={() => setShowOriginPicker(true)}
-                                            className="w-16 h-16 rounded-[1.8rem] flex items-center justify-center transition-all text-black/60 hover:text-black"
+                                            className="w-12 h-12 md:w-16 md:h-16 rounded-[1.2rem] md:rounded-[1.8rem] flex items-center justify-center transition-all text-black/60 hover:text-black"
                                         >
-                                            {originType === "PARTICULAR" && <UserCheck size={22} />}
-                                            {originType === "EMPRESA" && <Briefcase size={22} />}
-                                            {originType === "IMM" && <Landmark size={22} />}
-                                            {originType === "POLICIA" && <Shield size={22} />}
-                                            {originType === "BOMBEROS" && <Flame size={22} />}
-                                            {originType === "AMBULANCIA" && <Plus size={22} />}
+                                            {originType === "PARTICULAR" && <UserCheck size={20} className="md:w-5.5 md:h-5.5" />}
+                                            {originType === "EMPRESA" && <Briefcase size={20} className="md:w-5.5 md:h-5.5" />}
+                                            {originType === "IMM" && <Landmark size={20} className="md:w-5.5 md:h-5.5" />}
+                                            {originType === "POLICIA" && <Shield size={20} className="md:w-5.5 md:h-5.5" />}
+                                            {originType === "BOMBEROS" && <Flame size={20} className="md:w-5.5 md:h-5.5" />}
+                                            {originType === "AMBULANCIA" && <Plus size={20} className="md:w-5.5 md:h-5.5" />}
                                         </motion.button>
 
                                         {/* Unit Picker Button - Dynamic Icon/Number */}
@@ -1768,12 +1900,12 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                             whileHover={{ scale: 1.05 }}
                                             whileTap={{ scale: 0.95 }}
                                             onClick={() => setShowUnitPicker(true)}
-                                            className="w-16 h-16 rounded-[1.8rem] flex items-center justify-center transition-all text-black/60 hover:text-black relative"
+                                            className="w-12 h-12 md:w-16 md:h-16 rounded-[1.2rem] md:rounded-[1.8rem] flex items-center justify-center transition-all text-black/60 hover:text-black relative"
                                         >
                                             {selectedUnit ? (
-                                                <span className="text-lg font-black">{selectedUnit.number || selectedUnit.name.substring(0, 2)}</span>
+                                                <span className="text-sm md:text-lg font-black">{selectedUnit.number || selectedUnit.name.substring(0, 2)}</span>
                                             ) : (
-                                                <Building2 size={22} />
+                                                <Building2 size={20} className="md:w-5.5 md:h-5.5" />
                                             )}
                                         </motion.button>
 
@@ -1785,14 +1917,14 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                             whileTap={{ scale: 0.95 }}
                                             onClick={() => { playTactileSound(); setVehicleType("AUTO"); }}
                                             className={cn(
-                                                "w-16 h-16 rounded-[1.8rem] flex flex-col items-center justify-center gap-1 transition-all",
+                                                "w-12 h-12 md:w-16 md:h-16 rounded-[1.2rem] md:rounded-[1.8rem] flex flex-col items-center justify-center gap-0.5 md:gap-1 transition-all",
                                                 vehicleType === "AUTO"
                                                     ? "text-[#B20D30]"
                                                     : "text-black/20 hover:text-black"
                                             )}
                                         >
-                                            <Car size={20} />
-                                            <span className="text-[7px] font-black uppercase tracking-tighter">Auto</span>
+                                            <Car size={18} className="md:w-5 md:h-5" />
+                                            <span className="text-[6px] md:text-[7px] font-black uppercase tracking-tighter">Auto</span>
                                         </motion.button>
 
                                         {/* Moto Button */}
@@ -1801,14 +1933,14 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                             whileTap={{ scale: 0.95 }}
                                             onClick={() => { playTactileSound(); setVehicleType("MOTO"); }}
                                             className={cn(
-                                                "w-16 h-16 rounded-[1.8rem] flex flex-col items-center justify-center gap-1 transition-all",
+                                                "w-12 h-12 md:w-16 md:h-16 rounded-[1.2rem] md:rounded-[1.8rem] flex flex-col items-center justify-center gap-0.5 md:gap-1 transition-all",
                                                 vehicleType === "MOTO"
                                                     ? "text-[#B20D30]"
                                                     : "text-black/20 hover:text-black"
                                             )}
                                         >
-                                            <Bike size={20} />
-                                            <span className="text-[7px] font-black uppercase tracking-tighter">Moto</span>
+                                            <Bike size={18} className="md:w-5 md:h-5" />
+                                            <span className="text-[6px] md:text-[7px] font-black uppercase tracking-tighter">Moto</span>
                                         </motion.button>
 
                                         <div className="h-px bg-black/10 mx-2" />
@@ -1817,10 +1949,10 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                         <motion.button
                                             whileHover={{ scale: 1.05 }}
                                             whileTap={{ scale: 0.95 }}
-                                            onClick={() => setIsCameraActive(true)}
-                                            className="w-16 h-16 rounded-[1.8rem] flex items-center justify-center transition-all bg-slate-800 text-white hover:bg-slate-700"
+                                            onClick={() => setIsOCRActive(true)}
+                                            className="w-12 h-12 md:w-16 md:h-16 rounded-[1.2rem] md:rounded-[1.8rem] flex items-center justify-center transition-all bg-slate-800 text-white hover:bg-slate-700"
                                         >
-                                            <Camera size={22} />
+                                            <Camera size={20} className="md:w-5.5 md:h-5.5" />
                                         </motion.button>
 
                                         {/* Audio Recording Button - Fixed Dark Background */}
@@ -1835,13 +1967,14 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                         <div className="h-px bg-black/10 mx-2" />
 
                                         {/* Finish Button - Highlighted */}
+                                        {/* Finish Button - Highlighted */}
                                         <motion.button
                                             whileHover={{ scale: 1.05 }}
                                             whileTap={{ scale: 0.95 }}
                                             disabled={isSubmitting || !plate.trim()}
                                             onClick={() => { playTactileSound(); handleSubmit(); }}
                                             className={cn(
-                                                "w-16 h-16 rounded-[1.8rem] flex items-center justify-center transition-all shadow-lg",
+                                                "w-12 h-12 md:w-16 md:h-16 rounded-[1.2rem] md:rounded-[1.8rem] flex items-center justify-center transition-all shadow-lg",
                                                 type === "ENTRY" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-orange-600 hover:bg-orange-700 text-white",
                                                 "disabled:opacity-30 disabled:cursor-not-allowed"
                                             )}
@@ -1855,283 +1988,170 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
 
                         {activeTab === "alerts" && (
                             <motion.div key="alerts" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="h-full w-full overflow-y-auto px-8 pt-6 pb-40 custom-scrollbar">
-                                <div className="max-w-7xl mx-auto space-y-8">
-                                    <div className="flex flex-col md:flex-row md:items-center justify-between sticky top-0 bg-slate-50/95 backdrop-blur-md py-6 z-30 gap-6">
+                                <div className="max-w-7xl mx-auto space-y-6">
+                                    {/* HEADER + FILTER ICONS */}
+                                    <div className="flex items-center justify-between sticky top-0 bg-slate-50/95 backdrop-blur-md py-4 z-30">
                                         <div>
                                             <h2 className="text-3xl font-black uppercase tracking-tighter text-black leading-none">Eventos Críticos</h2>
                                             <p className="text-[10px] text-[#B20D30] font-black uppercase tracking-[0.3em] mt-2">Registro de activación de botón de pánico</p>
                                         </div>
-                                        <div className="flex items-center gap-4">
-                                            <div className="relative group">
-                                                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-black/20 group-focus-within:text-[#B20D30] transition-colors" size={18} />
-                                                <Input
-                                                    type="date"
-                                                    value={alertsDate}
-                                                    onChange={(e) => setAlertsDate(e.target.value)}
-                                                    className="pl-12 h-14 w-48 bg-white/40 backdrop-blur-md border border-black rounded-2xl font-black text-xs uppercase tracking-widest transition-all focus:border-[#B20D30]/50 shadow-sm"
-                                                />
-                                            </div>
-                                            <div className="relative group">
-                                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-black/20 group-focus-within:text-[#B20D30] transition-colors" size={18} />
-                                                <Input
-                                                    placeholder="BUSCAR OPERARIO..."
-                                                    value={alertsSearch}
-                                                    onChange={(e) => setAlertsSearch(e.target.value)}
-                                                    className="pl-12 h-14 w-80 bg-white/40 backdrop-blur-md border border-black rounded-2xl font-black text-xs uppercase tracking-widest transition-all focus:border-[#B20D30]/50 shadow-sm"
-                                                />
-                                            </div>
+                                        <div className="flex items-center gap-2">
+                                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => { setShowAlertsFilterModal(true); playTactileSound(); }}
+                                                className="w-12 h-12 rounded-2xl bg-white border border-black/10 flex items-center justify-center text-black/40 hover:text-[#B20D30] hover:border-[#B20D30]/30 transition-all shadow-sm">
+                                                <Search size={20} />
+                                            </motion.button>
+                                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => { setShowAlertsFilterModal(true); playTactileSound(); }}
+                                                className="w-12 h-12 rounded-2xl bg-white border border-black/10 flex items-center justify-center text-black/40 hover:text-[#B20D30] hover:border-[#B20D30]/30 transition-all shadow-sm">
+                                                <Calendar size={20} />
+                                            </motion.button>
                                         </div>
                                     </div>
 
-                                    <div className="w-full">
-                                        <table className="w-full text-left border-collapse">
-                                            <thead>
-                                                <tr className="shadow-lg" style={{ backgroundColor: customHeaderColor }}>
-                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Activó</th>
-                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Normalizó</th>
-                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Duración</th>
-                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white text-right">Fecha/Hora</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-50">
-                                                {(() => {
-                                                    const alertArr = entries.filter(e => {
-                                                        const isAlertType = e.type.includes("ALERTA");
-                                                        const matchesSearch = !alertsSearch || (e.guardName || "").toLowerCase().includes(alertsSearch.toLowerCase());
-                                                        const alertDate = new Date(e.timestamp || e.createdAt).toISOString().split('T')[0];
-                                                        const matchesDate = !alertsDate || alertDate === alertsDate;
+                                    {/* FILTER MODAL */}
+                                    <AnimatePresence>
+                                        {showAlertsFilterModal && (
+                                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => setShowAlertsFilterModal(false)}>
+                                                <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} className="bg-white rounded-[2rem] p-8 w-full max-w-md shadow-2xl space-y-6" onClick={e => e.stopPropagation()}>
+                                                    <div className="flex items-center justify-between">
+                                                        <h3 className="text-xl font-black uppercase tracking-tighter">Filtros</h3>
+                                                        <button onClick={() => setShowAlertsFilterModal(false)} className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center"><X size={20} /></button>
+                                                    </div>
+                                                    <div className="space-y-4">
+                                                        <div className="space-y-2">
+                                                            <label className="text-[10px] font-black uppercase text-black/40 tracking-widest">Fecha</label>
+                                                            <Input type="date" value={alertsDate} onChange={(e) => setAlertsDate(e.target.value)} className="h-14 bg-slate-50 border-slate-200 rounded-2xl font-black text-sm" />
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <label className="text-[10px] font-black uppercase text-black/40 tracking-widest">Operario</label>
+                                                            <Input placeholder="Buscar operario..." value={alertsSearch} onChange={(e) => setAlertsSearch(e.target.value)} className="h-14 bg-slate-50 border-slate-200 rounded-2xl font-black text-sm" />
+                                                        </div>
+                                                    </div>
+                                                    <Button onClick={() => setShowAlertsFilterModal(false)} className="w-full h-14 rounded-2xl bg-[#B20D30] hover:bg-[#910a28] text-white font-black uppercase tracking-widest">Aplicar</Button>
+                                                </motion.div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
 
-                                                        return isAlertType && matchesSearch && matchesDate;
-                                                    });
+                                    {/* ALERT CARDS */}
+                                    <div className="space-y-4">
+                                        {(() => {
+                                            const alertArr = entries.filter(e => {
+                                                const isAlertType = e.type.includes("ALERTA");
+                                                const matchesSearch = !alertsSearch || (e.guardName || "").toLowerCase().includes(alertsSearch.toLowerCase());
+                                                const alertDate = new Date(e.timestamp || e.createdAt).toISOString().split('T')[0];
+                                                const matchesDate = !alertsDate || alertDate === alertsDate;
+                                                return isAlertType && matchesSearch && matchesDate;
+                                            });
 
-                                                    if (alertArr.length === 0) return (
-                                                        <tr>
-                                                            <td colSpan={4} className="py-40 text-center">
-                                                                <div className="flex flex-col items-center gap-6 opacity-20 text-black">
-                                                                    <Shield size={80} />
-                                                                    <p className="text-xl font-black uppercase tracking-[0.5em]">Historial de Alertas Limpio</p>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    );
+                                            if (alertArr.length === 0) return (
+                                                <div className="py-32 flex flex-col items-center gap-6 opacity-20 text-black">
+                                                    <Shield size={80} />
+                                                    <p className="text-xl font-black uppercase tracking-[0.5em]">Historial de Alertas Limpio</p>
+                                                </div>
+                                            );
 
-                                                    return alertArr.map((alert, idx) => {
-                                                        // Solo mostrar eventos de ACTIVACIÓN
-                                                        if (alert.type !== "ALERTA_ACTIVADA") return null;
+                                            return alertArr.map((alert) => {
+                                                if (alert.type !== "ALERTA") return null;
+                                                if (alert.plate === "NORMAL" || alert.plate === "Manual") return null;
+                                                const deactivationEvent = entries.find(e => e.type === "ALERTA" && (e.plate === "NORMAL" || e.plate === "Manual") && new Date(e.timestamp || e.createdAt).getTime() > new Date(alert.timestamp || alert.createdAt).getTime());
+                                                let duration = "---"; let isStillActive = false;
+                                                if (deactivationEvent) { const diff = new Date(deactivationEvent.timestamp || deactivationEvent.createdAt).getTime() - new Date(alert.timestamp || alert.createdAt).getTime(); duration = `${Math.floor(diff / 60000)}m ${Math.floor((diff % 60000) / 1000)}s`; }
+                                                else { duration = "ACTIVA"; isStillActive = true; }
+                                                const isSOS = alert.plate === "SOS";
 
-                                                        const deactivationEvent = entries.find(e =>
-                                                            e.type === "ALERTA_DESACTIVADA" &&
-                                                            new Date(e.timestamp || e.createdAt).getTime() > new Date(alert.timestamp || alert.createdAt).getTime()
-                                                        );
-
-                                                        let duration = "---";
-                                                        let isStillActive = false;
-                                                        if (deactivationEvent) {
-                                                            const diff = new Date(deactivationEvent.timestamp || deactivationEvent.createdAt).getTime() - new Date(alert.timestamp || alert.createdAt).getTime();
-                                                            const mins = Math.floor(diff / 60000);
-                                                            const secs = Math.floor((diff % 60000) / 1000);
-                                                            duration = `${mins}m ${secs}s`;
-                                                        } else {
-                                                            duration = "ACTIVA";
-                                                            isStillActive = true;
-                                                        }
-
-                                                        return (
-                                                            <tr key={alert.id} className="hover:bg-slate-50/50 transition-colors group">
-                                                                <td className="px-8 py-6">
-                                                                    <div className="flex items-center gap-3">
-                                                                        <div className="w-8 h-8 rounded-lg bg-red-100 text-red-600 flex items-center justify-center text-[10px] font-black">
-                                                                            {(alert.guardName || "SI").substring(0, 2).toUpperCase()}
-                                                                        </div>
-                                                                        <div>
-                                                                            <div className="text-xs font-bold text-black uppercase">{alert.guardName || "Sistema"}</div>
-                                                                            <div className="text-[9px] font-black text-red-600 uppercase tracking-wider">Activó Alerta</div>
-                                                                        </div>
-                                                                    </div>
-                                                                </td>
-                                                                <td className="px-8 py-6">
-                                                                    {deactivationEvent ? (
-                                                                        <div className="flex items-center gap-3">
-                                                                            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center text-[10px] font-black">
-                                                                                {(deactivationEvent.guardName || "SI").substring(0, 2).toUpperCase()}
-                                                                            </div>
-                                                                            <div>
-                                                                                <div className="text-xs font-bold text-black uppercase">{deactivationEvent.guardName || "Sistema"}</div>
-                                                                                <div className="text-[9px] font-black text-emerald-600 uppercase tracking-wider">Normalizó</div>
-                                                                            </div>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <div className="flex items-center gap-2">
-                                                                            <div className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></div>
-                                                                            <span className="text-xs font-black text-red-600 uppercase">Pendiente</span>
-                                                                        </div>
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-8 py-6">
-                                                                    <div className={cn(
-                                                                        "px-4 py-2 rounded-xl text-sm font-black inline-flex items-center gap-2 border-2",
-                                                                        isStillActive
-                                                                            ? "bg-red-600 border-red-600 text-white animate-pulse shadow-lg shadow-red-600/30"
-                                                                            : "bg-white border-emerald-500 text-emerald-600"
-                                                                    )}>
-                                                                        <Clock size={16} />
-                                                                        {duration}
-                                                                    </div>
-                                                                </td>
-                                                                <td className="px-8 py-6 text-right">
-                                                                    <div className="flex flex-col items-end">
-                                                                        <span className="text-sm font-bold text-black tabular-nums">
-                                                                            {new Date(alert.timestamp || alert.createdAt).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                                                                        </span>
-                                                                        <span className="text-[10px] font-black text-black/40 uppercase tracking-widest">
-                                                                            {new Date(alert.timestamp || alert.createdAt).toLocaleDateString('es-UY', { day: '2-digit', month: '2-digit' })}
-                                                                        </span>
-                                                                    </div>
-                                                                </td>
-                                                            </tr>
-                                                        );
-                                                    }).filter(Boolean);
-                                                })()}
-                                            </tbody>
-                                        </table>
+                                                return (
+                                                    <motion.button key={alert.id} whileTap={{ scale: 0.98 }} onClick={() => setSelectedEntry(alert)}
+                                                        className="w-full bg-white rounded-[1.5rem] border border-slate-100 p-6 flex items-center gap-6 hover:shadow-lg transition-all text-left group active:bg-slate-50">
+                                                        <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm", isSOS ? "bg-orange-100 text-orange-600" : isStillActive ? "bg-red-600 text-white animate-pulse" : "bg-red-100 text-red-600")}>
+                                                            <Siren size={24} />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-black uppercase text-black truncate">{alert.guardName || "Sistema"}</p>
+                                                            <p className={cn("text-[10px] font-black uppercase tracking-wider", isSOS ? "text-orange-600" : "text-red-600")}>{isSOS ? "Informó Sospechoso" : isStillActive ? "Alerta Activa" : "Alerta Resuelta"}</p>
+                                                        </div>
+                                                        <div className="text-right shrink-0">
+                                                            <div className={cn("px-3 py-1 rounded-lg text-[10px] font-black inline-block mb-1", isStillActive ? "bg-red-600 text-white animate-pulse" : "bg-emerald-50 text-emerald-600")}>{duration}</div>
+                                                            <p className="text-[10px] font-bold text-black/40">{new Date(alert.timestamp || alert.createdAt).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' })}</p>
+                                                        </div>
+                                                        <ChevronRight size={16} className="text-black/10 group-hover:text-black/30 shrink-0" />
+                                                    </motion.button>
+                                                );
+                                            }).filter(Boolean);
+                                        })()}
                                     </div>
                                 </div>
                             </motion.div>
                         )}
                         {activeTab === "lpr" && (
                             <motion.div key="lpr" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="h-full w-full overflow-y-auto px-8 pt-6 pb-40 custom-scrollbar">
-                                <div className="max-w-7xl mx-auto space-y-8">
-                                    <div className="flex flex-col md:flex-row md:items-center justify-between sticky top-0 bg-slate-50/95 backdrop-blur-md py-6 z-30 gap-6">
+                                <div className="max-w-7xl mx-auto space-y-6">
+                                    <div className="flex items-center justify-between sticky top-0 bg-slate-50/95 backdrop-blur-md py-4 z-30">
                                         <div>
                                             <h2 className="text-3xl font-black uppercase tracking-tighter text-black leading-none">Historial LPR</h2>
                                             <p className="text-[10px] text-[#B20D30] font-black uppercase tracking-[0.3em] mt-2">Reconocimiento automático de matrículas</p>
                                         </div>
-                                        <div className="flex items-center gap-4">
-                                            <div className="relative group">
-                                                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-black/20 group-focus-within:text-[#B20D30] transition-colors" size={18} />
-                                                <Input
-                                                    type="date"
-                                                    value={lprDate}
-                                                    onChange={(e) => setLprDate(e.target.value)}
-                                                    className="pl-12 h-14 w-48 bg-white/40 backdrop-blur-md border border-black rounded-2xl font-black text-xs uppercase tracking-widest transition-all focus:border-[#B20D30]/50 shadow-sm"
-                                                />
-                                            </div>
-                                            <div className="relative group">
-                                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-black/20 group-focus-within:text-[#B20D30] transition-colors" size={18} />
-                                                <Input
-                                                    placeholder="BUSCAR MATRÍCULA..."
-                                                    value={lprSearch}
-                                                    onChange={(e) => setLprSearch(e.target.value)}
-                                                    className="pl-12 h-14 w-80 bg-white/40 backdrop-blur-md border border-black rounded-2xl font-black text-xs uppercase tracking-widest transition-all focus:border-[#B20D30]/50 shadow-sm"
-                                                />
-                                            </div>
+                                        <div className="flex items-center gap-2">
+                                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => { setShowLprFilterModal(true); playTactileSound(); }} className="w-12 h-12 rounded-2xl bg-white border border-black/10 flex items-center justify-center text-black/40 hover:text-[#B20D30] hover:border-[#B20D30]/30 transition-all shadow-sm"><Search size={20} /></motion.button>
+                                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => { setShowLprFilterModal(true); playTactileSound(); }} className="w-12 h-12 rounded-2xl bg-white border border-black/10 flex items-center justify-center text-black/40 hover:text-[#B20D30] hover:border-[#B20D30]/30 transition-all shadow-sm"><Calendar size={20} /></motion.button>
                                         </div>
                                     </div>
-
-                                    <div className="w-full">
-                                        <table className="w-full text-left border-collapse">
-                                            <thead>
-                                                <tr className="shadow-lg" style={{ backgroundColor: customHeaderColor }}>
-                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Foto</th>
-                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Matrícula</th>
-                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Vehículo</th>
-                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Propietario</th>
-                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Unidad</th>
-                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Sentido</th>
-                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Fecha/Hora</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-50">
-                                                {isLprLoading ? (
-                                                    <tr>
-                                                        <td colSpan={7} className="py-40">
-                                                            <div className="flex flex-col items-center gap-6 opacity-20">
-                                                                <Loader2 className="animate-spin" size={60} />
-                                                                <p className="text-xl font-black uppercase tracking-[0.5em]">Cargando Eventos LPR...</p>
+                                    <AnimatePresence>
+                                        {showLprFilterModal && (
+                                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => setShowLprFilterModal(false)}>
+                                                <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} className="bg-white rounded-[2rem] p-8 w-full max-w-md shadow-2xl space-y-6" onClick={e => e.stopPropagation()}>
+                                                    <div className="flex items-center justify-between">
+                                                        <h3 className="text-xl font-black uppercase tracking-tighter">Filtros LPR</h3>
+                                                        <button onClick={() => setShowLprFilterModal(false)} className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center"><X size={20} /></button>
+                                                    </div>
+                                                    <div className="space-y-4">
+                                                        <div className="space-y-2"><label className="text-[10px] font-black uppercase text-black/40 tracking-widest">Fecha</label><Input type="date" value={lprDate} onChange={(e) => setLprDate(e.target.value)} className="h-14 bg-slate-50 border-slate-200 rounded-2xl font-black text-sm" /></div>
+                                                        <div className="space-y-2"><label className="text-[10px] font-black uppercase text-black/40 tracking-widest">Matrícula</label><Input placeholder="Buscar matrícula..." value={lprSearch} onChange={(e) => setLprSearch(e.target.value)} className="h-14 bg-slate-50 border-slate-200 rounded-2xl font-black text-sm" /></div>
+                                                        <div className="space-y-2">
+                                                            <label className="text-[10px] font-black uppercase text-black/40 tracking-widest">Dirección</label>
+                                                            <div className="flex gap-2">
+                                                                {(["ALL", "ENTRY", "EXIT"] as const).map(dir => (
+                                                                    <button key={dir} onClick={() => setLprDirection(dir)} className={cn("flex-1 h-14 rounded-2xl font-black text-sm uppercase tracking-wider transition-all border", lprDirection === dir ? dir === "ENTRY" ? "bg-emerald-500 text-white border-emerald-500" : dir === "EXIT" ? "bg-orange-500 text-white border-orange-500" : "bg-[#B20D30] text-white border-[#B20D30]" : "bg-slate-50 text-black/40 border-slate-200 hover:border-slate-300")}>
+                                                                        {dir === "ALL" ? "Todos" : dir === "ENTRY" ? "Entrada" : "Salida"}
+                                                                    </button>
+                                                                ))}
                                                             </div>
-                                                        </td>
-                                                    </tr>
-                                                ) : lprEntries.length > 0 ? (
-                                                    lprEntries.map((event) => (
-                                                        <tr key={event.id} className="hover:bg-slate-50/50 transition-colors group">
-                                                            <td className="px-6 py-4">
-                                                                <div
-                                                                    onClick={() => event.snapshotPath && setViewerData({
-                                                                        url: event.snapshotPath,
-                                                                        plate: event.plateDetected,
-                                                                        name: (event as any).user?.name,
-                                                                        unit: (event as any).user?.unit?.name,
-                                                                        direction: event.direction,
-                                                                        confidence: event.confidence,
-                                                                        timestamp: event.timestamp,
-                                                                        deviceName: event.deviceName
-                                                                    })}
-                                                                    className="w-16 h-12 rounded-lg bg-slate-100 overflow-hidden relative border border-black transition-all duration-300 cursor-zoom-in active:scale-95"
-                                                                >
-                                                                    {event.snapshotPath ? (
-                                                                        <Image src={event.snapshotPath} alt="LPR" fill className="object-cover" />
-                                                                    ) : (
-                                                                        <div className="w-full h-full flex items-center justify-center text-slate-300">
-                                                                            <ImageIcon size={16} />
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                <div className="px-3 py-1 bg-slate-100 border-2 border-slate-200 rounded-lg inline-block">
-                                                                    <span className="text-sm font-black text-black uppercase tracking-tighter">{event.plateDetected || "--- ---"}</span>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                {(() => {
-                                                                    const vehicle = event.user?.vehicles?.find((v: any) =>
-                                                                        v.plate.replace(/[^A-Z0-9]/gi, '') === (event.plateDetected || "").replace(/[^A-Z0-9]/gi, '')
-                                                                    );
-                                                                    return (
-                                                                        <span className="text-xs font-bold text-black/60 uppercase">
-                                                                            {vehicle ? `${vehicle.brand || ""} ${vehicle.model || ""}`.trim() || "---" : "---"}
-                                                                        </span>
-                                                                    );
-                                                                })()}
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                <span className="text-xs font-bold text-black uppercase">{event.user?.name || "No Identificado"}</span>
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                <span className="text-xs font-black text-[#B20D30] uppercase">{event.user?.unit?.name || "---"}</span>
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                <div className={cn(
-                                                                    "inline-flex px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter",
-                                                                    event.direction === "ENTRY" ? "bg-emerald-50 text-emerald-600" : "bg-orange-50 text-orange-600"
-                                                                )}>
-                                                                    {event.direction === "ENTRY" ? "Ingreso" : "Egreso"}
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                <div className="flex flex-col">
-                                                                    <span className="text-xs font-bold text-black whitespace-nowrap">
-                                                                        {new Date(event.timestamp).toLocaleDateString('es-UY', { day: '2-digit', month: '2-digit' })}
-                                                                    </span>
-                                                                    <span className="text-[10px] font-black text-black/40">
-                                                                        {new Date(event.timestamp).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' })}
-                                                                    </span>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    ))
-                                                ) : (
-                                                    <tr>
-                                                        <td colSpan={7} className="py-40">
-                                                            <div className="flex flex-col items-center gap-6 opacity-20">
-                                                                <Search size={80} />
-                                                                <p className="text-xl font-black uppercase tracking-[0.5em]">No se encontraron registros</p>
+                                                        </div>
+                                                    </div>
+                                                    <Button onClick={() => setShowLprFilterModal(false)} className="w-full h-14 rounded-2xl bg-[#B20D30] hover:bg-[#910a28] text-white font-black uppercase tracking-widest">Aplicar</Button>
+                                                </motion.div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                    <div className="space-y-4">
+                                        {isLprLoading ? (
+                                            <div className="py-32 flex flex-col items-center gap-6 opacity-20"><Loader2 className="animate-spin" size={60} /><p className="text-xl font-black uppercase tracking-[0.5em]">Cargando Eventos LPR...</p></div>
+                                        ) : lprEntries.length > 0 ? (
+                                            lprEntries.map((event) => {
+                                                const vehicle = event.user?.vehicles?.find((v: any) => v.plate?.replace(/[^A-Z0-9]/gi, '') === (event.plateDetected || "").replace(/[^A-Z0-9]/gi, ''));
+                                                return (
+                                                    <motion.button key={event.id} whileTap={{ scale: 0.98 }} onClick={() => setViewerData({ url: event.snapshotPath || "", plate: event.plateDetected, name: event.user?.name, unit: event.user?.unit?.name, direction: event.direction, confidence: event.confidence, timestamp: event.timestamp, deviceName: event.device?.name, vehicleBrand: vehicle?.brand, vehicleModel: vehicle?.model })} className="w-full bg-white rounded-[1.5rem] border border-slate-100 p-5 flex items-center gap-5 hover:shadow-lg transition-all text-left group active:bg-slate-50">
+                                                        <div className="w-16 h-16 rounded-2xl bg-slate-100 overflow-hidden relative border border-black/5 shrink-0">
+                                                            {event.snapshotPath ? (<Image src={event.snapshotPath} alt="LPR" fill className="object-cover" />) : (<div className="w-full h-full flex items-center justify-center text-slate-300"><ImageIcon size={20} /></div>)}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded-md text-sm font-black text-black uppercase tracking-tighter">{event.plateDetected || "--- ---"}</span>
+                                                                <span className={cn("px-2 py-0.5 rounded-md text-[9px] font-black uppercase", event.direction === "ENTRY" ? "bg-emerald-50 text-emerald-600" : "bg-orange-50 text-orange-600")}>{event.direction === "ENTRY" ? "Ingreso" : "Egreso"}</span>
                                                             </div>
-                                                        </td>
-                                                    </tr>
-                                                )}
-                                            </tbody>
-                                        </table>
+                                                            <p className="text-xs font-bold text-black/60 truncate">{event.user?.name || "No Identificado"} {event.user?.unit?.name ? `· ${event.user.unit.name}` : ""}</p>
+                                                            {vehicle && <p className="text-[10px] text-black/30 font-bold">{`${vehicle.brand || ""} ${vehicle.model || ""}`.trim()}</p>}
+                                                        </div>
+                                                        <div className="text-right shrink-0">
+                                                            <p className="text-xs font-bold text-black">{new Date(event.timestamp).toLocaleDateString('es-UY', { day: '2-digit', month: '2-digit' })}</p>
+                                                            <p className="text-[10px] font-black text-black/40">{new Date(event.timestamp).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' })}</p>
+                                                        </div>
+                                                        <ChevronRight size={16} className="text-black/10 group-hover:text-black/30 shrink-0" />
+                                                    </motion.button>
+                                                );
+                                            })
+                                        ) : (
+                                            <div className="py-32 flex flex-col items-center gap-6 opacity-20"><Search size={80} /><p className="text-xl font-black uppercase tracking-[0.5em]">No se encontraron registros</p></div>
+                                        )}
                                     </div>
                                 </div>
                             </motion.div>
@@ -2165,36 +2185,46 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                                 <tr className="shadow-lg" style={{ backgroundColor: customHeaderColor }}>
                                                     <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Foto</th>
                                                     <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Matrícula</th>
+                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Fecha/Hora</th>
                                                     <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Sujeto</th>
                                                     <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Destino</th>
                                                     <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Tipo</th>
-                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Fecha/Hora</th>
                                                     <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white text-right">Acciones</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-50">
                                                 {entries.map((entry) => (
-                                                    <tr key={entry.id} className="hover:bg-slate-50/50 transition-colors group">
+                                                    <tr
+                                                        key={entry.id}
+                                                        onClick={() => setSelectedEntry(entry)}
+                                                        className="group border-b border-black/5 hover:bg-slate-50 transition-all cursor-pointer"
+                                                    >
                                                         <td className="px-6 py-4">
-                                                            <div
-                                                                onClick={() => entry.photoPath && setViewerData({
-                                                                    url: entry.photoPath,
-                                                                    plate: entry.plate,
-                                                                    name: entry.name
-                                                                })}
-                                                                className="w-16 h-12 rounded-lg bg-slate-100 overflow-hidden relative border border-black transition-all duration-300 cursor-zoom-in active:scale-95"
-                                                            >
+                                                            <div className="w-16 h-12 rounded-xl bg-slate-100 overflow-hidden relative border border-black/5 group-hover:scale-105 transition-transform">
                                                                 {entry.photoPath ? (
-                                                                    <Image src={entry.photoPath} alt="Log" fill className="object-cover" />
+                                                                    <Image src={entry.photoPath} alt="Photo" fill className="object-cover" />
                                                                 ) : (
-                                                                    <div className="w-full h-full flex items-center justify-center text-slate-300">
-                                                                        <ImageIcon size={16} />
+                                                                    <div className="w-full h-full flex items-center justify-center text-black/10">
+                                                                        <ImageIcon size={24} />
                                                                     </div>
                                                                 )}
                                                             </div>
                                                         </td>
                                                         <td className="px-6 py-4">
-                                                            <span className="text-sm font-black text-black uppercase">{entry.plate || "--- ---"}</span>
+                                                            <p className="font-black text-xl uppercase tracking-tighter text-black">{entry.plate}</p>
+                                                            <p className="text-[10px] font-black uppercase text-black/20 tracking-widest mt-1">
+                                                                {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '---'}
+                                                            </p>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-xs font-bold text-black whitespace-nowrap">
+                                                                    {entry.timestamp ? new Date(entry.timestamp).toLocaleDateString() : "---"}
+                                                                </span>
+                                                                <span className="text-[10px] font-black text-black/40">
+                                                                    {entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "---"}
+                                                                </span>
+                                                            </div>
                                                         </td>
                                                         <td className="px-6 py-4">
                                                             <div className="flex flex-col">
@@ -2206,34 +2236,47 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                                             <span className="text-xs font-black text-[#B20D30] uppercase">{entry.destination || "---"}</span>
                                                         </td>
                                                         <td className="px-6 py-4">
-                                                            <div className={cn(
-                                                                "inline-flex px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter",
-                                                                entry.type === "ALERTA" ? "bg-red-600 text-white animate-pulse" :
-                                                                    entry.type === "ENTRY" ? "bg-emerald-50 text-emerald-600" : "bg-orange-50 text-orange-600"
-                                                            )}>
-                                                                {entry.type === "ALERTA" ? "Alerta" :
-                                                                    entry.type === "ENTRY" ? "Ingreso" : "Egreso"}
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="flex flex-col">
-                                                                <span className="text-xs font-bold text-black whitespace-nowrap">
-                                                                    {entry.createdAt ? new Date(entry.createdAt).toLocaleDateString('es-UY', { day: '2-digit', month: '2-digit' }) : "---"}
-                                                                </span>
-                                                                <span className="text-[10px] font-black text-black/40">
-                                                                    {entry.createdAt ? new Date(entry.createdAt).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' }) : "---"}
-                                                                </span>
-                                                            </div>
+                                                            {(() => {
+                                                                const isPanic = entry.type === "ALERTA" && entry.plate === "PÁNICO";
+                                                                const isSos = entry.type === "ALERTA" && entry.plate === "SOS";
+                                                                const isDeactivation = entry.type === "ALERTA" && (entry.plate === "NORMAL" || entry.plate === "Manual");
+
+                                                                if (isPanic) return (
+                                                                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter bg-red-600 text-white animate-pulse shadow-lg shadow-red-600/20">
+                                                                        <Siren size={10} /> Pánico
+                                                                    </div>
+                                                                );
+                                                                if (isSos) return (
+                                                                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter bg-orange-500 text-white shadow-lg shadow-orange-500/20">
+                                                                        <ShieldAlert size={10} /> S.O.S
+                                                                    </div>
+                                                                );
+                                                                if (isDeactivation) return (
+                                                                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter bg-slate-100 text-slate-500 border border-slate-200">
+                                                                        <CheckCircle2 size={10} /> Manual
+                                                                    </div>
+                                                                );
+
+                                                                return (
+                                                                    <div className={cn(
+                                                                        "inline-flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm",
+                                                                        entry.type === "ENTRY" ? "bg-blue-50 text-blue-600" : "bg-orange-50 text-orange-600"
+                                                                    )}>
+                                                                        {entry.type === "ENTRY" ? <LogIn size={10} /> : <LogOut size={10} />}
+                                                                        {entry.type === "ENTRY" ? "Ingreso Manual" : "Salida Manual"}
+                                                                    </div>
+                                                                );
+                                                            })()}
                                                         </td>
                                                         <td className="px-6 py-4 text-right">
                                                             <div className="flex items-center justify-end gap-2">
                                                                 {entry.audioPath && (
-                                                                    <button onClick={() => new Audio(entry.audioPath).play()} className="p-2 rounded-lg hover:bg-blue-50 text-black/20 hover:text-blue-500 transition-all">
-                                                                        <Volume2 size={16} />
+                                                                    <button onClick={(e) => { e.stopPropagation(); new Audio(entry.audioPath).play(); }} className="w-10 h-10 rounded-xl hover:bg-blue-50 text-black/20 hover:text-blue-500 transition-all flex items-center justify-center">
+                                                                        <Volume2 size={18} />
                                                                     </button>
                                                                 )}
-                                                                <button onClick={() => handleDelete(entry.id)} className="p-2 rounded-lg hover:bg-red-50 text-black/20 hover:text-[#B20D30] transition-all">
-                                                                    <Trash2 size={16} />
+                                                                <button onClick={(e) => { e.stopPropagation(); handleDelete(entry.id); }} className="w-10 h-10 rounded-xl hover:bg-red-50 text-black/20 hover:text-[#B20D30] transition-all flex items-center justify-center">
+                                                                    <Trash2 size={18} />
                                                                 </button>
                                                             </div>
                                                         </td>
@@ -2252,26 +2295,161 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                     </div>
                                 </div>
                             </motion.div>
-                        )}
-                    </AnimatePresence>
+                        )
+                        }
+                    </AnimatePresence >
 
-                </div>
+                </div >
+
+                {/* ENTRY DETAIL DRAWER */}
+                <AnimatePresence>
+                    {selectedEntry && (
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-sm" onClick={() => setSelectedEntry(null)}>
+                            <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", damping: 30, stiffness: 300 }} className="absolute right-0 top-0 bottom-0 w-full max-w-lg bg-white shadow-2xl overflow-y-auto" onClick={e => e.stopPropagation()}>
+                                {/* Header */}
+                                <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-xl border-b border-slate-100 p-6 flex items-center justify-between">
+                                    <div>
+                                        <h3 className="text-xl font-black uppercase tracking-tighter text-black">Detalle de Registro</h3>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-black/30 mt-1">
+                                            {selectedEntry.timestamp ? new Date(selectedEntry.timestamp).toLocaleString('es-UY') : '---'}
+                                        </p>
+                                    </div>
+                                    <motion.button whileTap={{ scale: 0.9 }} onClick={() => setSelectedEntry(null)} className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center"><X size={20} /></motion.button>
+                                </div>
+
+                                <div className="p-6 space-y-6">
+                                    {/* Photo */}
+                                    {selectedEntry.photoPath && (
+                                        <div className="w-full aspect-video rounded-2xl bg-slate-100 overflow-hidden relative border border-black/5">
+                                            <Image src={selectedEntry.photoPath} alt="Foto" fill className="object-cover" />
+                                        </div>
+                                    )}
+
+                                    <div className="flex items-center gap-3 flex-wrap">
+                                        {(() => {
+                                            const isPanic = selectedEntry.type === "ALERTA" && selectedEntry.plate === "PÁNICO";
+                                            const isSos = selectedEntry.type === "ALERTA" && selectedEntry.plate === "SOS";
+                                            const isDeactivation = selectedEntry.type === "ALERTA" && (selectedEntry.plate === "NORMAL" || selectedEntry.plate === "Manual");
+
+                                            if (isPanic) return (
+                                                <div className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-xl shadow-lg shadow-red-600/20 animate-pulse">
+                                                    <Siren size={20} />
+                                                    <span className="text-xl font-black uppercase tracking-tighter">Pánico Crítico</span>
+                                                </div>
+                                            );
+                                            if (isSos) return (
+                                                <div className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-xl shadow-lg shadow-orange-500/20">
+                                                    <ShieldAlert size={20} />
+                                                    <span className="text-xl font-black uppercase tracking-tighter">Reporte S.O.S</span>
+                                                </div>
+                                            );
+                                            if (isDeactivation) return (
+                                                <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-500 border-2 border-slate-200 rounded-xl">
+                                                    <CheckCircle2 size={20} />
+                                                    <span className="text-xl font-black uppercase tracking-tighter">Manual</span>
+                                                </div>
+                                            );
+
+                                            return (
+                                                <>
+                                                    {selectedEntry.plate && (
+                                                        <div className="px-4 py-2 bg-slate-100 border-2 border-slate-200 rounded-xl">
+                                                            <span className="text-2xl font-black text-black uppercase tracking-tighter">{selectedEntry.plate}</span>
+                                                        </div>
+                                                    )}
+                                                    <div className={cn(
+                                                        "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5",
+                                                        selectedEntry.type === "ENTRY" ? "bg-blue-600 text-white" : "bg-orange-600 text-white"
+                                                    )}>
+                                                        {selectedEntry.type === "ENTRY" ? <LogIn size={12} /> : <LogOut size={12} />}
+                                                        {selectedEntry.type === "ENTRY" ? "Ingreso Manual" : "Salida Manual"}
+                                                    </div>
+                                                </>
+                                            );
+                                        })()}
+                                    </div>
+
+                                    {/* Info Grid */}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {selectedEntry.name && (
+                                            <div className="bg-slate-50 rounded-2xl p-4">
+                                                <p className="text-[9px] font-black uppercase text-black/30 tracking-widest mb-1">Nombre</p>
+                                                <p className="text-sm font-black text-black uppercase">{selectedEntry.name}</p>
+                                            </div>
+                                        )}
+                                        {selectedEntry.dni && (
+                                            <div className="bg-slate-50 rounded-2xl p-4">
+                                                <p className="text-[9px] font-black uppercase text-black/30 tracking-widest mb-1">Documento</p>
+                                                <p className="text-sm font-black text-black uppercase">{selectedEntry.dni}</p>
+                                            </div>
+                                        )}
+                                        {selectedEntry.destination && (
+                                            <div className="bg-slate-50 rounded-2xl p-4">
+                                                <p className="text-[9px] font-black uppercase text-black/30 tracking-widest mb-1">Destino</p>
+                                                <p className="text-sm font-black text-[#B20D30] uppercase">{selectedEntry.destination}</p>
+                                            </div>
+                                        )}
+                                        {selectedEntry.company && (
+                                            <div className="bg-slate-50 rounded-2xl p-4">
+                                                <p className="text-[9px] font-black uppercase text-black/30 tracking-widest mb-1">Empresa</p>
+                                                <p className="text-sm font-black text-black uppercase">{selectedEntry.company}</p>
+                                            </div>
+                                        )}
+                                        {selectedEntry.guardName && (
+                                            <div className="bg-slate-50 rounded-2xl p-4">
+                                                <p className="text-[9px] font-black uppercase text-black/30 tracking-widest mb-1">Guardia</p>
+                                                <p className="text-sm font-black text-black uppercase">{selectedEntry.guardName}</p>
+                                            </div>
+                                        )}
+                                        {selectedEntry.origin && (
+                                            <div className="bg-slate-50 rounded-2xl p-4">
+                                                <p className="text-[9px] font-black uppercase text-black/30 tracking-widest mb-1">Origen</p>
+                                                <p className="text-sm font-black text-black uppercase">{selectedEntry.origin}</p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Notes */}
+                                    {selectedEntry.observations && (
+                                        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
+                                            <p className="text-[9px] font-black uppercase text-amber-600 tracking-widest mb-2">Observaciones</p>
+                                            <p className="text-sm text-amber-900 font-medium leading-relaxed">{selectedEntry.observations}</p>
+                                        </div>
+                                    )}
+
+                                    {/* Audio */}
+                                    {selectedEntry.audioPath && (
+                                        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5">
+                                            <p className="text-[9px] font-black uppercase text-blue-600 tracking-widest mb-3">Audio Grabado</p>
+                                            <audio controls src={selectedEntry.audioPath} className="w-full" />
+                                        </div>
+                                    )}
+
+                                    {/* Delete */}
+                                    <button onClick={() => { handleDelete(selectedEntry.id); setSelectedEntry(null); }} className="w-full py-4 rounded-2xl bg-red-50 hover:bg-red-100 text-[#B20D30] font-black uppercase text-xs tracking-widest transition-colors flex items-center justify-center gap-2">
+                                        <Trash2 size={16} /> Eliminar Registro
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 <footer className={cn(
-                    "fixed bottom-0 left-0 right-0 h-24 border-t-2 transition-all duration-500 flex items-center justify-between px-6 z-[100] shadow-[0_-20px_60px_rgba(0,0,0,0.08)]",
+                    "fixed bottom-0 left-0 right-0 h-20 md:h-24 border-t-2 transition-all duration-500 flex items-center justify-center px-4 md:px-6 z-[100] shadow-[0_-20px_60px_rgba(0,0,0,0.08)]",
                     isAlertMode ? "bg-red-600 border-white" : "bg-white/95 backdrop-blur-3xl border-white/50"
                 )}>
-                    {/* AVATAR + MENU */}
-                    <div className="relative">
+                    {/* AVATAR + MENU - absolute left */}
+                    <div className="absolute left-4 md:left-6 z-20">
                         <motion.button
                             whileTap={{ scale: 0.9 }}
                             onClick={() => { setShowProfileMenu(!showProfileMenu); playTactileSound(); }}
-                            className="w-14 h-14 rounded-full bg-slate-100 border-4 border-white shadow-xl flex items-center justify-center overflow-hidden relative z-20"
+                            className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-slate-100 border-[3px] md:border-4 border-white shadow-xl flex items-center justify-center overflow-hidden relative z-20"
                         >
                             {guardPhoto ? (
                                 <Image src={guardPhoto} alt="User" fill className="object-cover" />
                             ) : (
-                                <UserIcon className="text-slate-400" size={24} />
+                                <UserIcon className="text-slate-400" size={20} />
                             )}
                         </motion.button>
 
@@ -2298,6 +2476,11 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                             <Settings size={20} /> <span className="text-xs font-black uppercase tracking-wider">Configuración</span>
                                         </button>
                                         <div className="h-px bg-slate-100 mx-2" />
+                                        <button className="flex items-center gap-3 p-4 hover:bg-slate-50 rounded-2xl transition-colors text-black"
+                                            onClick={() => { handleOpenGuardList(); setShowProfileMenu(false); }}>
+                                            <Shield size={20} /> <span className="text-xs font-black uppercase tracking-wider">Cambiar Guardia</span>
+                                        </button>
+                                        <div className="h-px bg-slate-100 mx-2" />
                                         <button className="flex items-center gap-3 p-4 hover:bg-red-50 text-[#B20D30] rounded-2xl transition-colors"
                                             onClick={handleLogout}>
                                             <LogOut size={20} /> <span className="text-xs font-black uppercase tracking-wider">Cerrar Sesión</span>
@@ -2308,20 +2491,51 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                         </AnimatePresence>
                     </div>
 
-                    <nav className={cn(
-                        "transition-all duration-300 p-2 flex items-center gap-2 md:gap-4",
-                    )}>
-                        <BottomTab icon={customIcons.control ? <Image src={customIcons.control} width={24} height={24} className="object-contain" alt="Icon" /> : <FileText size={24} />} active={activeTab === "control"} onClick={() => handleTabChange("control")} label="Acceso" alertActive={isAlertMode} />
-                        <BottomTab icon={customIcons.history ? <Image src={customIcons.history} width={24} height={24} className="object-contain" alt="Icon" /> : <HistoryIcon size={24} />} active={activeTab === "history"} onClick={() => handleTabChange("history")} label="Historial" alertActive={isAlertMode} />
-                        <BottomTab icon={customIcons.lpr ? <Image src={customIcons.lpr} width={24} height={24} className="object-contain" alt="Icon" /> : <Car size={24} />} active={activeTab === "lpr"} onClick={() => handleTabChange("lpr")} label="LPR" alertActive={isAlertMode} />
-                        <BottomTab icon={customIcons.alerts ? <Image src={customIcons.alerts} width={24} height={24} className="object-contain" alt="Icon" /> : <Bell size={24} />} active={activeTab === "alerts"} onClick={() => handleTabChange("alerts")} label="Alertas" alertActive={isAlertMode} />
-                        <div className="w-px h-8 bg-black/5 mx-2" />
-                        <BottomTab icon={customIcons.map ? <Image src={customIcons.map} width={24} height={24} className="object-contain" alt="Icon" /> : <MapIcon size={24} />} active={activeTab === "map"} onClick={() => handleTabChange("map")} label="Mapa" alertActive={isAlertMode} />
+                    {/* CENTERED NAV */}
+                    <nav className="flex items-center gap-2 md:gap-6">
+                        <BottomTab icon={customIcons.control ? <Image src={customIcons.control} width={20} height={20} className="object-contain md:w-6 md:h-6" alt="Icon" /> : <FileText size={20} className="md:w-6 md:h-6" />} active={activeTab === "control"} onClick={() => handleTabChange("control")} label="Acceso" alertActive={isAlertMode} />
+                        <BottomTab icon={customIcons.history ? <Image src={customIcons.history} width={20} height={20} className="object-contain md:w-6 md:h-6" alt="Icon" /> : <HistoryIcon size={20} className="md:w-6 md:h-6" />} active={activeTab === "history"} onClick={() => handleTabChange("history")} label="Historial" alertActive={isAlertMode} />
+
+                        {/* CENTER PANIC / ALERTS BUTTON - hold to trigger, tap to view */}
+                        <div className="relative -mt-8 md:-mt-10 mx-2 md:mx-4">
+                            <motion.button
+                                style={{ touchAction: "none" }}
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                onClick={() => { handleTabChange("alerts"); playTactileSound(); }}
+                                onMouseDown={() => { if (!isAlertMode) startPanicHold(); }}
+                                onMouseUp={() => { if (!isAlertMode) cancelPanicHold(); }}
+                                onMouseLeave={() => { if (!isAlertMode) cancelPanicHold(); }}
+                                onTouchStart={() => { if (!isAlertMode) startPanicHold(); }}
+                                onTouchEnd={() => { if (!isAlertMode) cancelPanicHold(); }}
+                                className={cn(
+                                    "w-16 h-16 md:w-20 md:h-20 rounded-full shadow-2xl flex items-center justify-center transition-all border-4 select-none relative overflow-hidden",
+                                    activeTab === "alerts"
+                                        ? "bg-red-600 text-white border-red-700 shadow-red-600/30"
+                                        : "bg-white text-red-600 border-slate-100 hover:border-red-100"
+                                )}
+                            >
+                                <Siren size={32} className={cn("md:w-8 md:h-8 relative z-10", activeTab === "alerts" && "animate-pulse")} />
+                                {!isAlertMode && panicHoldProgress > 0 && (
+                                    <svg className="absolute inset-0 -rotate-90 w-full h-full p-1 pointer-events-none z-20">
+                                        <circle cx="50%" cy="50%" r="44%" fill="none" stroke="#B20D30" strokeWidth="4" strokeDasharray="220" strokeDashoffset={220 - (220 * panicHoldProgress) / 100} strokeLinecap="round" className="transition-all duration-75" />
+                                    </svg>
+                                )}
+                            </motion.button>
+                        </div>
+
+                        <BottomTab icon={customIcons.lpr ? <Image src={customIcons.lpr} width={20} height={20} className="object-contain md:w-6 md:h-6" alt="Icon" /> : <Car size={20} className="md:w-6 md:h-6" />} active={activeTab === "lpr"} onClick={() => handleTabChange("lpr")} label="LPR" alertActive={isAlertMode} />
+                        <BottomTab icon={customIcons.map ? <Image src={customIcons.map} width={20} height={20} className="object-contain md:w-6 md:h-6" alt="Icon" /> : <MapIcon size={20} className="md:w-6 md:h-6" />} active={activeTab === "map"} onClick={() => handleTabChange("map")} label="Mapa" alertActive={isAlertMode} />
                     </nav>
 
-                    <div className="hidden lg:flex flex-col items-end">
-                        <p className={cn("text-xl font-black tabular-nums tracking-tighter leading-none mb-1", isAlertMode ? "text-white" : "text-[#B20D30]")}>{currentTime.toLocaleTimeString('es-UY', { hour12: false, hour: '2-digit', minute: '2-digit' })}</p>
-                        <p className={cn("text-[8px] font-black uppercase tracking-widest leading-none", isAlertMode ? "text-white/60" : "text-black/40")}>{currentTime.toLocaleDateString('es-UY', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
+                    {/* CLOCK - absolute right */}
+                    <div className="absolute right-4 md:right-6 hidden lg:flex flex-col items-end">
+                        <p className={cn("text-xl font-black tabular-nums tracking-tighter leading-none mb-1", isAlertMode ? "text-white" : "text-[#B20D30]")}>
+                            {currentTime ? currentTime.toLocaleTimeString('es-UY', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                        </p>
+                        <p className={cn("text-[8px] font-black uppercase tracking-widest leading-none", isAlertMode ? "text-white/60" : "text-black/40")}>
+                            {currentTime ? currentTime.toLocaleDateString('es-UY', { weekday: 'short', day: 'numeric', month: 'short' }) : '--- -- ---'}
+                        </p>
                     </div>
                 </footer>
 
@@ -2469,8 +2683,8 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                 className="bg-white w-full max-w-lg rounded-[2rem] p-8 shadow-2xl relative overflow-hidden"
                             >
                                 <div className="text-center mb-6 relative z-10">
-                                    <h2 className="text-3xl font-black uppercase text-[#B20D30] tracking-tighter">Solicitar Apoyo</h2>
-                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Seleccione el tipo de amenaza</p>
+                                    <h2 className="text-3xl font-black uppercase text-[#B20D30] tracking-tighter">Reportar Incidente</h2>
+                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Seleccione el tipo de incidente en esta ubicación</p>
                                 </div>
 
                                 <div className="mb-6 relative z-10">
@@ -2486,11 +2700,12 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
 
                                 <div className="grid grid-cols-2 gap-4 relative z-10">
                                     <button onClick={() => {
-                                        if (socket && backupLocation) {
+                                        const finalLoc = backupLocation || myLocation;
+                                        if (socket && finalLoc) {
                                             const missionByMe = {
                                                 id: 'req-' + Date.now(),
                                                 type: 'INDIVIDUO SOSPECHOSO',
-                                                lat: backupLocation.lat, lng: backupLocation.lng,
+                                                lat: finalLoc.lat, lng: finalLoc.lng,
                                                 requesterName: guardName || "Yo",
                                                 requesterId: socket.id,
                                                 status: 'PENDING',
@@ -2500,21 +2715,22 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                             setActiveMission(missionByMe);
                                             setShowBackupModal(false);
                                             setBackupDetail(""); // Reset
-                                            showNotification("SOLICITUD ENVIADA", "Alerta enviada a todas las unidades.", "info");
+                                            showNotification("REPORTE ENVIADO", "Incidente reportado a todas las unidades.", "info");
                                         }
-                                    }} className="bg-red-50 hover:bg-red-100 border-2 border-transparent hover:border-[#B20D30]/20 py-6 rounded-2xl flex flex-col items-center gap-3 transition-all group active:scale-95">
-                                        <div className="w-16 h-16 bg-white shadow-lg rounded-full flex items-center justify-center text-[#B20D30] group-hover:scale-110 transition-transform">
+                                    }} className="bg-slate-50 hover:bg-slate-100 border-2 border-transparent hover:border-slate-300 py-6 rounded-2xl flex flex-col items-center gap-3 transition-all group active:scale-95">
+                                        <div className="w-16 h-16 bg-white shadow-lg rounded-full flex items-center justify-center text-slate-700 group-hover:scale-110 transition-transform">
                                             <UserX size={32} />
                                         </div>
-                                        <span className="text-sm font-black uppercase text-[#B20D30] leading-tight">Individuo<br />Sospechoso</span>
+                                        <span className="text-sm font-black uppercase text-slate-700 leading-tight">Individuo<br />Sospechoso</span>
                                     </button>
 
                                     <button onClick={() => {
-                                        if (socket && backupLocation) {
+                                        const finalLoc = backupLocation || myLocation;
+                                        if (socket && finalLoc) {
                                             const missionByMe = {
                                                 id: 'req-' + Date.now(),
                                                 type: 'VEHICULO SOSPECHOSO',
-                                                lat: backupLocation.lat, lng: backupLocation.lng,
+                                                lat: finalLoc.lat, lng: finalLoc.lng,
                                                 requesterName: guardName || "Yo",
                                                 requesterId: socket.id,
                                                 status: 'PENDING',
@@ -2524,13 +2740,39 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                             setActiveMission(missionByMe);
                                             setShowBackupModal(false);
                                             setBackupDetail(""); // Reset
-                                            showNotification("SOLICITUD ENVIADA", "Alerta enviada a todas las unidades.", "info");
+                                            showNotification("REPORTE ENVIADO", "Incidente reportado a todas las unidades.", "info");
                                         }
                                     }} className="bg-slate-50 hover:bg-slate-100 border-2 border-transparent hover:border-slate-300 py-6 rounded-2xl flex flex-col items-center gap-3 transition-all group active:scale-95">
                                         <div className="w-16 h-16 bg-white shadow-lg rounded-full flex items-center justify-center text-slate-700 group-hover:scale-110 transition-transform">
                                             <CarFront size={32} />
                                         </div>
                                         <span className="text-sm font-black uppercase text-slate-700 leading-tight">Vehículo<br />Sospechoso</span>
+                                    </button>
+
+                                    {/* Botón de Apoyo (Fuerza Bruta) */}
+                                    <button onClick={() => {
+                                        const finalLoc = backupLocation || myLocation;
+                                        if (socket && finalLoc) {
+                                            const missionByMe = {
+                                                id: 'req-' + Date.now(),
+                                                type: 'SOLICITUD DE APOYO',
+                                                lat: finalLoc.lat, lng: finalLoc.lng,
+                                                requesterName: guardName || "Yo",
+                                                requesterId: socket.id,
+                                                status: 'PENDING',
+                                                details: backupDetail
+                                            };
+                                            socket.emit('request_backup', missionByMe);
+                                            setActiveMission(missionByMe);
+                                            setShowBackupModal(false);
+                                            setBackupDetail(""); // Reset
+                                            showNotification("SOLICITUD ENVIADA", "Solicitud de apoyo enviada.", "error");
+                                        }
+                                    }} className="bg-red-50 hover:bg-red-100 border-2 border-transparent hover:border-red-300 py-6 rounded-2xl flex flex-col items-center gap-3 transition-all group active:scale-95 col-span-2">
+                                        <div className="w-16 h-16 bg-white shadow-lg rounded-full flex items-center justify-center text-red-600 group-hover:scale-110 transition-transform">
+                                            <ShieldAlert size={32} />
+                                        </div>
+                                        <span className="text-sm font-black uppercase text-red-600 leading-tight">Solicitar Apoyo Necesario</span>
                                     </button>
                                 </div>
 
@@ -2558,9 +2800,11 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                     </div>
 
                                     <div>
-                                        <h1 className="text-3xl font-black uppercase text-red-600 leading-none mb-2">SOLICITUD DE APOYO</h1>
+                                        <h1 className="text-3xl font-black uppercase text-red-600 leading-none mb-2">
+                                            {incomingBackup.type.includes('SOSPECHOSO') ? 'AVISO DE SOSPECHOSO' : 'SOLICITUD DE APOYO'}
+                                        </h1>
                                         <p className="text-xl font-bold text-black uppercase">{incomingBackup.type}</p>
-                                        <p className="text-sm font-bold text-gray-500 mt-2 uppercase">Solicitado por: <span className="text-black">{incomingBackup.requesterName}</span></p>
+                                        <p className="text-sm font-bold text-gray-500 mt-2 uppercase">Informado por: <span className="text-black">{incomingBackup.requesterName}</span></p>
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-4 mt-8">
@@ -2587,10 +2831,18 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                                     handleTabChange('map'); // Switch to map immediately
                                                 }
                                             }}
-                                            className="py-4 rounded-2xl bg-red-600 text-white font-black uppercase tracking-widest hover:bg-red-700 shadow-xl shadow-red-500/30"
+                                            className={cn(
+                                                "py-4 rounded-2xl bg-red-600 text-white font-black uppercase tracking-widest hover:bg-red-700 shadow-xl shadow-red-500/30",
+                                                socket && incomingBackup.requesterId === socket.id ? "hidden" : ""
+                                            )}
                                         >
                                             RESPONDER
                                         </button>
+                                        {socket && incomingBackup.requesterId === socket.id && (
+                                            <div className="col-span-2 md:col-span-1 flex items-center justify-center p-4 text-center text-black/40 font-bold uppercase text-[10px] tracking-widest bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                                                Esperando apoyo...
+                                            </div>
+                                        )}
                                     </div>
                                 </motion.div>
                             </div>
@@ -2703,13 +2955,35 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                     className="relative w-full h-full"
                                     onClick={(e) => e.stopPropagation()}
                                 >
-                                    <Image
-                                        src={viewerImage}
-                                        alt="Full view"
-                                        fill
-                                        className="object-contain"
-                                        priority
-                                    />
+                                    <div className="relative w-full h-full group/viewer">
+                                        <Image
+                                            src={viewerImage}
+                                            alt="Full view"
+                                            fill
+                                            className="object-contain cursor-zoom-in"
+                                            priority
+                                            onClick={() => setZoomImage(viewerImage)}
+                                        />
+
+                                        {/* Report Button overlay on image */}
+                                        {viewerData?.plate && viewerData.plate !== '--- ---' && (
+                                            <div className="absolute inset-0 flex items-center justify-center bg-black/10 opacity-0 group-hover/viewer:opacity-100 transition-opacity z-40">
+                                                <button
+                                                    onClick={async (e) => {
+                                                        e.stopPropagation();
+                                                        setLoadingAnalysis(true);
+                                                        const analysis = await getPlateAnalysis(viewerData.plate!);
+                                                        setPlateAnalysis(analysis);
+                                                        setLoadingAnalysis(false);
+                                                    }}
+                                                    className="bg-[#B20D30] text-white px-12 py-5 rounded-full font-black uppercase text-lg tracking-widest shadow-2xl flex items-center gap-4 active:scale-95 transition-all"
+                                                >
+                                                    {loadingAnalysis ? <Loader2 size={24} className="animate-spin" /> : <Activity size={24} />}
+                                                    REPORTE HISTÓRICO PATENTE
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
 
                                     {/* LPR Data Overlay - Only show if we have LPR data */}
                                     {viewerData && (viewerData.plate || viewerData.name || viewerData.unit) && (
@@ -2794,12 +3068,24 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                                     </div>
                                                 )}
 
+                                                {/* Vehicle Info */}
+                                                {(viewerData.vehicleBrand || viewerData.vehicleModel) && (
+                                                    <div className="bg-black/80 backdrop-blur-md px-6 py-4 rounded-2xl border border-white/20 shadow-2xl">
+                                                        <div className="flex items-center gap-3 mb-2">
+                                                            <Car size={18} className="text-purple-400" />
+                                                            <div className="text-[10px] font-black text-white/60 uppercase tracking-wider">Vehículo</div>
+                                                        </div>
+                                                        <div className="text-lg font-black text-white uppercase">{`${viewerData.vehicleBrand || ""} ${viewerData.vehicleModel || ""}`.trim()}</div>
+                                                    </div>
+                                                )}
+
                                                 {/* Device Info */}
-                                                {viewerData.deviceName && (
+                                                {(viewerData.deviceName || viewerData.device?.name) && (
                                                     <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10">
                                                         <div className="flex items-center gap-2">
                                                             <Camera size={14} className="text-white/40" />
-                                                            <span className="text-[10px] font-bold text-white/60 uppercase tracking-wider">{viewerData.deviceName}</span>
+                                                            <span className="text-[10px] font-black text-white/40 uppercase tracking-widest mr-1">Cámara:</span>
+                                                            <span className="text-[10px] font-bold text-white uppercase tracking-wider">{viewerData.deviceName || viewerData.device?.name}</span>
                                                         </div>
                                                     </div>
                                                 )}
@@ -2949,6 +3235,92 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                     }
                 </AnimatePresence >
 
+                {/* GUARD LIST MODAL */}
+                <AnimatePresence>
+                    {showGuardList && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[3000] bg-black/80 backdrop-blur-xl flex items-center justify-center p-6"
+                            onClick={() => setShowGuardList(false)}
+                        >
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.9 }}
+                                className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full p-8 overflow-hidden flex flex-col max-h-[90vh]"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div className="flex items-center justify-between mb-8">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-16 h-16 rounded-2xl bg-[#B20D30] text-white flex items-center justify-center shadow-lg shadow-red-900/20">
+                                            <Shield size={32} />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-3xl font-black uppercase tracking-tighter text-black">Guardias Disponibles</h2>
+                                            <p className="text-sm text-black/40 font-bold uppercase tracking-widest">Seleccione usuario para operar esta tablet</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setShowGuardList(false)} className="w-12 h-12 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors">
+                                        <X size={24} className="text-black/60" />
+                                    </button>
+                                </div>
+
+                                {loadingGuards ? (
+                                    <div className="flex-1 flex items-center justify-center py-20">
+                                        <Loader2 size={48} className="text-black/20 animate-spin" />
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 overflow-y-auto p-2">
+                                        {guardsList.map((guard) => (
+                                            <button
+                                                key={guard.id}
+                                                onClick={() => {
+                                                    const pinCheck = prompt(`Ingrese PIN de seguridad para ${guard.name}:`);
+                                                    if (pinCheck && pinCheck === guard.password) {
+                                                        localStorage.setItem("guard_name", guard.name);
+                                                        setGuardName(guard.name);
+                                                        setGuardPhoto(guard.cara); // Assuming 'cara' is the photo URL
+                                                        if (guard.cara) localStorage.setItem("guard_photo", guard.cara);
+                                                        setShowGuardList(false);
+                                                        toast.success(`Sesión iniciada como ${guard.name}`);
+                                                        window.location.reload(); // Refresh to ensure full state reset
+                                                    } else if (pinCheck) {
+                                                        toast.error("PIN Incorrecto");
+                                                    }
+                                                }}
+                                                className="bg-slate-50 hover:bg-slate-100 border-2 border-slate-100 hover:border-[#B20D30]/20 rounded-3xl p-6 flex flex-col items-center gap-4 transition-all group"
+                                            >
+                                                <div className="relative w-24 h-24 rounded-full overflow-hidden bg-slate-200 shadow-inner">
+                                                    {guard.cara ? (
+                                                        <Image src={`/api/files/${guard.cara}`} alt={guard.name} fill className="object-cover" />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center text-slate-400">
+                                                            <UserIcon size={40} />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="text-center">
+                                                    <p className="text-lg font-black uppercase text-black group-hover:text-[#B20D30] transition-colors line-clamp-1">{guard.name}</p>
+                                                    <p className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">{guard.role}</p>
+                                                </div>
+                                            </button>
+                                        ))}
+                                        {guardsList.length === 0 && (
+                                            <div className="col-span-full text-center py-10 text-slate-400 font-bold uppercase text-sm">
+                                                No se encontraron guardias registrados
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+
+
                 {/* Settings Modal */}
                 <AnimatePresence>
                     {showSettingsModal && (
@@ -2974,6 +3346,24 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                         <h2 className="text-2xl font-black uppercase tracking-tight text-black">Configuración</h2>
                                         <p className="text-sm text-black/60 font-bold">Personalización de la interfaz</p>
                                     </div>
+                                </div>
+
+                                <div className="mb-8 p-6 bg-slate-50 rounded-2xl border border-slate-200">
+                                    <h3 className="text-sm font-black uppercase tracking-wider text-black mb-4">Permisos y Diagnóstico</h3>
+                                    <button
+                                        onClick={() => {
+                                            if ("Notification" in window) Notification.requestPermission();
+                                            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                                                .then(stream => {
+                                                    stream.getTracks().forEach(t => t.stop());
+                                                    toast.success("Permisos solicitados correctamente");
+                                                })
+                                                .catch(() => toast.error("Permisos denegados o error de hardware"));
+                                        }}
+                                        className="w-full py-4 bg-white border-2 border-black/10 rounded-xl text-xs font-bold uppercase tracking-widest text-black hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <RefreshCcw size={16} /> Reiniciar Solicitud de Permisos
+                                    </button>
                                 </div>
 
                                 <div className="space-y-6">
@@ -3038,43 +3428,7 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                         </div>
                                     </div>
 
-                                    <div className="space-y-4 pt-4 border-t border-slate-100">
-                                        <Label className="text-xs font-black uppercase tracking-wider text-black">Iconos de la Aplicación</Label>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            {[
-                                                { key: "control", label: "Control de Acceso (Home)" },
-                                                { key: "history", label: "Bitácora (Historial)" },
-                                                { key: "lpr", label: "LPR (Cámaras)" },
-                                                { key: "alerts", label: "Alertas y Pánico" },
-                                                { key: "map", label: "Mapa de Seguridad" },
-                                            ].map((tab) => (
-                                                <div key={tab.key} className="space-y-1 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <Label className="text-[10px] font-black uppercase tracking-wider text-black/60">{tab.label}</Label>
-                                                        {customIcons[tab.key] && (
-                                                            <div className="w-6 h-6 relative">
-                                                                <Image src={customIcons[tab.key]} alt="Icon" fill className="object-contain" />
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    <Input
-                                                        type="file"
-                                                        accept="image/*"
-                                                        onChange={async (e) => {
-                                                            const file = e.target.files?.[0];
-                                                            if (file) {
-                                                                const formData = new FormData();
-                                                                formData.append("file", file);
-                                                                const res = await uploadBrandingFile(formData);
-                                                                if (res.success) setCustomIcons({ ...customIcons, [tab.key]: res.url! });
-                                                            }
-                                                        }}
-                                                        className="h-10 text-[10px] rounded-lg border-2 border-slate-200 bg-white"
-                                                    />
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
+
                                 </div>
 
                                 <div className="flex gap-4 mt-10">
@@ -3141,6 +3495,132 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                         />
                     )
                 }
+                {/* FULLSCREEN IMAGE ZOOM MODAL */}
+                <AnimatePresence>
+                    {zoomImage && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[3000] bg-black flex items-center justify-center p-8"
+                            onClick={() => setZoomImage(null)}
+                        >
+                            <motion.div
+                                initial={{ scale: 0.9, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.9, opacity: 0 }}
+                                className="relative w-full h-full max-w-7xl max-h-[90vh]"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <Image
+                                    src={zoomImage}
+                                    alt="Zoom"
+                                    fill
+                                    className="object-contain"
+                                    quality={100}
+                                    unoptimized
+                                />
+                                <button
+                                    onClick={() => setZoomImage(null)}
+                                    className="absolute -top-12 right-0 w-12 h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white"
+                                >
+                                    <X size={24} />
+                                </button>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* PLATE REPORT MODAL */}
+                <AnimatePresence>
+                    {plateAnalysis && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[3000] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6"
+                            onClick={() => setPlateAnalysis(null)}
+                        >
+                            <motion.div
+                                initial={{ scale: 0.9, y: 20 }}
+                                animate={{ scale: 1, y: 0 }}
+                                exit={{ scale: 0.9, y: 20 }}
+                                className="w-full max-w-4xl bg-white rounded-[3rem] p-12 space-y-10 shadow-2xl relative overflow-hidden"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div className="absolute top-0 left-0 w-full h-40 bg-gradient-to-b from-[#B20D30]/5 to-transparent pointer-events-none" />
+
+                                <div className="flex justify-between items-start relative">
+                                    <div className="space-y-2">
+                                        <h3 className="text-5xl font-black tracking-tighter text-slate-900 leading-none uppercase">Reporte de Inteligencia</h3>
+                                        <p className="text-xs font-black text-slate-400 uppercase tracking-[0.4em]">Historial Cronológico de Accesos LPR</p>
+                                    </div>
+                                    <div className="bg-[#B20D30] px-10 py-5 rounded-[2rem] shadow-2xl shadow-[#B20D30]/30 border-4 border-white/20">
+                                        <span className="text-white font-black text-4xl tracking-widest">{viewerData?.plate}</span>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-8">
+                                    <div className="bg-slate-50 p-8 rounded-[2.5rem] border-2 border-slate-100 flex flex-col justify-center">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Pasadas Semanales</p>
+                                        <p className="text-5xl font-black text-[#B20D30]">{plateAnalysis.totalEvents}</p>
+                                    </div>
+                                    <div className="bg-slate-50 p-8 rounded-[2.5rem] border-2 border-slate-100 col-span-2">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Última Actividad</p>
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-14 h-14 rounded-2xl bg-white shadow-sm flex items-center justify-center text-[#B20D30]">
+                                                <Clock size={28} />
+                                            </div>
+                                            <div>
+                                                <p className="text-xl font-black text-slate-900">{plateAnalysis.lastVisit ? new Date(plateAnalysis.lastVisit).toLocaleString('es-UY') : "Ninguna"}</p>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase">Tiempo transcurrido registrado</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-6">
+                                    <div className="flex items-center justify-between ml-4">
+                                        <h4 className="text-xs font-black text-slate-900 uppercase tracking-[0.5em]">Línea de Tiempo de Accesos</h4>
+                                        <div className="h-0.5 flex-1 bg-slate-100 mx-8" />
+                                    </div>
+
+                                    <div className="space-y-4 max-h-[35vh] overflow-y-auto px-4 custom-scrollbar">
+                                        {plateAnalysis.events.map((ev: any) => (
+                                            <div key={ev.id} className="flex items-center justify-between p-6 rounded-3xl bg-white border-2 border-slate-50 hover:border-[#B20D30]/20 hover:shadow-xl transition-all duration-300 group">
+                                                <div className="flex items-center gap-8">
+                                                    <div className={cn(
+                                                        "w-16 h-16 rounded-[1.25rem] flex items-center justify-center shadow-inner transition-colors",
+                                                        ev.direction === 'ENTRY' ? "bg-emerald-100 text-emerald-600 group-hover:bg-emerald-500 group-hover:text-white" : "bg-orange-100 text-orange-600 group-hover:bg-orange-500 group-hover:text-white"
+                                                    )}>
+                                                        {ev.direction === 'ENTRY' ? <LogIn size={24} /> : <LogOut size={24} />}
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <p className="text-lg font-black text-slate-900 uppercase tracking-tight">{ev.direction === 'ENTRY' ? 'Ingreso Autorizado' : 'Egreso Autorizado'}</p>
+                                                        <p className="text-xs font-bold text-slate-400">{new Date(ev.timestamp).toLocaleString('es-UY')}</p>
+                                                    </div>
+                                                </div>
+                                                <div className={cn(
+                                                    "px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest border-2",
+                                                    ev.decision === 'GRANT' ? "border-emerald-100 text-emerald-600 bg-emerald-50/30" : "border-red-100 text-red-600 bg-red-50/30"
+                                                )}>
+                                                    {ev.decision === 'GRANT' ? 'Paso Concedido' : 'Paso Denegado'}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={() => setPlateAnalysis(null)}
+                                    className="w-full h-20 bg-slate-900 hover:bg-black text-white rounded-[2rem] font-black uppercase tracking-[0.3em] text-sm active:scale-95 transition-all shadow-2xl flex items-center justify-center gap-4 border-2 border-white/10"
+                                >
+                                    SALIR DEL REPORTE
+                                </button>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </main >
 
             <style jsx global>{`
@@ -3149,7 +3629,135 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.05); border-radius: 10px; }
                 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.1); }
             `}</style>
+            {/* FULLSCREEN IMAGE ZOOM MODAL */}
+            <AnimatePresence>
+                {zoomImage && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[1000] bg-black flex items-center justify-center p-8"
+                        onClick={() => setZoomImage(null)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="relative w-full h-full max-w-7xl max-h-[90vh]"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <Image
+                                src={zoomImage}
+                                alt="Zoom"
+                                fill
+                                className="object-contain"
+                                quality={100}
+                                unoptimized
+                            />
+                            <button
+                                onClick={() => setZoomImage(null)}
+                                className="absolute -top-12 right-0 w-12 h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white"
+                            >
+                                <X size={24} />
+                            </button>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* PLATE REPORT MODAL */}
+            <AnimatePresence>
+                {plateAnalysis && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[1000] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6"
+                        onClick={() => setPlateAnalysis(null)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.9, y: 20 }}
+                            className="w-full max-w-2xl bg-white rounded-[3rem] p-10 space-y-8 shadow-2xl relative overflow-hidden"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-[#B20D30]/5 to-transparent pointer-events-none" />
+
+                            <div className="flex justify-between items-start relative">
+                                <div className="space-y-2">
+                                    <h3 className="text-4xl font-black tracking-tighter text-slate-900 leading-none">REPORTE DE ACCESOS</h3>
+                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em]">ANÁLISIS DE COMPORTAMIENTO LPR</p>
+                                </div>
+                                <div className="bg-[#B20D30] px-8 py-4 rounded-2xl shadow-xl shadow-[#B20D30]/20">
+                                    <span className="text-white font-black text-3xl tracking-[0.2em]">{plateAnalysis.events[0]?.plateDetected || (viewerData as any).plate}</span>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-6">
+                                <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Última Visita Registrada</p>
+                                    <p className="text-lg font-black text-slate-900">{plateAnalysis.lastVisit ? new Date(plateAnalysis.lastVisit).toLocaleString('es-UY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : "No hay registros previos"}</p>
+                                </div>
+                                <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 flex items-center justify-between">
+                                    <div>
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Frecuencia Semanal</p>
+                                        <p className="text-4xl font-black text-[#B20D30]">{plateAnalysis.totalEvents}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-[10px] font-black text-slate-900 uppercase">Pasadas</div>
+                                        <div className="text-[9px] font-bold text-slate-400">Últimos 7 días</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                <h4 className="text-xs font-black text-slate-900 uppercase tracking-[0.4em] ml-4">Cronología de Eventos</h4>
+                                <div className="space-y-3 max-h-[30vh] overflow-y-auto px-2 custom-scrollbar">
+                                    {plateAnalysis.events.map((ev: any, i: number) => (
+                                        <div key={ev.id} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:bg-white hover:shadow-md transition-all">
+                                            <div className="flex items-center gap-6">
+                                                <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center shadow-sm", ev.direction === 'ENTRY' ? "bg-emerald-100 text-emerald-600" : "bg-orange-100 text-orange-600")}>
+                                                    {ev.direction === 'ENTRY' ? <LogIn size={20} /> : <LogOut size={20} />}
+                                                </div>
+                                                <div className="leading-tight">
+                                                    <p className="text-sm font-black text-slate-900 uppercase tracking-tight">{ev.direction === 'ENTRY' ? 'Ingreso detectado' : 'Salida detectada'}</p>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase">{new Date(ev.timestamp).toLocaleString('es-UY')}</p>
+                                                </div>
+                                            </div>
+                                            <div className={cn("px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest", ev.decision === 'GRANT' ? "bg-emerald-500 text-white" : "bg-red-500 text-white")}>
+                                                {ev.decision === 'GRANT' ? 'Autorizado' : 'Denegado'}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={() => setPlateAnalysis(null)}
+                                className="w-full h-16 bg-slate-900 text-white rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-sm active:scale-95 transition-all shadow-xl"
+                            >
+                                Finalizar Consulta
+                            </button>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div >
+    );
+}
+
+function DetailCard({ label, value, icon }: any) {
+    return (
+        <div className="flex items-center gap-6 p-6 bg-slate-50 rounded-[1.5rem] border border-slate-100 group hover:bg-white hover:shadow-xl transition-all duration-300">
+            <div className="w-14 h-14 rounded-2xl bg-white shadow-sm flex items-center justify-center text-slate-400 group-hover:bg-[#B20D30] group-hover:text-white transition-colors duration-500">
+                {icon && React.isValidElement(icon) ? React.cloneElement(icon as any, { size: 24 }) : icon}
+            </div>
+            <div>
+                <p className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1">{label}</p>
+                <p className="text-xl font-black uppercase text-slate-900 tracking-tight">{value || "Sin especificar"}</p>
+            </div>
+        </div>
     );
 }
 
@@ -3171,8 +3779,8 @@ function BottomTab({ icon, active, onClick, label, small, alertActive }: any) {
                 onClick();
             }}
             className={cn(
-                small ? "w-24 h-16" : "w-20 md:w-28 h-18",
-                "rounded-[1.25rem] flex flex-col items-center justify-center gap-1.5 transition-all relative overflow-hidden",
+                small ? "w-20 h-14 md:w-24 md:h-16" : "w-16 h-16 md:w-28 md:h-18",
+                "rounded-[1rem] md:rounded-[1.25rem] flex flex-col items-center justify-center gap-1 md:gap-1.5 transition-all relative overflow-hidden",
                 active
                     ? (alertActive ? "text-red-700 bg-white" : "text-[#B20D30]")
                     : (alertActive ? "text-red-300" : "text-black/40 hover:text-black hover:bg-white/60")
@@ -3182,7 +3790,7 @@ function BottomTab({ icon, active, onClick, label, small, alertActive }: any) {
                 {icon}
             </div>
             <span className={cn(
-                small ? "text-[8px]" : "text-[9px]",
+                small ? "text-[7px] md:text-[8px]" : "text-[8px] md:text-[9px]",
                 "font-black uppercase tracking-widest relative z-10 transition-all duration-300",
                 active ? "opacity-100 translate-y-0" : "opacity-60 translate-y-1"
             )}>
@@ -3285,15 +3893,17 @@ function AudioRecordingButton({ isRecording, audioUrl, onStart, onStop, onClear 
 
 function AppField({ label, icon, value, onChange, placeholder }: any) {
     return (
-        <div className="space-y-4">
-            <Label className="text-xs font-black uppercase text-black tracking-[0.3em] flex items-center gap-3 ml-2">
-                <div className="p-2.5 rounded-xl bg-black text-white shadow-md">{icon}</div> {label}
+        <div className="space-y-2 md:space-y-4">
+            <Label className="text-[10px] md:text-xs font-black uppercase text-black tracking-[0.2em] md:tracking-[0.3em] flex items-center gap-2 md:gap-3 ml-1 md:ml-2">
+                <div className="p-2 md:p-2.5 rounded-lg md:rounded-xl bg-black text-white shadow-md flex items-center justify-center">
+                    {icon && React.isValidElement(icon) ? React.cloneElement(icon as any, { size: 12, className: "md:w-3.5 md:h-3.5" }) : icon}
+                </div> {label}
             </Label>
             <Input
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 placeholder={placeholder}
-                className="h-20 bg-white border border-black/20 focus:ring-4 focus:ring-[#B20D30]/20 rounded-2xl text-black font-black text-lg tracking-wide px-10 placeholder:text-black/20 transition-all shadow-sm"
+                className="h-14 md:h-20 bg-white border border-black/20 focus:ring-4 focus:ring-[#B20D30]/20 rounded-xl md:rounded-2xl text-black font-black text-sm md:text-lg tracking-wide px-6 md:px-10 placeholder:text-black/20 transition-all shadow-sm"
             />
         </div>
     );
@@ -3330,7 +3940,10 @@ function HistoryItem({ entry, onDelete }: any) {
                         {entry.audioPath && (
                             <button onClick={() => {
                                 const audio = new Audio(entry.audioPath);
-                                audio.play();
+                                audio.play().catch(err => {
+                                    console.error("Audio playback error:", err);
+                                    toast.error("Error al reproducir audio. El formato podría no ser compatible.");
+                                });
                             }} className="w-10 h-10 rounded-xl bg-slate-50 text-black/40 hover:text-blue-500 hover:bg-blue-50 transition-all flex items-center justify-center">
                                 <Volume2 size={18} />
                             </button>
@@ -3370,7 +3983,7 @@ function AudioRecordingFloatingButton({ isRecording, audioUrl, onStart, onStop, 
                     whileTap={{ scale: 0.95 }}
                     onClick={isRecording ? onStop : onStart}
                     className={cn(
-                        "w-16 h-16 rounded-[1.8rem] flex items-center justify-center transition-all",
+                        "w-12 h-12 md:w-16 md:h-16 rounded-[1.2rem] md:rounded-[1.8rem] flex items-center justify-center transition-all",
                         isRecording ? "bg-red-600 text-white hover:bg-red-700" : "bg-slate-800 text-white hover:bg-slate-700"
                     )}
                 >
@@ -3379,12 +3992,12 @@ function AudioRecordingFloatingButton({ isRecording, audioUrl, onStart, onStop, 
                             <motion.div
                                 animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0, 0.3] }}
                                 transition={{ repeat: Infinity, duration: 1 }}
-                                className="absolute inset-0 bg-white rounded-[1.8rem]"
+                                className="absolute inset-0 bg-white rounded-[1.2rem] md:rounded-[1.8rem]"
                             />
-                            <Square size={22} className="relative z-10 fill-white" />
+                            <Square size={20} className="relative z-10 fill-white md:w-5 md:h-5" />
                         </>
                     ) : (
-                        <Mic size={22} />
+                        <Mic size={20} className="md:w-5 md:h-5" />
                     )}
                 </motion.button>
             ) : (
@@ -3392,9 +4005,9 @@ function AudioRecordingFloatingButton({ isRecording, audioUrl, onStart, onStop, 
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={onClear}
-                    className="w-16 h-16 rounded-[1.8rem] flex items-center justify-center transition-all bg-emerald-600 text-white hover:bg-emerald-700"
+                    className="w-12 h-12 md:w-16 md:h-16 rounded-[1.2rem] md:rounded-[1.8rem] flex items-center justify-center transition-all bg-emerald-600 text-white hover:bg-emerald-700"
                 >
-                    <Volume2 size={22} />
+                    <Volume2 size={20} className="md:w-5 md:h-5" />
                 </motion.button>
             )}
         </>
@@ -3404,11 +4017,11 @@ function AudioRecordingFloatingButton({ isRecording, audioUrl, onStart, onStop, 
 function RollingCharacter({ char, isFocused }: { char: string, isFocused: boolean }) {
     return (
         <div className={cn(
-            "w-10 h-16 sm:w-12 sm:h-20 md:w-20 md:h-28 bg-white rounded-2xl flex items-center justify-center border-4 transition-all duration-300",
+            "w-9 h-14 sm:w-12 sm:h-20 md:w-20 md:h-28 bg-white rounded-xl md:rounded-2xl flex items-center justify-center border-[3px] md:border-4 transition-all duration-300",
             isFocused ? "border-[#B20D30] bg-[#B20D30]/5 shadow-[0_10px_30px_rgba(178,13,48,0.15)] scale-110 z-10" : "border-black text-black"
         )}>
             <span className={cn(
-                "text-3xl sm:text-4xl md:text-6xl font-black tracking-tighter",
+                "text-xl sm:text-4xl md:text-6xl font-black tracking-tighter",
                 isFocused ? "text-[#B20D30]" : "text-black",
                 char === " " && "opacity-10"
             )}>
@@ -3418,7 +4031,7 @@ function RollingCharacter({ char, isFocused }: { char: string, isFocused: boolea
     );
 }
 
-function TactilePlateInput({ value, onChange }: { value: string, onChange: (v: string) => void }) {
+function TactilePlateInput({ value, onChange, onCameraClick }: { value: string, onChange: (v: string) => void, onCameraClick?: () => void }) {
     const chars = value.padEnd(7, " ").substring(0, 7).split("");
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -3458,6 +4071,20 @@ function TactilePlateInput({ value, onChange }: { value: string, onChange: (v: s
                         isFocused={value.length === i && value.length < 7}
                     />
                 ))}
+
+                {onCameraClick && (
+                    <motion.button
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onCameraClick();
+                        }}
+                        className="ml-4 sm:ml-6 md:ml-10 w-12 h-14 sm:w-16 sm:h-20 md:w-24 md:h-28 rounded-xl md:rounded-2xl bg-[#B20D30] text-white flex items-center justify-center shadow-lg hover:bg-[#910a28] transition-all border-none"
+                    >
+                        <Camera size={24} className="md:w-8 md:h-8" />
+                    </motion.button>
+                )}
             </div>
 
             <motion.div

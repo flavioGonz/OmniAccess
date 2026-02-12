@@ -75,6 +75,8 @@ function TimeAgo({ timestamp }: { timestamp: string | Date }) {
     return <span>{label}</span>;
 }
 
+import { getSocketUrl } from "@/lib/socket-config";
+
 export default function AccessDashboard() {
     const [events, setEvents] = useState<FullAccessEvent[]>([]);
     const [socket, setSocket] = useState<Socket | null>(null);
@@ -117,11 +119,7 @@ export default function AccessDashboard() {
     useEffect(() => {
         loadInitialData();
 
-        const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
-        const isStandardPort = window.location.port === '' || window.location.port === '80' || window.location.port === '443';
-        const socketUrl = isStandardPort
-            ? `${protocol}://${window.location.hostname}`
-            : `${protocol}://${window.location.hostname}:10000`;
+        const socketUrl = getSocketUrl();
         console.log("🔌 Connecting to socket:", socketUrl);
 
         const newSocket = io(socketUrl, {

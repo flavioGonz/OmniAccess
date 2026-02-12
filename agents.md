@@ -39,6 +39,7 @@ OmniAccess utiliza **Prisma ORM** con **PostgreSQL**. A continuación se detalla
 | **`Vehicle`** | `plate`, `brand`, `model`, `color`, `userId` | Vehículos vinculados a usuarios específicos. |
 | **`ParkingSlot`** | `id`, `label`, `unitId`, `x, y, width, height` | Mapeo de cocheras con coordenadas para visualización en plano. |
 | **`TopologyNode`** | `id`, `x, y` | Coordenadas de los nodos en el mapa de flujo dinámico. |
+| **`Bitacora`** | `id`, `type`, `name`, `dni`, `plate`, `photoPath` | Registro manual de guardia. Incluye fotos, notas y asociación a eventos de acceso. |
 
 ### 🛠️ Hardware y Eventos
 | Tabla | Campos Clave | Descripción |
@@ -63,6 +64,8 @@ OmniAccess utiliza **Prisma ORM** con **PostgreSQL**. A continuación se detalla
 | Endpoint | Método | Descripción |
 | :--- | :--- | :--- |
 | `/api/events` | **GET** | Obtiene historial de eventos de acceso. |
+| `/api/calendar/stats` | **GET** | Estadísticas mensuales de accesos (aprobados/denegados). |
+| `/api/bitacora` | **GET/POST** | Gestión del registro manual de guardia con fotos. |
 | `/api/system-status` | **GET** | Chequeo de salud del sistema (DB, S3, WAHA). |
 | `/api/files/[...key]` | **GET** | Proxy para servir archivos protegidos de S3/MinIO. |
 | `/api/users/[id]/face` | **POST** | Sube y actualiza foto facial de un usuario. |

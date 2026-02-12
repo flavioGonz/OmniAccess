@@ -1,22 +1,18 @@
 import { prisma } from "@/lib/prisma";
-import GuardConsole from "./GuardConsole";
+import GuardIphoneConsole from "@/components/GuardIphoneConsole";
 import { getGuardsList } from "../actions/users";
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-export default async function GuardPage() {
-    const headersList = await headers();
-    const userAgent = headersList.get('user-agent') || '';
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(userAgent);
+export const metadata = {
+    manifest: "/manifest-iphone.json"
+};
 
-    if (isMobile) {
-        redirect('/guard-iphone');
-    }
+import { PushNotificationManager } from "@/components/PushNotificationManager";
 
+export default async function GuardIphonePage() {
     const initialEntries = await prisma.bitacora.findMany({
-        take: 500,
+        take: 50,
         orderBy: { timestamp: "desc" },
         include: {
             accessEvent: true
@@ -44,13 +40,16 @@ export default async function GuardPage() {
     });
 
     return (
-        <GuardConsole
-            initialEntries={initialEntries}
-            logo={logoSetting?.value || globalLogoSetting?.value || "/logo-transparent.png"}
-            headerColor={headerColorSetting?.value || "#000000"}
-            initialIcons={iconsSetting?.value ? JSON.parse(iconsSetting.value) : {}}
-            units={units}
-            guards={guards}
-        />
+        <>
+            <PushNotificationManager />
+            <GuardIphoneConsole
+                initialEntries={initialEntries}
+                logo={logoSetting?.value || globalLogoSetting?.value || "/logo-transparent.png"}
+                headerColor={headerColorSetting?.value || "#000000"}
+                initialIcons={iconsSetting?.value ? JSON.parse(iconsSetting.value) : {}}
+                units={units}
+                guards={guards}
+            />
+        </>
     );
 }

@@ -11,12 +11,13 @@ const outfit = Outfit({
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: "SecureAccess - Control de Acceso",
+  title: "Omniacces",
   description: "Sistema de control de acceso LPR y Facial",
   icons: {
-    icon: "/favicon.png",
-    apple: "/icon-192.png",
+    icon: "/iconos/sildan-pwa.png",
+    apple: "/iconos/sildan-pwa.png",
   },
+  manifest: "/manifest.json",
 };
 
 import { ThemeProvider } from "@/components/theme-provider";
@@ -35,7 +36,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-        <link rel="manifest" href="/manifest.json" />
+
       </head>
       <body
         className={`${outfit.variable} antialiased font-sans`}

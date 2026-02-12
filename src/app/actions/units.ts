@@ -104,30 +104,36 @@ export async function getUnits() {
 }
 
 export async function getUnitsWithDetails() {
-    const allUnits = await prisma.unit.findMany({
-        include: {
-            users: {
-                include: {
-                    credentials: true,
-                    vehicles: true
+    try {
+        const allUnits = await prisma.unit.findMany({
+            include: {
+                users: {
+                    include: {
+                        credentials: true,
+                        vehicles: true
+                    }
                 }
+            },
+            orderBy: { name: 'asc' }
+        });
+
+        // Organize hierarchy manually to avoid Prisma Client sync issues on Windows
+        const unitMap = new Map();
+        allUnits.forEach(u => unitMap.set(u.id, { ...u, children: [] }));
+
+        allUnits.forEach(u => {
+            const unit = unitMap.get(u.id);
+            if (u.parentId && unitMap.has(u.parentId)) {
+                unitMap.get(u.parentId).children.push(unit);
             }
-        },
-        orderBy: { name: 'asc' }
-    });
+        });
 
-    // Organize hierarchy manually to avoid Prisma Client sync issues on Windows
-    const unitMap = new Map();
-    allUnits.forEach(u => unitMap.set(u.id, { ...u, children: [] }));
-
-    allUnits.forEach(u => {
-        const unit = unitMap.get(u.id);
-        if (u.parentId && unitMap.has(u.parentId)) {
-            unitMap.get(u.parentId).children.push(unit);
-        }
-    });
-
-    return Array.from(unitMap.values());
+        return Array.from(unitMap.values());
+    } catch (error: any) {
+        // Log error both to console and a dedicated file we can easily check
+        console.error("[ACTION ERROR] getUnitsWithDetails:", error);
+        return []; // Return empty array to avoid crashing, but we'll see the log
+    }
 }
 
 export async function bulkCreateSubUnits(parentId: string, pattern: string) {

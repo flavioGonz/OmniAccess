@@ -88,6 +88,8 @@ const BRAND_CONFIG: Record<string, { label: string, color: string, bg: string, l
 };
 
 
+import { getSocketUrl, getApiUrl } from "@/lib/socket-config";
+
 export default function DevicesPage() {
     const router = useRouter();
     const pathname = usePathname();
@@ -121,7 +123,8 @@ export default function DevicesPage() {
         loadData();
 
         // Socket Connection for Real-time Status
-        const socket = io(`http://${window.location.hostname}:10000`);
+        const socketUrl = getSocketUrl();
+        const socket = io(socketUrl);
 
         socket.on("device_status", (data) => {
             setDevices(prev => prev.map(d => {
@@ -728,7 +731,7 @@ export default function DevicesPage() {
                         <div className="aspect-video bg-black flex items-center justify-center relative group">
                             <img
                                 key={viewingLive.id}
-                                src={`http://${window.location.hostname}:10000/api/live/${viewingLive.id}`}
+                                src={`${getApiUrl()}/api/live/${viewingLive.id}`}
                                 alt="Live View"
                                 className="max-w-full max-h-full object-contain"
                             />

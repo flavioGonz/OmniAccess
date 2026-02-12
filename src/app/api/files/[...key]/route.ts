@@ -13,12 +13,16 @@ export async function GET(
         const s3Client = await getS3Client();
         const keyParts = params.key;
 
+        console.log(`[S3 Proxy] Request: ${keyParts ? keyParts.join('/') : 'NO_KEY'}`);
+
         if (!keyParts || keyParts.length < 2) {
             return new NextResponse("Invalid file path", { status: 400 });
         }
 
         const bucketName = keyParts[0];
         const fileKey = keyParts.slice(1).join("/");
+
+        console.log(`[S3 Proxy] Attempting to fetch: ${fileKey} from bucket: ${bucketName}`);
 
         const command = new GetObjectCommand({
             Bucket: bucketName || BUCKET_NAME,
@@ -31,11 +35,16 @@ export async function GET(
             return new NextResponse("File not found", { status: 404 });
         }
 
-        const byteArray = await (response.Body as any).transformToByteArray();
+        const byteArray = await new Promise<Buffer>((resolve, reject) => {
+            const chunks: any[] = [];
+            (response.Body as any).on('data', (chunk: any) => chunks.push(chunk));
+            (response.Body as any).on('error', reject);
+            (response.Body as any).on('end', () => resolve(Buffer.concat(chunks)));
+        });
 
         console.log(`[S3 Proxy] Serving ${fileKey} from ${bucketName} (${byteArray.length} bytes)`);
 
-        return new Response(byteArray, {
+        return new Response(byteArray as any, {
             status: 200,
             headers: {
                 "Content-Type": response.ContentType || "image/jpeg",

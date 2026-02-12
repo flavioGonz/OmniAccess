@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { UserRole } from "@prisma/client";
 import { addDevicePlate } from "./devices";
+import fs from "fs/promises";
+import path from "path";
+import { uploadToS3 } from "@/lib/s3";
 
 export async function getUsers(options?: { take?: number, skip?: number }) {
     const users = await prisma.user.findMany({
@@ -29,6 +32,231 @@ export async function getUsers(options?: { take?: number, skip?: number }) {
 
 export async function getUsersCount() {
     return await prisma.user.count();
+}
+
+export async function getGuardsList() {
+    const guards = await prisma.user.findMany({
+        where: {
+            role: { in: ['STAFF', 'ADMIN'] }
+        },
+        include: {
+            credentials: true
+        },
+        orderBy: { name: 'asc' }
+    });
+
+    return guards.map(g => ({
+        ...g,
+        password: g.credentials.find(c => c.type === 'PASSWORD')?.value || g.credentials.find(c => c.type === 'PIN')?.value || ''
+    }));
+}
+
+export async function getAdminsList() {
+    const admins = await prisma.user.findMany({
+        where: {
+            role: 'ADMIN'
+        },
+        include: {
+            credentials: true
+        },
+        orderBy: { name: 'asc' }
+    });
+
+    return admins.map(a => ({
+        ...a,
+        username: a.name, // Mapping name to username for UI consistency
+        password: a.credentials.find(c => c.type === 'PASSWORD')?.value || ''
+    }));
+}
+
+export async function saveGuard(formData: FormData) {
+    const id = formData.get("id") as string;
+    const name = formData.get("name") as string;
+    const username = formData.get("username") as string;
+    const dni = formData.get("dni") as string;
+    const password = formData.get("password") as string;
+    const photoFile = formData.get("photo") as File | null;
+    const currentPhoto = formData.get("currentPhoto") as string;
+
+    let photoPath = currentPhoto;
+
+    // Handle File Upload
+    if (photoFile && photoFile.size > 0) {
+        try {
+            const bytes = await photoFile.arrayBuffer();
+            const buffer = Buffer.from(bytes);
+            const fileName = `guard-${Date.now()}-${photoFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
+
+            // Upload to S3 (Face bucket)
+            photoPath = await uploadToS3(buffer, fileName, photoFile.type || "image/jpeg", "face");
+        } catch (error) {
+            console.error("Error uploading guard photo:", error);
+            throw new Error("Error al subir la foto");
+        }
+    }
+
+    const data: any = {
+        name,
+        username: username || name.toLowerCase().replace(/\s+/g, '.'),
+        dni,
+        cara: photoPath || null
+    };
+
+    let user;
+    if (id) {
+        // When updating by ID (from Admin UI), we can set the role
+        data.role = 'STAFF';
+        user = await prisma.user.update({
+            where: { id },
+            data
+        });
+    } else {
+        // Find existing user by name to avoid duplicates
+        const existingUser = await prisma.user.findFirst({
+            where: { name }
+        });
+
+        if (existingUser) {
+            // Preserve ADMIN role if it exists
+            if (existingUser.role !== 'ADMIN') {
+                data.role = 'STAFF';
+            }
+            user = await prisma.user.update({
+                where: { id: existingUser.id },
+                data
+            });
+        } else {
+            data.role = 'STAFF';
+            user = await prisma.user.create({
+                data
+            });
+        }
+    }
+
+    // Handle Password (PASSWORD Type)
+    if (password) {
+        // Update or Create PASSWORD credential
+        const existingPass = await prisma.credential.findFirst({
+            where: { userId: user.id, type: 'PASSWORD' }
+        });
+
+        if (existingPass) {
+            await prisma.credential.update({
+                where: { id: existingPass.id },
+                data: { value: password }
+            });
+        } else {
+            await prisma.credential.create({
+                data: {
+                    userId: user.id,
+                    type: 'PASSWORD',
+                    value: password
+                }
+            });
+        }
+
+        // Also update PIN for backward compatibility if needed, or if the UI uses it as PIN too
+        const existingPin = await prisma.credential.findFirst({
+            where: { userId: user.id, type: 'PIN' }
+        });
+
+        if (existingPin) {
+            await prisma.credential.update({
+                where: { id: existingPin.id },
+                data: { value: password }
+            });
+        } else {
+            await prisma.credential.create({
+                data: {
+                    userId: user.id,
+                    type: 'PIN',
+                    value: password
+                }
+            });
+        }
+    }
+
+    revalidatePath("/admin/consolas");
+    return user;
+}
+
+export async function saveAdmin(formData: FormData) {
+    const id = formData.get("id") as string;
+    const name = formData.get("name") as string;
+    const email = formData.get("email") as string;
+    const password = formData.get("password") as string;
+    const photoFile = formData.get("photo") as File | null;
+    const currentPhoto = formData.get("currentPhoto") as string;
+
+    let photoPath = currentPhoto;
+
+    // Handle File Upload
+    if (photoFile && photoFile.size > 0) {
+        try {
+            const bytes = await photoFile.arrayBuffer();
+            const buffer = Buffer.from(bytes);
+            const fileName = `admin-${Date.now()}-${photoFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
+
+            // Upload to S3 (Face bucket)
+            photoPath = await uploadToS3(buffer, fileName, photoFile.type || "image/jpeg", "face");
+        } catch (error) {
+            console.error("Error uploading admin photo:", error);
+            throw new Error("Error al subir la foto");
+        }
+    }
+
+    const data: any = {
+        name, // Username
+        email: email || null,
+        role: 'ADMIN',
+        cara: photoPath || null
+    };
+
+    let user;
+    if (id) {
+        user = await prisma.user.update({
+            where: { id },
+            data
+        });
+    } else {
+        // Check uniqueness of name (username)
+        const existing = await prisma.user.findFirst({ where: { name } });
+        if (existing) throw new Error("El nombre de usuario ya existe");
+
+        user = await prisma.user.create({
+            data
+        });
+    }
+
+    // Handle Password
+    if (password) {
+        // Delete existing password creds
+        await prisma.credential.deleteMany({
+            where: { userId: user.id, type: 'PASSWORD' }
+        });
+
+        await prisma.credential.create({
+            data: {
+                userId: user.id,
+                type: 'PASSWORD',
+                value: password
+            }
+        });
+    }
+
+    revalidatePath("/admin/settings");
+    return user;
+}
+
+export async function deleteAdmin(id: string) {
+    // Prevent deleting self? UI handles it usually, or middleware.
+    await prisma.user.delete({ where: { id } });
+    revalidatePath("/admin/settings");
+}
+
+export async function deleteGuard(id: string) {
+    await prisma.user.delete({ where: { id } });
+    revalidatePath("/admin/consolas");
 }
 
 export async function deleteUser(id: string) {
@@ -314,6 +542,12 @@ export async function importUserBatch(users: any[]) {
             let user = await prisma.user.findFirst({
                 where: { dni: u.DNI.toString() }
             });
+
+            if (user && user.role === 'ADMIN') {
+                // Skip overwriting admins via batch import to protect system integrity
+                successCount++;
+                continue;
+            }
 
             const userData = {
                 name: u.Name,

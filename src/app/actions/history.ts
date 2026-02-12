@@ -137,7 +137,12 @@ export async function getAccessEvents(options?: {
             };
         }));
 
-        return { events: enrichedEvents, total };
+        // Ensure results are sorted by timestamp desc after enrichment
+        const sortedEnrichedEvents = enrichedEvents.sort((a, b) =>
+            b.timestamp.getTime() - a.timestamp.getTime()
+        );
+
+        return { events: sortedEnrichedEvents, total };
 
     } catch (error) {
         console.error("Database connection error in getAccessEvents:", error);

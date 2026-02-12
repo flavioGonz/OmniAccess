@@ -77,6 +77,7 @@ function SidebarItem({ icon, label, href, active, collapsed, target, badge }: Si
     );
 }
 
+import { getSocketUrl } from "@/lib/socket-config";
 import { getSetting } from "@/app/actions/settings";
 
 function MinIORetentionBadge() {
@@ -115,11 +116,7 @@ export default function AdminLayout({
     const alarmAudioRef = React.useRef<HTMLAudioElement | null>(null);
 
     React.useEffect(() => {
-        const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
-        const isStandardPort = window.location.port === '' || window.location.port === '80' || window.location.port === '443';
-        const socketUrl = isStandardPort
-            ? `${protocol}://${window.location.hostname}`
-            : `${protocol}://${window.location.hostname}:10000`;
+        const socketUrl = getSocketUrl();
         const socket = io(socketUrl);
 
         const activeConsolesRef = new Map<string, any>();

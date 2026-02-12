@@ -294,6 +294,8 @@ export async function POST(req: NextRequest) {
             data: {
                 id: eventId,
                 timestamp: eventTimestamp,
+                accessType: idType === 'PLATE' ? 'PLATE' : idType === 'FACE' ? 'FACE' : undefined,
+                direction: (device as any)?.direction === 'EXIT' ? 'EXIT' : 'ENTRY',
                 credentialId: (credential as any)?.id,
                 userId: credential?.userId,
                 deviceId: device.id,

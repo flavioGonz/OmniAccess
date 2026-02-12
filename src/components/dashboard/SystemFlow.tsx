@@ -137,8 +137,8 @@ const ConsoleNode = memo(({ data }: any) => {
 
     return (
         <div className={cn(
-            "relative flex flex-col items-center justify-center p-1.5 bg-[#121214] border border-[#2c2c30] rounded-[1rem] w-[200px] h-[130px] shadow-2xl transition-all duration-500 custom-drag-handle group/console",
-            isActive ? "shadow-[0_20px_50px_-10px_rgba(16,185,129,0.3)] scale-105" : "opacity-60 grayscale"
+            "relative flex flex-col items-center justify-center p-0.5 transition-all duration-500 custom-drag-handle group/console",
+            isActive ? "scale-105" : "opacity-40 grayscale"
         )}>
             {/* Tablet Bezel Reflection */}
             <div className="absolute inset-0 rounded-[1rem] bg-gradient-to-tr from-white/5 to-transparent pointer-events-none" />
@@ -149,14 +149,10 @@ const ConsoleNode = memo(({ data }: any) => {
                 isActive ? "bg-slate-900" : "bg-neutral-800"
             )}>
                 {/* Status Bar */}
-                <div className="h-5 w-full bg-black/40 flex items-center justify-between px-3 backdrop-blur-sm border-b border-white/5">
-                    <div className="flex items-center gap-1.5">
-                        <div className={cn("w-1.5 h-1.5 rounded-full shadow-lg", isActive ? "bg-emerald-500 shadow-emerald-500/50" : "bg-red-500")} />
-                        <span className="text-[7px] font-mono text-white/50 tracking-wider">4G • {data.ip?.split('.').slice(-1)[0]}</span>
-                    </div>
-                    <div className="flex gap-0.5">
-                        <div className="w-2 h-1 bg-white/20 rounded-[1px]" />
-                        <div className="w-0.5 h-1 bg-white/20 rounded-[1px]" />
+                <div className="h-4 w-full bg-black/60 flex items-center justify-between px-2 backdrop-blur-sm border-b border-white/5">
+                    <div className="flex items-center gap-1">
+                        <div className={cn("w-1 h-1 rounded-full", isActive ? "bg-emerald-500" : "bg-red-500")} />
+                        <span className="text-[6px] font-mono text-white/70 tracking-tight">{data.ip}</span>
                     </div>
                 </div>
 
@@ -180,8 +176,8 @@ const ConsoleNode = memo(({ data }: any) => {
                             {/* Info */}
                             <div className="flex flex-col text-left">
                                 <span className="text-[10px] font-black text-white uppercase leading-none tracking-tight">{data.guardName?.split(' ')[0] || "Guardia"}</span>
-                                <span className="text-[7px] font-bold text-white/40 uppercase mt-0.5 tracking-wider">
-                                    {data.deviceId || "Tablet"}
+                                <span className="text-[6px] font-bold text-white/40 uppercase mt-0.5 tracking-tighter truncate max-w-[80px]">
+                                    {data.deviceInfo || data.deviceId || "Tablet"}
                                 </span>
                             </div>
                         </div>
@@ -191,7 +187,6 @@ const ConsoleNode = memo(({ data }: any) => {
                             "px-2 py-0.5 rounded-full border flex items-center gap-1",
                             isActive ? "bg-emerald-500/20 border-emerald-500/30" : "bg-neutral-800 border-neutral-700"
                         )}>
-                            {isActive && <Activity size={8} className="text-emerald-400 animate-pulse" />}
                             <span className={cn(
                                 "text-[6px] font-black uppercase tracking-widest",
                                 isActive ? "text-emerald-400" : "text-neutral-500"
@@ -315,7 +310,7 @@ const SystemFlow = memo(function SystemFlow({ mode = "full" }: { mode?: "full" |
                             if (existingNode) {
                                 return currentNodes.map(n => n.id === tabletId ? {
                                     ...n,
-                                    data: { ...n.data, status: 'online', lastSeen: new Date() }
+                                    data: { ...n.data, status: 'online', lastSeen: new Date(), avatar: data.guardPhoto }
                                 } : n);
                             }
 
@@ -325,7 +320,9 @@ const SystemFlow = memo(function SystemFlow({ mode = "full" }: { mode?: "full" |
                                 data: {
                                     guardName: data.guardName,
                                     deviceId: 'Tablet Conectada',
-                                    ip: data.ip || 'Detectando...',
+                                    deviceInfo: data.deviceInfo || 'Detectando...',
+                                    ip: data.reportedIp || data.ip || 'Detectando...',
+                                    avatar: data.guardPhoto,
                                     status: 'online',
                                     lastSeen: new Date()
                                 },

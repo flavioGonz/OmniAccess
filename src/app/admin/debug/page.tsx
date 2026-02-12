@@ -21,6 +21,8 @@ type WebhookLog = {
     credentialValue?: string;
 };
 
+import { getSocketUrl } from "@/lib/socket-config";
+
 export default function WebhookDebugPage() {
     const [logs, setLogs] = useState<WebhookLog[]>([]);
     const [filter, setFilter] = useState<'all' | 'hikvision' | 'akuvox' | 'face' | 'plate' | 'tag'>('all');
@@ -29,11 +31,7 @@ export default function WebhookDebugPage() {
 
     useEffect(() => {
         // Connect to Socket.IO on port 10000
-        const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
-        const isStandardPort = window.location.port === '' || window.location.port === '80' || window.location.port === '443';
-        const socketUrl = isStandardPort
-            ? `${protocol}://${window.location.hostname}`
-            : `${protocol}://${window.location.hostname}:10000`;
+        const socketUrl = getSocketUrl();
         console.log('[DEBUG] Creating socket connection to:', socketUrl);
 
         const socket = io(socketUrl, {
