@@ -11,9 +11,12 @@ export async function GET(
     try {
         const params = await context.params;
         const s3Client = await getS3Client();
-        const keyParts = params.key;
+        let keyParts = params.key;
 
-        console.log(`[S3 Proxy] Request: ${keyParts ? keyParts.join('/') : 'NO_KEY'}`);
+        // Resilience: Handle potential double prefixing (api/files/api/files/...)
+        while (keyParts.length > 2 && keyParts[0] === 'api' && keyParts[1] === 'files') {
+            keyParts = keyParts.slice(2);
+        }
 
         if (!keyParts || keyParts.length < 2) {
             return new NextResponse("Invalid file path", { status: 400 });

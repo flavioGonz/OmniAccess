@@ -2,13 +2,14 @@
 /* eslint-disable */
 
 import { useRef, useState, useEffect } from "react";
-import { Camera, X, Loader2 } from "lucide-react";
+import { Camera, X, Loader2, RefreshCcw, Image as ImageIcon, ScanLine } from "lucide-react";
 import { toast } from "sonner";
 import * as Tesseract from 'tesseract.js';
+import { cn } from "@/lib/utils";
 
 interface OCRScannerTFProps {
     onClose: () => void;
-    onDetected: (plate: string, imageBlob: Blob) => void;
+    onDetected: (plate: string | null, imageBlob: Blob) => void;
 }
 
 export default function OCRScannerTF({ onClose, onDetected }: OCRScannerTFProps) {
@@ -24,6 +25,10 @@ export default function OCRScannerTF({ onClose, onDetected }: OCRScannerTFProps)
     const [workerStatus, setWorkerStatus] = useState<string>("Iniciando...");
     const [workerProgress, setWorkerProgress] = useState<number>(0);
     const [lastDetected, setLastDetected] = useState<string>("");
+
+    // Camera & Mode State
+    const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
+    const [isPhotoMode, setIsPhotoMode] = useState(false);
 
     // Initialize TensorFlow.js and Tesseract
     useEffect(() => {
@@ -110,7 +115,7 @@ export default function OCRScannerTF({ onClose, onDetected }: OCRScannerTFProps)
             console.log("Attempting to start camera...");
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: {
-                    facingMode: "environment",
+                    facingMode: facingMode,
                     width: { ideal: 1280 },
                     height: { ideal: 720 }
                 }
@@ -137,13 +142,13 @@ export default function OCRScannerTF({ onClose, onDetected }: OCRScannerTFProps)
         };
     }, []);
 
-    // 2. Start camera on mount independently
+    // 2. Start camera on mount and when facingMode changes
     useEffect(() => {
         startCamera();
         return () => {
             stopCamera();
         };
-    }, []);
+    }, [facingMode]);
 
     const validateMercosurPlate = (text: string): string | null => {
         // Mercosur format: ABC1234 or ABC1D23
@@ -329,10 +334,31 @@ export default function OCRScannerTF({ onClose, onDetected }: OCRScannerTFProps)
         }
     };
 
+    const capturePhotoOnly = () => {
+        if (!videoRef.current || !canvasRef.current) return;
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+            ctx.drawImage(video, 0, 0);
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    onDetected(null, blob);
+                    onClose();
+                    toast.success("Foto capturada");
+                }
+            }, "image/jpeg", 0.9);
+        }
+    };
+
 
 
     const handleManualCapture = () => {
-        if (!isProcessingRef.current) {
+        if (isPhotoMode) {
+            capturePhotoOnly();
+        } else if (!isProcessingRef.current) {
             captureAndProcess();
         }
     };
@@ -360,15 +386,24 @@ export default function OCRScannerTF({ onClose, onDetected }: OCRScannerTFProps)
 
                 {/* Guide overlay */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="relative w-[80%] max-w-md aspect-[3/1] border-4 border-white/50 rounded-xl shadow-2xl">
-                        <div className="absolute -top-2 -left-2 w-8 h-8 border-t-4 border-l-4 border-white rounded-tl-xl" />
-                        <div className="absolute -top-2 -right-2 w-8 h-8 border-t-4 border-r-4 border-white rounded-tr-xl" />
-                        <div className="absolute -bottom-2 -left-2 w-8 h-8 border-b-4 border-l-4 border-white rounded-bl-xl" />
-                        <div className="absolute -bottom-2 -right-2 w-8 h-8 border-b-4 border-r-4 border-white rounded-br-xl" />
+                    <div className={cn(
+                        "relative transition-all duration-300",
+                        isPhotoMode
+                            ? "w-[90%] h-[80%] border-4 border-white/20 rounded-3xl"
+                            : "w-[80%] max-w-md aspect-[3/1] border-4 border-white/50 rounded-xl shadow-2xl"
+                    )}>
+                        {!isPhotoMode && (
+                            <>
+                                <div className="absolute -top-2 -left-2 w-8 h-8 border-t-4 border-l-4 border-white rounded-tl-xl" />
+                                <div className="absolute -top-2 -right-2 w-8 h-8 border-t-4 border-r-4 border-white rounded-tr-xl" />
+                                <div className="absolute -bottom-2 -left-2 w-8 h-8 border-b-4 border-l-4 border-white rounded-bl-xl" />
+                                <div className="absolute -bottom-2 -right-2 w-8 h-8 border-b-4 border-r-4 border-white rounded-br-xl" />
+                            </>
+                        )}
                     </div>
 
-                    {/* Detected plate display */}
-                    {lastDetected && (
+                    {/* Detected plate display - Only in OCR Mode */}
+                    {!isPhotoMode && lastDetected && (
                         <div className="absolute inset-0 flex items-center justify-center">
                             <div className="bg-[#B20D30] px-6 py-3 rounded-2xl shadow-2xl animate-pulse">
                                 <span className="text-white font-black text-3xl tracking-[0.3em]">{lastDetected}</span>
@@ -377,29 +412,58 @@ export default function OCRScannerTF({ onClose, onDetected }: OCRScannerTFProps)
                     )}
                 </div>
 
-                {/* Status indicator */}
-                <div className="absolute top-4 left-4 flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full ring-1 ring-white/10">
-                    {isProcessingRef.current || workerStatus !== "Listo" ? (
-                        <Loader2 className="w-3 h-3 text-white animate-spin" />
-                    ) : (
-                        <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_#10b981]" />
+                {/* Top Controls */}
+                <div className="absolute top-4 left-4 flex items-center gap-2">
+                    {/* OCR Status - Only in OCR Mode */}
+                    {!isPhotoMode && (
+                        <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full ring-1 ring-white/10">
+                            {isProcessingRef.current || workerStatus !== "Listo" ? (
+                                <Loader2 className="w-3 h-3 text-white animate-spin" />
+                            ) : (
+                                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_#10b981]" />
+                            )}
+                            <span className="text-[10px] font-black text-white uppercase tracking-widest">
+                                {workerStatus}
+                            </span>
+                        </div>
                     )}
-                    <span className="text-[10px] font-black text-white uppercase tracking-widest">
-                        {workerStatus}
-                    </span>
                 </div>
 
-                {/* CAPTURE BUTTON */}
-                <div className="absolute inset-x-0 bottom-8 flex justify-center px-4">
+                {/* Bottom Controls */}
+                <div className="absolute inset-x-0 bottom-8 px-6 flex items-center justify-between pointer-events-none">
+                    {/* Camera Switch */}
+                    <button
+                        onClick={() => setFacingMode(prev => prev === "user" ? "environment" : "user")}
+                        className="pointer-events-auto w-12 h-12 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white ring-1 ring-white/20 active:scale-95 transition-all"
+                    >
+                        <RefreshCcw size={20} />
+                    </button>
+
+                    {/* CAPTURE BUTTON */}
                     <button
                         onClick={handleManualCapture}
-                        disabled={isProcessingRef.current || !cocoModel || !worker}
-                        className="group flex flex-col items-center gap-2 active:scale-95 transition-all disabled:opacity-50"
+                        disabled={(!isPhotoMode && (isProcessingRef.current || !cocoModel || !worker))}
+                        className="pointer-events-auto group flex flex-col items-center gap-2 active:scale-95 transition-all disabled:opacity-50"
                     >
                         <div className="w-20 h-20 rounded-full bg-white shadow-2xl flex items-center justify-center ring-4 ring-white/30 group-active:ring-8 transition-all">
-                            <Camera className="w-10 h-10 text-black" />
+                            {isPhotoMode ? (
+                                <div className="w-16 h-16 rounded-full bg-slate-900" />
+                            ) : (
+                                <Camera className="w-10 h-10 text-black" />
+                            )}
                         </div>
-                        <span className="text-white text-xs font-bold tracking-wider">CAPTURAR</span>
+                        <span className="text-white text-xs font-bold tracking-wider">{isPhotoMode ? "CAPTURAR" : "SCANNER"}</span>
+                    </button>
+
+                    {/* Mode Toggle */}
+                    <button
+                        onClick={() => setIsPhotoMode(prev => !prev)}
+                        className={cn(
+                            "pointer-events-auto w-12 h-12 rounded-full backdrop-blur-md flex items-center justify-center text-white ring-1 ring-white/20 active:scale-95 transition-all",
+                            isPhotoMode ? "bg-white text-black" : "bg-black/40"
+                        )}
+                    >
+                        {isPhotoMode ? <ImageIcon size={20} /> : <ScanLine size={20} />}
                     </button>
                 </div>
             </div>

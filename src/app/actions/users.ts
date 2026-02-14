@@ -636,3 +636,92 @@ export async function importUserBatch(users: any[]) {
     revalidatePath("/admin/users");
     return { success: true, count: successCount, failed: failCount, errors };
 }
+
+export async function getBlacklist() {
+    return await prisma.user.findMany({
+        where: { role: 'BLACKLISTED' },
+        include: {
+            unit: true,
+            credentials: true
+        },
+        orderBy: { updatedAt: 'desc' }
+    });
+}
+
+export async function toggleBlacklist(userId: string, isBlacklisted: boolean) {
+    const user = await prisma.user.update({
+        where: { id: userId },
+        data: { role: isBlacklisted ? 'BLACKLISTED' : 'VISITOR' }
+    });
+    revalidatePath("/admin/dashboard-face");
+    revalidatePath("/admin/users");
+    return user;
+}
+import { registerFaceInCompereFace } from "./face-verify";
+
+export async function registerFace(formData: FormData) {
+    const name = formData.get("name") as string;
+    const dni = formData.get("dni") as string;
+    const isBlacklisted = formData.get("isBlacklisted") === "true";
+    const photoFile = formData.get("photo") as File;
+
+    let photoPath = "";
+    let photoBuffer: Buffer | null = null;
+
+    if (photoFile && photoFile.size > 0) {
+        photoBuffer = Buffer.from(await photoFile.arrayBuffer());
+        const filename = `face-${Date.now()}-${name.replace(/\s+/g, '_')}.jpg`;
+        photoPath = await uploadToS3(photoBuffer, filename, photoFile.type || "image/jpeg", "face");
+    }
+
+    const user = await prisma.user.create({
+        data: {
+            name,
+            dni,
+            role: isBlacklisted ? 'BLACKLISTED' : 'VISITOR',
+            cara: photoPath || null
+        }
+    });
+
+    // Mirror registration to CompereFace if photo exists
+    if (photoBuffer) {
+        try {
+            console.log(`[Sync] Registering ${name} in CompereFace...`);
+            await registerFaceInCompereFace(name, photoBuffer);
+        } catch (err) {
+            console.error("[Sync] Failed to register in CompereFace:", err);
+            // We continue as the user is already in our DB
+        }
+    }
+
+    if (photoPath) {
+        await prisma.credential.create({
+            data: {
+                userId: user.id,
+                type: 'FACE',
+                value: dni || user.id,
+                notes: isBlacklisted ? 'REGISTRO BLACKLIST' : 'REGISTRO SHOPPING'
+            }
+        } as any);
+    }
+
+    revalidatePath("/admin/dashboard-face");
+    return user;
+}
+export async function searchUsers(query: string) {
+    if (!query) return [];
+
+    return await prisma.user.findMany({
+        where: {
+            OR: [
+                { name: { contains: query, mode: 'insensitive' } },
+                { dni: { contains: query, mode: 'insensitive' } }
+            ]
+        },
+        include: {
+            unit: true
+        },
+        take: 10,
+        orderBy: { updatedAt: 'desc' }
+    });
+}

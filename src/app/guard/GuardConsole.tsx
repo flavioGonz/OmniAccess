@@ -47,16 +47,24 @@ import {
     Monitor,
     Maximize2,
     Calendar,
-    Eye
+    Eye,
+    UserPlus,
+    AlertOctagon,
+    ScanFace,
+    Upload,
+    History
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { createBitacoraEntry, deleteBitacoraEntry, getBitacoraPage } from "@/app/actions/bitacora";
 import { getAccessEvents, getPlateAnalysis } from "@/app/actions/history";
 import { getQuickCreateData, getGuardsList } from "@/app/actions/users";
+import { resolveFaceEventAction } from "@/app/actions/face-resolve";
 import { UserFormDialog } from "@/components/UserFormDialog";
+import { searchByPhotoAction } from "@/app/actions/face-verify";
 import { toast } from "sonner";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
@@ -79,7 +87,7 @@ interface GuardConsoleProps {
     guards: any[];
 }
 
-type TabType = "control" | "history" | "alerts" | "lpr" | "map";
+type TabType = "control" | "history" | "alerts" | "lpr" | "map" | "face";
 
 
 export default function GuardConsole({ initialEntries, logo, headerColor, initialIcons, units, guards }: GuardConsoleProps) {
@@ -132,6 +140,13 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
     const [showAlertsFilterModal, setShowAlertsFilterModal] = useState(false);
     const [showHistoryFilterModal, setShowHistoryFilterModal] = useState(false);
 
+    // Manual Face Resolve states
+    const [faceResultName, setFaceResultName] = useState("");
+    const [faceResultDni, setFaceResultDni] = useState("");
+    const [faceResultUnit, setFaceResultUnit] = useState("");
+    const [faceResultNotes, setFaceResultNotes] = useState("");
+    const [isResolvingFace, setIsResolvingFace] = useState(false);
+
     // Image Viewer state
     const [viewerData, setViewerData] = useState<{
         url: string,
@@ -170,6 +185,28 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
     const [customHeaderColor, setCustomHeaderColor] = useState<string>(headerColor);
     const [customIcons, setCustomIcons] = useState<Record<string, string>>(initialIcons);
     const [isSavingBranding, setIsSavingBranding] = useState(false);
+
+    // Face Recognition States
+    const [isFaceCameraActive, setIsFaceCameraActive] = useState(false);
+    const [isAnalyzingFace, setIsAnalyzingFace] = useState(false);
+    const [faceMatchResult, setFaceMatchResult] = useState<any>(null);
+
+    useEffect(() => {
+        if (faceMatchResult) {
+            setFaceResultName(faceMatchResult.user?.name || faceMatchResult.match?.subject || "");
+            setFaceResultDni(faceMatchResult.user?.dni || "");
+            setFaceResultUnit(faceMatchResult.user?.unit?.name || "");
+            setFaceResultNotes("");
+        } else {
+            setFaceResultName("");
+            setFaceResultDni("");
+            setFaceResultUnit("");
+            setFaceResultNotes("");
+        }
+    }, [faceMatchResult]);
+    const faceVideoRef = useRef<HTMLVideoElement>(null);
+    const faceCanvasRef = useRef<HTMLCanvasElement>(null);
+    const faceStreamRef = useRef<MediaStream | null>(null);
 
     // Guard List State
     const [showGuardList, setShowGuardList] = useState(false);
@@ -544,8 +581,8 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
         }
     }, []);
 
-    const handleOCRDetected = (detectedPlate: string, imageBlob: Blob) => {
-        setPlate(detectedPlate);
+    const handleOCRDetected = (detectedPlate: string | null, imageBlob: Blob) => {
+        if (detectedPlate !== null) setPlate(detectedPlate);
         const reader = new FileReader();
         reader.onloadend = () => {
             setCapturedPhoto(reader.result as string);
@@ -695,9 +732,20 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
 
     const handleTabChange = (tab: TabType) => {
         if (tab === activeTab) return;
+
+        // Stop any active cameras when leaving tabs
+        if (activeTab === "face") stopFaceCamera();
+        if (activeTab === "control") setIsCameraActive(false);
+
         setIsTransitioning(true);
         setTimeout(() => {
             setActiveTab(tab);
+
+            // Reset face match result when switching to face tab
+            if (tab === "face") {
+                setFaceMatchResult(null);
+            }
+
             setTimeout(() => {
                 setIsTransitioning(false);
             }, 600);
@@ -986,6 +1034,86 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
         }
     };
 
+    // FACE RECOGNITION HELPERS
+    const startFaceCamera = async () => {
+        if (!window.isSecureContext) {
+            showNotification("CONEXIÓN NO SEGURA", "Se requiere HTTPS para el reconocimiento facial neural.", "error");
+            return;
+        }
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: "user" }, // Better for face
+                audio: false
+            });
+            faceStreamRef.current = stream;
+            if (faceVideoRef.current) faceVideoRef.current.srcObject = stream;
+            setIsFaceCameraActive(true);
+        } catch (err) {
+            console.error("Face camera error:", err);
+            showNotification("ERROR DE CÁMARA", "No se pudo activar el sensor biométrico.", "error");
+        }
+    };
+
+    const stopFaceCamera = () => {
+        if (faceStreamRef.current) {
+            faceStreamRef.current.getTracks().forEach(t => t.stop());
+            faceStreamRef.current = null;
+        }
+        if (faceVideoRef.current) faceVideoRef.current.srcObject = null;
+        setIsFaceCameraActive(false);
+    };
+
+    const captureAndAnalyzeFace = async () => {
+        if (!faceVideoRef.current || !faceCanvasRef.current) return;
+
+        setIsAnalyzingFace(true);
+        playTactileSound();
+
+        try {
+            const canvas = faceCanvasRef.current;
+            const video = faceVideoRef.current;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) return;
+
+            ctx.drawImage(video, 0, 0);
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+
+            // Convert dataUrl to Buffer/Uint8Array for action
+            const response = await fetch(dataUrl);
+            const blob = await response.blob();
+            const arrayBuffer = await blob.arrayBuffer();
+            const buffer = new Uint8Array(arrayBuffer);
+
+            const result = await searchByPhotoAction(buffer as any);
+
+            if (result.success) {
+                setFaceMatchResult({
+                    ...result,
+                    capturedImage: dataUrl
+                });
+                stopFaceCamera();
+                if (result.user) {
+                    showNotification("SUJETO IDENTIFICADO", `Se ha reconocido a ${result.user.name}`, "success");
+                } else if (result.match) {
+                    showNotification("COINCIDENCIA EXTERNA", `Reconocido como ${result.match.subject}`, "info");
+                } else {
+                    showNotification("SIN RESULTADOS", "No se encontraron coincidencias en la base neural.", "info");
+                }
+            } else {
+                showNotification("ERROR DE ANÁLISIS", result.error || "Falla en el motor neural.", "error");
+            }
+
+        } catch (err) {
+            console.error("Face analysis error:", err);
+            showNotification("ERROR CRÍTICO", "Falla al procesar la imagen biométrica.", "error");
+        } finally {
+            setIsAnalyzingFace(false);
+        }
+    };
+
     // Audio recording functions
     const startRecording = async () => {
         if (!window.isSecureContext) {
@@ -1055,8 +1183,8 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
             await axios.post('/api/bitacora', formData);
             setNotes("");
             setCapturedPhoto(null);
-            setAudioUrl(null);
             setAudioBlob(null);
+            setAudioUrl(null);
             showNotification("INFORMACIÓN ANEXADA", "Los detalles se han guardado exitosamente.", "success");
         } catch (e) {
             console.error("Error annexing info:", e);
@@ -1547,6 +1675,435 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                         setBackupDetail(mission.details || "");
                                     }}
                                 />
+                            </motion.div>
+                        )}
+                        {activeTab === "face" && (
+                            <motion.div
+                                key="face"
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 20 }}
+                                className="h-full w-full overflow-y-auto custom-scrollbar bg-slate-50 relative pb-40"
+                            >
+                                <div className="max-w-7xl mx-auto px-4 py-6 md:p-10 flex flex-col gap-6 md:gap-10">
+                                    {/* Responsive Header */}
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                        <div>
+                                            <h2 className="text-2xl md:text-4xl font-black uppercase tracking-tighter text-black">Reconocimiento Facial</h2>
+                                            <p className="text-[9px] md:text-[10px] text-[#B20D30] font-black uppercase tracking-[0.3em] mt-1 italic">Módulo de Vigilancia Neural</p>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <label className="p-3 bg-white border-2 border-slate-100 text-slate-400 rounded-xl hover:text-[#B20D30] hover:border-[#B20D30]/30 transition-all active:scale-95 cursor-pointer">
+                                                <Upload size={18} />
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    className="hidden"
+                                                    onChange={async (e) => {
+                                                        const file = e.target.files?.[0];
+                                                        if (file) {
+                                                            setIsAnalyzingFace(true);
+                                                            try {
+                                                                const reader = new FileReader();
+                                                                reader.onload = async (event) => {
+                                                                    const dataUrl = event.target?.result as string;
+                                                                    const response = await fetch(dataUrl);
+                                                                    const blob = await response.blob();
+                                                                    const arrayBuffer = await blob.arrayBuffer();
+                                                                    const buffer = new Uint8Array(arrayBuffer);
+                                                                    const result = await searchByPhotoAction(buffer as any);
+                                                                    if (result.success) {
+                                                                        setFaceMatchResult({ ...result, capturedImage: dataUrl });
+                                                                        stopFaceCamera();
+                                                                    }
+                                                                };
+                                                                reader.readAsDataURL(file);
+                                                            } finally {
+                                                                setIsAnalyzingFace(false);
+                                                            }
+                                                        }
+                                                    }}
+                                                />
+                                            </label>
+                                            <div className="px-4 py-2 bg-white border-2 border-slate-100 rounded-xl flex items-center gap-2">
+                                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">IA Conectada</span>
+                                            </div>
+                                            {faceMatchResult && (
+                                                <button
+                                                    onClick={() => { setFaceMatchResult(null); startFaceCamera(); }}
+                                                    className="p-3 bg-white border-2 border-[#B20D30] text-[#B20D30] rounded-xl hover:bg-slate-50 transition-all active:scale-95"
+                                                >
+                                                    <RefreshCcw size={18} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-col xl:flex-row gap-6 md:gap-10">
+                                        {/* Scanner Viewport */}
+                                        <div className="flex-1 min-h-[300px] md:min-h-[500px] bg-black rounded-[2rem] md:rounded-[3rem] overflow-hidden relative shadow-2xl border-4 border-white">
+                                            <AnimatePresence mode="wait">
+                                                {faceMatchResult ? (
+                                                    <motion.div
+                                                        key="result-img"
+                                                        initial={{ opacity: 0 }}
+                                                        animate={{ opacity: 1 }}
+                                                        className="absolute inset-0"
+                                                    >
+                                                        <Image
+                                                            src={faceMatchResult.capturedImage}
+                                                            alt="Captured"
+                                                            fill
+                                                            className="object-cover"
+                                                        />
+                                                    </motion.div>
+                                                ) : isFaceCameraActive ? (
+                                                    <motion.div
+                                                        key="live-feed"
+                                                        initial={{ opacity: 0 }}
+                                                        animate={{ opacity: 1 }}
+                                                        className="absolute inset-0"
+                                                    >
+                                                        <video
+                                                            ref={faceVideoRef}
+                                                            autoPlay
+                                                            playsInline
+                                                            className="w-full h-full object-cover transition-all duration-700"
+                                                        />
+                                                        {/* Scanning HUD */}
+                                                        <div className="absolute inset-0 pointer-events-none p-6 md:p-12">
+                                                            <div className="w-full h-full border-2 border-white/20 rounded-2xl md:rounded-[2.5rem] relative">
+                                                                <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-[#B20D30]" />
+                                                                <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-[#B20D30]" />
+                                                                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-[#B20D30]" />
+                                                                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-[#B20D30]" />
+                                                                <motion.div
+                                                                    animate={{ top: ['10%', '90%', '10%'] }}
+                                                                    transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                                                                    className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-[#B20D30] to-transparent shadow-[0_0_15px_#B20D30]"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </motion.div>
+                                                ) : (
+                                                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900 gap-6">
+                                                        <div className="w-24 h-24 rounded-full bg-white/5 flex items-center justify-center border-2 border-dashed border-white/20">
+                                                            <Camera size={40} className="text-white/20" />
+                                                        </div>
+                                                        <button
+                                                            onClick={startFaceCamera}
+                                                            className="px-8 py-4 bg-[#B20D30] text-white rounded-2xl font-black uppercase text-sm tracking-widest shadow-2xl active:scale-95 transition-all"
+                                                        >
+                                                            Iniciar Cámara de Seguridad
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </AnimatePresence>
+
+                                            {/* Analyzing Screen overlay */}
+                                            <AnimatePresence>
+                                                {isAnalyzingFace && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0 }}
+                                                        animate={{ opacity: 1 }}
+                                                        exit={{ opacity: 0 }}
+                                                        className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center gap-6 z-30"
+                                                    >
+                                                        <Loader2 className="w-16 h-16 text-white animate-spin" />
+                                                        <div className="text-center">
+                                                            <h3 className="text-xl font-black text-white uppercase tracking-tighter">Analizando Biometría</h3>
+                                                            <p className="text-[10px] text-white/50 font-black uppercase tracking-[0.3em] mt-2">Accediendo a Base de Datos Neural</p>
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+
+                                        {/* Control & Result Card */}
+                                        <div className="w-full xl:w-[450px] flex flex-col gap-6">
+                                            <div className="bg-white rounded-[2rem] md:rounded-[3rem] border-2 border-slate-100 p-6 md:p-8 flex flex-col shadow-sm">
+                                                {!faceMatchResult ? (
+                                                    <div className="py-10 flex flex-col items-center justify-center text-center gap-6 opacity-30">
+                                                        <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center">
+                                                            <Monitor size={32} className="text-slate-400" />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-md font-black uppercase text-slate-900">En Espera</p>
+                                                            <p className="text-xs font-bold text-slate-400 mt-1">Presione el botón para escanear</p>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: 10 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        className="space-y-6"
+                                                    >
+                                                        <div className="space-y-4">
+                                                            <div className={cn(
+                                                                "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest inline-block shadow-sm",
+                                                                faceMatchResult.user
+                                                                    ? (faceMatchResult.user.role === 'BLACKLISTED' ? "bg-red-600 animate-pulse text-white" : "bg-emerald-500 text-white")
+                                                                    : (faceMatchResult.match ? "bg-amber-500 text-white" : "bg-red-500 text-white")
+                                                            )}>
+                                                                {faceMatchResult.user
+                                                                    ? (faceMatchResult.user.role === 'BLACKLISTED' ? "⚠️ BLACKLIST DETECTED" : "Identidad Verificada")
+                                                                    : (faceMatchResult.match ? "Sujeto Reconocido (Sin Registro Local)" : "Desconocido")}
+                                                            </div>
+
+                                                            {faceMatchResult.user ? (
+                                                                <div className="space-y-4">
+                                                                    <div>
+                                                                        <h3 className="text-2xl md:text-3xl font-black uppercase tracking-tight text-slate-900 leading-none">{faceMatchResult.user.name}</h3>
+                                                                        {faceMatchResult.user.unit && (
+                                                                            <p className="text-sm md:text-lg font-black text-[#B20D30] uppercase tracking-wide mt-1">📍 {faceMatchResult.user.unit.name}</p>
+                                                                        )}
+                                                                    </div>
+
+                                                                    {/* User Status / Observations */}
+                                                                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
+                                                                        <div className="flex items-center justify-between">
+                                                                            <span className="text-[9px] font-black text-slate-400 uppercase">Rol / Categoría</span>
+                                                                            <span className={cn(
+                                                                                "text-[10px] font-black uppercase",
+                                                                                faceMatchResult.user.role === 'BLACKLISTED' ? "text-red-600" : "text-emerald-600"
+                                                                            )}>{faceMatchResult.user.role}</span>
+                                                                        </div>
+                                                                        {faceMatchResult.user.observations && (
+                                                                            <div className="pt-2 border-t border-slate-200">
+                                                                                <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Observaciones / VIP Note</p>
+                                                                                <p className="text-xs font-bold text-slate-700 italic">"{faceMatchResult.user.observations}"</p>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+
+                                                                    <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-50">
+                                                                        <div>
+                                                                            <p className="text-[9px] font-black text-slate-400 uppercase">DNI/CI</p>
+                                                                            <p className="text-sm font-bold truncate">{faceMatchResult.user.dni || "N/A"}</p>
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-[9px] font-black text-slate-400 uppercase">Aprobación</p>
+                                                                            <p className={cn(
+                                                                                "text-sm font-black",
+                                                                                faceMatchResult.user.role === 'BLACKLISTED' ? "text-red-600" : "text-emerald-600"
+                                                                            )}>{faceMatchResult.user.role === 'BLACKLISTED' ? "BLOQUEADO" : "HABILITADO"}</p>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            ) : faceMatchResult.match ? (
+                                                                <div className="space-y-4">
+                                                                    <div>
+                                                                        <h3 className="text-2xl md:text-3xl font-black uppercase tracking-tight text-[#B20D30] leading-none mb-1">{faceMatchResult.match.subject}</h3>
+                                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Identificado por Motor Neural Externo</p>
+                                                                    </div>
+                                                                    <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200">
+                                                                        <p className="text-[10px] font-black text-amber-600 uppercase mb-1">⚠️ Aviso de Seguridad</p>
+                                                                        <p className="text-xs font-bold text-amber-800">El sujeto está en la base neural pero no tiene un perfil de residente/usuario creado en este sistema.</p>
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="py-4">
+                                                                    <h3 className="text-2xl font-black uppercase tracking-tight text-slate-300">No se encontraron registros</h3>
+                                                                    <p className="text-xs font-bold text-slate-400 mt-2 uppercase tracking-widest">Sujeto No Identificado</p>
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {faceMatchResult.match && (
+                                                            <div className="bg-slate-50 p-4 rounded-2xl md:rounded-[2rem] border border-slate-100">
+                                                                <div className="flex items-center justify-between mb-2">
+                                                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Confianza</span>
+                                                                    <span className="text-md font-black text-slate-900">{(faceMatchResult.match.similarity * 100).toFixed(0)}%</span>
+                                                                </div>
+                                                                <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                                                                    <motion.div
+                                                                        initial={{ width: 0 }}
+                                                                        animate={{ width: `${faceMatchResult.match.similarity * 100}%` }}
+                                                                        className={cn(
+                                                                            "h-full rounded-full transition-all",
+                                                                            faceMatchResult.match.similarity >= 0.8 ? "bg-emerald-500" :
+                                                                                faceMatchResult.match.similarity >= 0.6 ? "bg-amber-500" : "bg-red-500"
+                                                                        )}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* DETECTION TIMELINE */}
+                                                        <div className="mt-6 pt-6 border-t border-slate-100 space-y-4">
+                                                            <div className="flex items-center gap-2 text-slate-400">
+                                                                <History size={14} />
+                                                                <span className="text-[9px] font-black uppercase tracking-widest">Historial de Detección (Local)</span>
+                                                            </div>
+                                                            <div className="space-y-3">
+                                                                {entries.filter(e => {
+                                                                    const nameToMatch = faceMatchResult.user?.name || faceMatchResult.match?.subject;
+                                                                    if (!nameToMatch) return false;
+
+                                                                    return (faceMatchResult.user && e.userId === faceMatchResult.user.id) ||
+                                                                        (e.user?.name?.toLowerCase() === nameToMatch.toLowerCase()) ||
+                                                                        (e.bitacora?.name?.toLowerCase() === nameToMatch.toLowerCase());
+                                                                }).slice(0, 3).map((hist) => (
+                                                                    <div key={hist.id} className="flex gap-3 items-start p-3 bg-slate-50 rounded-xl border border-slate-100/50">
+                                                                        <div className={cn(
+                                                                            "w-2 h-2 rounded-full mt-1 shrink-0",
+                                                                            hist.type === "ENTRY" || hist.direction === "ENTRY" ? "bg-emerald-500" : "bg-orange-500"
+                                                                        )} />
+                                                                        <div className="flex-1">
+                                                                            <p className="text-[10px] font-black text-slate-900 uppercase">{hist.deviceName || hist.device?.name || "Punto de Acceso"}</p>
+                                                                            <p className="text-[8px] font-bold text-slate-400 uppercase mt-0.5">{new Date(hist.timestamp || hist.createdAt).toLocaleString()}</p>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                                {entries.filter(e => {
+                                                                    const nameToMatch = faceMatchResult.user?.name || faceMatchResult.match?.subject;
+                                                                    if (!nameToMatch) return false;
+                                                                    return (faceMatchResult.user && e.userId === faceMatchResult.user.id) ||
+                                                                        (e.user?.name?.toLowerCase() === nameToMatch.toLowerCase()) ||
+                                                                        (e.bitacora?.name?.toLowerCase() === nameToMatch.toLowerCase());
+                                                                }).length === 0 && (
+                                                                        <p className="text-[10px] font-bold text-slate-300 uppercase italic">Sin detecciones previas registradas</p>
+                                                                    )}
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="pt-2 space-y-3">
+                                                            {faceMatchResult.user && (
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setName(faceMatchResult.user.name);
+                                                                        setDni(faceMatchResult.user.dni || "");
+                                                                        if (faceMatchResult.user.unit) setSelectedUnit(faceMatchResult.user.unit);
+                                                                        handleTabChange("control");
+                                                                        setFaceMatchResult(null);
+                                                                    }}
+                                                                    className="w-full h-14 md:h-16 bg-[#B20D30] text-white rounded-xl md:rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg shadow-red-900/10 active:scale-95 flex items-center justify-center gap-3 transition-all"
+                                                                >
+                                                                    <UserCheck size={20} /> Autocompletar Registro
+                                                                </button>
+                                                            )}
+
+                                                            <div className="pt-4 space-y-3 border-t border-slate-100">
+                                                                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Ajuste Manual / Registro</Label>
+                                                                <Input
+                                                                    placeholder="NOMBRE DEL SUJETO"
+                                                                    value={faceResultName}
+                                                                    onChange={e => setFaceResultName(e.target.value)}
+                                                                    className="h-10 bg-slate-50 border-slate-200 text-xs font-black uppercase"
+                                                                />
+                                                                <div className="grid grid-cols-2 gap-3">
+                                                                    <Input
+                                                                        placeholder="DNI / CI"
+                                                                        value={faceResultDni}
+                                                                        onChange={e => setFaceResultDni(e.target.value)}
+                                                                        className="h-10 bg-slate-50 border-slate-200 text-xs font-black uppercase"
+                                                                    />
+                                                                    <Input
+                                                                        placeholder="UNIDAD (OPCIONAL)"
+                                                                        value={faceResultUnit}
+                                                                        onChange={e => setFaceResultUnit(e.target.value)}
+                                                                        className="h-10 bg-slate-50 border-slate-200 text-xs font-black uppercase"
+                                                                    />
+                                                                </div>
+                                                                <Input
+                                                                    placeholder="OBSERVACIONES"
+                                                                    value={faceResultNotes}
+                                                                    onChange={e => setFaceResultNotes(e.target.value)}
+                                                                    className="h-10 bg-slate-50 border-slate-200 text-xs font-black uppercase"
+                                                                />
+
+                                                                <Button
+                                                                    onClick={async () => {
+                                                                        setIsResolvingFace(true);
+                                                                        try {
+                                                                            // Manual creation
+                                                                            const formData = new FormData();
+                                                                            formData.append("type", "ENTRY");
+                                                                            formData.append("name", faceResultName || "Sujeto Desconocido");
+                                                                            formData.append("dni", faceResultDni || "---");
+                                                                            formData.append("destination", faceResultUnit || "");
+                                                                            formData.append("notes", faceResultNotes || "Validación Manual Facial");
+                                                                            formData.append("guardName", (typeof guardName === 'string' ? guardName : "Admin Sentinel"));
+
+                                                                            if (location) {
+                                                                                formData.append("latitude", location.lat.toString());
+                                                                                formData.append("longitude", location.lng.toString());
+                                                                            }
+
+                                                                            if (faceMatchResult.capturedImage) {
+                                                                                const res = await fetch(faceMatchResult.capturedImage);
+                                                                                const blob = await res.blob();
+                                                                                formData.append("photo", blob, "face_check.jpg");
+                                                                            }
+
+                                                                            const entry = await createBitacoraEntry(formData);
+                                                                            if (entry) {
+                                                                                toast.success("Ingreso registrado correctamente");
+                                                                                setEntries(prev => [entry, ...prev]);
+                                                                                setFaceMatchResult(null);
+                                                                                setTimeout(startFaceCamera, 100);
+                                                                            }
+                                                                        } catch (error) {
+                                                                            toast.error("Error al registrar ingreso");
+                                                                            console.error(error);
+                                                                        } finally {
+                                                                            setIsResolvingFace(false);
+                                                                        }
+                                                                    }}
+                                                                    disabled={isResolvingFace}
+                                                                    className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black uppercase text-xs tracking-widest"
+                                                                >
+                                                                    {isResolvingFace ? <Loader2 className="animate-spin" /> : <><CheckCircle2 className="mr-2" size={16} /> Registrar Ingreso Rapidamente</>}
+                                                                </Button>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setFaceMatchResult(null);
+                                                                    setTimeout(startFaceCamera, 100);
+                                                                }}
+                                                                className="w-full h-12 md:h-14 bg-slate-100 text-slate-900 rounded-xl md:rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-slate-200 transition-colors"
+                                                            >
+                                                                Reiniciar Cámara
+                                                            </button>
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </div>
+
+                                            {/* Status Badge */}
+                                            <div className="bg-[#B20D30] rounded-2xl md:rounded-[2rem] p-5 md:p-6 text-white shadow-xl flex items-center justify-between">
+                                                <div className="space-y-0.5">
+                                                    <p className="text-[9px] font-black uppercase tracking-widest opacity-60">Seguridad Predictiva</p>
+                                                    <p className="text-lg md:text-xl font-black tracking-tighter italic">LIVE SCANNER</p>
+                                                </div>
+                                                <div className="w-10 h-10 md:w-12 md:h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                                                    <Zap size={24} className={isAnalyzingFace ? "animate-pulse" : ""} />
+                                                </div>
+                                            </div>
+
+                                            {/* SCAN BUTTON (TOUCH OPTIMIZED) */}
+                                            {!faceMatchResult && (
+                                                <motion.button
+                                                    whileHover={{ scale: 1.02 }}
+                                                    whileTap={{ scale: 0.95 }}
+                                                    onClick={captureAndAnalyzeFace}
+                                                    disabled={isAnalyzingFace}
+                                                    className="w-full h-20 md:h-24 bg-white border-4 border-[#B20D30] text-[#B20D30] rounded-2xl md:rounded-[2rem] shadow-xl flex items-center gap-4 px-8 group transition-all"
+                                                >
+                                                    <div className="w-12 h-12 bg-[#B20D30] rounded-xl flex items-center justify-center text-white group-hover:scale-110 transition-transform shadow-lg shadow-red-900/20">
+                                                        <Camera size={28} />
+                                                    </div>
+                                                    <div className="text-left font-black uppercase tracking-tight">
+                                                        <p className="text-[10px] opacity-60 m-0">Neural Sensor</p>
+                                                        <p className="text-xl md:text-2xl m-0 leading-none">TOMAR FOTO</p>
+                                                    </div>
+                                                </motion.button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                <canvas ref={faceCanvasRef} className="hidden" />
                             </motion.div>
                         )}
                         {activeTab === "control" && (
@@ -2131,7 +2688,7 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                                 return (
                                                     <motion.button key={event.id} whileTap={{ scale: 0.98 }} onClick={() => setViewerData({ url: event.snapshotPath || "", plate: event.plateDetected, name: event.user?.name, unit: event.user?.unit?.name, direction: event.direction, confidence: event.confidence, timestamp: event.timestamp, deviceName: event.device?.name, vehicleBrand: vehicle?.brand, vehicleModel: vehicle?.model })} className="w-full bg-white rounded-[1.5rem] border border-slate-100 p-5 flex items-center gap-5 hover:shadow-lg transition-all text-left group active:bg-slate-50">
                                                         <div className="w-16 h-16 rounded-2xl bg-slate-100 overflow-hidden relative border border-black/5 shrink-0">
-                                                            {event.snapshotPath ? (<Image src={event.snapshotPath} alt="LPR" fill className="object-cover" />) : (<div className="w-full h-full flex items-center justify-center text-slate-300"><ImageIcon size={20} /></div>)}
+                                                            {event.snapshotPath ? (<Image src={event.snapshotPath} alt="LPR" fill className="object-cover" />) : (<div className="w-full h-full flex items-center justify-center text-slate-300"><ScanFace size={20} /></div>)}
                                                         </div>
                                                         <div className="flex-1 min-w-0">
                                                             <div className="flex items-center gap-2 mb-1">
@@ -2180,110 +2737,88 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                     </div>
 
                                     <div className="w-full">
-                                        <table className="w-full text-left border-collapse">
-                                            <thead>
-                                                <tr className="shadow-lg" style={{ backgroundColor: customHeaderColor }}>
-                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Foto</th>
-                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Matrícula</th>
-                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Fecha/Hora</th>
-                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Sujeto</th>
-                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Destino</th>
-                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white">Tipo</th>
-                                                    <th className="px-8 py-6 text-xs font-black uppercase tracking-widest text-white text-right">Acciones</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-50">
-                                                {entries.map((entry) => (
-                                                    <tr
-                                                        key={entry.id}
-                                                        onClick={() => setSelectedEntry(entry)}
-                                                        className="group border-b border-black/5 hover:bg-slate-50 transition-all cursor-pointer"
-                                                    >
-                                                        <td className="px-6 py-4">
-                                                            <div className="w-16 h-12 rounded-xl bg-slate-100 overflow-hidden relative border border-black/5 group-hover:scale-105 transition-transform">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                            {entries.map((entry) => (
+                                                <motion.button
+                                                    key={entry.id}
+                                                    whileTap={{ scale: 0.98 }}
+                                                    onClick={() => setSelectedEntry(entry)}
+                                                    className="bg-white rounded-[2rem] border-2 border-slate-100 p-6 flex flex-col gap-5 hover:shadow-xl transition-all text-left group relative overflow-hidden"
+                                                >
+                                                    <div className="flex items-center justify-between gap-4">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-20 h-20 rounded-[1.5rem] bg-slate-50 overflow-hidden relative border border-black/5 shadow-inner">
                                                                 {entry.photoPath ? (
-                                                                    <Image src={entry.photoPath} alt="Photo" fill className="object-cover" />
+                                                                    <Image src={entry.photoPath} alt="Entry" fill className="object-cover group-hover:scale-110 transition-transform duration-500" />
                                                                 ) : (
                                                                     <div className="w-full h-full flex items-center justify-center text-black/10">
-                                                                        <ImageIcon size={24} />
+                                                                        <Camera size={32} />
                                                                     </div>
                                                                 )}
                                                             </div>
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <p className="font-black text-xl uppercase tracking-tighter text-black">{entry.plate}</p>
-                                                            <p className="text-[10px] font-black uppercase text-black/20 tracking-widest mt-1">
-                                                                {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '---'}
-                                                            </p>
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="flex flex-col">
-                                                                <span className="text-xs font-bold text-black whitespace-nowrap">
-                                                                    {entry.timestamp ? new Date(entry.timestamp).toLocaleDateString() : "---"}
-                                                                </span>
-                                                                <span className="text-[10px] font-black text-black/40">
-                                                                    {entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "---"}
-                                                                </span>
+                                                            <div>
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <span className="px-3 py-1 bg-black text-white rounded-lg text-lg font-black uppercase tracking-widest font-mono shadow-lg shadow-black/20">
+                                                                        {entry.plate || "S/N"}
+                                                                    </span>
+                                                                    {entry.type === "ALERTA" ? (
+                                                                        <Badge className="bg-red-600 text-white font-black animate-pulse border-none text-[10px]">ALERTA</Badge>
+                                                                    ) : (
+                                                                        <Badge className={cn("font-black text-[10px] border-none", entry.type === "ENTRY" ? "bg-indigo-600 text-white" : "bg-orange-600 text-white")}>
+                                                                            {entry.type === "ENTRY" ? "INGRESO" : "SALIDA"}
+                                                                        </Badge>
+                                                                    )}
+                                                                </div>
+                                                                <p className="text-xs font-black text-black/40 uppercase tracking-widest">
+                                                                    {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {new Date(entry.timestamp).toLocaleDateString()}
+                                                                </p>
                                                             </div>
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="flex flex-col">
-                                                                <span className="text-xs font-bold text-black uppercase">{entry.name || "Identidad Reservada"}</span>
-                                                                <span className="text-[9px] text-black/40 font-bold">{entry.dni || "Sin ID"}</span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <span className="text-xs font-black text-[#B20D30] uppercase">{entry.destination || "---"}</span>
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            {(() => {
-                                                                const isPanic = entry.type === "ALERTA" && entry.plate === "PÁNICO";
-                                                                const isSos = entry.type === "ALERTA" && entry.plate === "SOS";
-                                                                const isDeactivation = entry.type === "ALERTA" && (entry.plate === "NORMAL" || entry.plate === "Manual");
+                                                        </div>
+                                                    </div>
 
-                                                                if (isPanic) return (
-                                                                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter bg-red-600 text-white animate-pulse shadow-lg shadow-red-600/20">
-                                                                        <Siren size={10} /> Pánico
-                                                                    </div>
-                                                                );
-                                                                if (isSos) return (
-                                                                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter bg-orange-500 text-white shadow-lg shadow-orange-500/20">
-                                                                        <ShieldAlert size={10} /> S.O.S
-                                                                    </div>
-                                                                );
-                                                                if (isDeactivation) return (
-                                                                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter bg-slate-100 text-slate-500 border border-slate-200">
-                                                                        <CheckCircle2 size={10} /> Manual
-                                                                    </div>
-                                                                );
-
-                                                                return (
-                                                                    <div className={cn(
-                                                                        "inline-flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter shadow-sm",
-                                                                        entry.type === "ENTRY" ? "bg-blue-50 text-blue-600" : "bg-orange-50 text-orange-600"
-                                                                    )}>
-                                                                        {entry.type === "ENTRY" ? <LogIn size={10} /> : <LogOut size={10} />}
-                                                                        {entry.type === "ENTRY" ? "Ingreso Manual" : "Salida Manual"}
-                                                                    </div>
-                                                                );
-                                                            })()}
-                                                        </td>
-                                                        <td className="px-6 py-4 text-right">
-                                                            <div className="flex items-center justify-end gap-2">
-                                                                {entry.audioPath && (
-                                                                    <button onClick={(e) => { e.stopPropagation(); new Audio(entry.audioPath).play(); }} className="w-10 h-10 rounded-xl hover:bg-blue-50 text-black/20 hover:text-blue-500 transition-all flex items-center justify-center">
-                                                                        <Volume2 size={18} />
-                                                                    </button>
-                                                                )}
-                                                                <button onClick={(e) => { e.stopPropagation(); handleDelete(entry.id); }} className="w-10 h-10 rounded-xl hover:bg-red-50 text-black/20 hover:text-[#B20D30] transition-all flex items-center justify-center">
-                                                                    <Trash2 size={18} />
-                                                                </button>
+                                                    <div className="space-y-4">
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <div className="bg-slate-50 rounded-2xl p-3 border border-slate-100">
+                                                                <p className="text-[10px] font-black text-black/30 uppercase tracking-widest mb-1 flex items-center gap-1.5"><UserIcon size={12} /> Sujeto</p>
+                                                                <p className="text-xs font-black text-black truncate uppercase">{entry.name || "Reservado"}</p>
+                                                                <p className="text-[10px] font-bold text-black/40 uppercase">{entry.dni || "N/A"}</p>
                                                             </div>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                                            <div className="bg-slate-50 rounded-2xl p-3 border border-slate-100">
+                                                                <p className="text-[10px] font-black text-black/30 uppercase tracking-widest mb-1 flex items-center gap-1.5"><Home size={12} /> Destino</p>
+                                                                <p className="text-xs font-black text-[#B20D30] truncate uppercase">{entry.destination || "---"}</p>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="bg-slate-50 rounded-2xl p-3 border border-slate-100 flex items-center justify-between">
+                                                            <div className="flex flex-col">
+                                                                <p className="text-[10px] font-black text-black/30 uppercase tracking-widest mb-1 flex items-center gap-1.5"><Camera size={12} /> Cámara / Origen</p>
+                                                                <p className="text-xs font-black text-black uppercase truncate">
+                                                                    {entry.accessEvent?.device?.name || "Registro Manual"}
+                                                                </p>
+                                                            </div>
+                                                            {entry.audioPath && (
+                                                                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                                                                    <Volume2 size={16} />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-50">
+                                                        <span className="text-[8px] font-black text-black/20 uppercase tracking-[0.3em]">Operador: {entry.guardName || "---"}</span>
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); handleDelete(entry.id); }}
+                                                                className="w-10 h-10 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 transition-all flex items-center justify-center"
+                                                            >
+                                                                <Trash2 size={16} /> Eliminar Registro
+                                                            </button>
+                                                            <ChevronRight size={16} className="text-black/10 group-hover:text-black/30 group-hover:translate-x-1 transition-all" />
+                                                        </div>
+                                                    </div>
+                                                </motion.button>
+                                            ))}
+                                        </div>
 
                                         {/* Infinite Scroll Load More Trigger */}
                                         <div ref={loadMoreRef} className="py-20 flex justify-center w-full">
@@ -2525,6 +3060,7 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                         </div>
 
                         <BottomTab icon={customIcons.lpr ? <Image src={customIcons.lpr} width={20} height={20} className="object-contain md:w-6 md:h-6" alt="Icon" /> : <Car size={20} className="md:w-6 md:h-6" />} active={activeTab === "lpr"} onClick={() => handleTabChange("lpr")} label="LPR" alertActive={isAlertMode} />
+                        <BottomTab icon={<ScanFace size={20} className="md:w-6 md:h-6" />} active={activeTab === "face"} onClick={() => handleTabChange("face")} label="Rostro" alertActive={isAlertMode} />
                         <BottomTab icon={customIcons.map ? <Image src={customIcons.map} width={20} height={20} className="object-contain md:w-6 md:h-6" alt="Icon" /> : <MapIcon size={20} className="md:w-6 md:h-6" />} active={activeTab === "map"} onClick={() => handleTabChange("map")} label="Mapa" alertActive={isAlertMode} />
                     </nav>
 

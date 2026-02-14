@@ -11,7 +11,7 @@ import {
     Building2, FileText, UserCheck, Briefcase, Plus,
     Flame, Home, Clock, ImageIcon, Loader2,
     Car, Bike, Smartphone, ChevronRight, Square,
-    ShieldAlert, UserX, CarFront, Filter, RefreshCw
+    ShieldAlert, UserX, CarFront, Filter, RefreshCw, AlertTriangle
 } from "lucide-react";
 import { io } from "socket.io-client";
 import { getSocketUrl } from "@/lib/socket-config";
@@ -381,8 +381,8 @@ export default function GuardIphoneConsole({
         }
     };
 
-    const handleOCRDetected = (detectedPlate: string, imageBlob: Blob) => {
-        setPlate(detectedPlate);
+    const handleOCRDetected = (detectedPlate: string | null, imageBlob: Blob) => {
+        if (detectedPlate !== null) setPlate(detectedPlate);
 
         // Convert blob to data URL for preview and existing logic
         const reader = new FileReader();
@@ -860,64 +860,51 @@ export default function GuardIphoneConsole({
                                     );
 
                                     return filteredEntries.map((entry: any) => (
-                                        <div
+                                        <button
                                             key={entry.id}
                                             onClick={() => setSelectedEntry(entry)}
-                                            className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex gap-4 active:scale-[0.98] transition-all"
+                                            className="bg-white p-5 rounded-[2rem] border-2 border-slate-100 shadow-sm flex flex-col gap-4 active:scale-[0.98] transition-all text-left"
                                         >
-                                            <div className="w-16 h-16 rounded-xl bg-slate-100 shrink-0 overflow-hidden relative">
-                                                {entry.photoPath ? (
-                                                    <Image src={entry.photoPath} alt="Entry" fill className="object-cover" />
-                                                ) : (
-                                                    <div className="w-full h-full flex items-center justify-center text-slate-300">
-                                                        <ImageIcon size={24} />
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-16 h-16 rounded-2xl bg-slate-50 shrink-0 overflow-hidden relative border border-slate-200">
+                                                    {entry.photoPath ? (
+                                                        <Image src={entry.photoPath} alt="Entry" fill className="object-cover" />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center text-slate-200">
+                                                            <ImageIcon size={24} />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 mb-0.5">
+                                                        <span className="px-2 py-0.5 bg-slate-900 shadow-lg text-white rounded-md text-sm font-black uppercase tracking-tighter">{entry.plate || "S/N"}</span>
+                                                        <span className={cn(
+                                                            "px-2 py-0.5 rounded-md text-[8px] font-black uppercase",
+                                                            entry.type === "ENTRY" ? "bg-blue-50 text-blue-600" : entry.type === "ALERTA" ? "bg-red-50 text-red-600 animate-pulse" : "bg-orange-50 text-orange-600"
+                                                        )}>
+                                                            {entry.type === "ENTRY" ? "Ingreso" : entry.type === "ALERTA" ? "Alerta" : "Egreso"}
+                                                        </span>
                                                     </div>
-                                                )}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex justify-between items-start">
-                                                    <h3 className="font-black text-slate-900 uppercase truncate">{entry.plate}</h3>
-                                                    <span className="text-[9px] font-black text-slate-400 uppercase">
-                                                        {entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '---'}
-                                                    </span>
-                                                </div>
-                                                <p className="text-xs font-bold text-slate-500 truncate">{entry.name || "Sin nombre"}</p>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    {(() => {
-                                                        const isPanic = entry.type === "ALERTA" && entry.plate === "PÁNICO";
-                                                        const isSos = entry.type === "ALERTA" && entry.plate === "SOS";
-                                                        const isDeactivation = entry.type === "ALERTA" && (entry.plate === "NORMAL" || entry.plate === "Manual");
-
-                                                        if (isPanic) return (
-                                                            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-red-600 text-white text-[8px] font-black uppercase animate-pulse">
-                                                                <Siren size={10} /> Pánico
-                                                            </div>
-                                                        );
-                                                        if (isSos) return (
-                                                            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-orange-500 text-white text-[8px] font-black uppercase">
-                                                                <ShieldAlert size={10} /> S.O.S
-                                                            </div>
-                                                        );
-                                                        if (isDeactivation) return (
-                                                            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[8px] font-black uppercase">
-                                                                <CheckCircle2 size={10} /> Manual
-                                                            </div>
-                                                        );
-
-                                                        return (
-                                                            <div className={cn(
-                                                                "flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[8px] font-black uppercase",
-                                                                entry.type === "ENTRY" ? "bg-blue-50 text-blue-600" : "bg-orange-50 text-orange-600"
-                                                            )}>
-                                                                {entry.type === "ENTRY" ? <LogIn size={10} /> : <LogOut size={10} />}
-                                                                {entry.type === "ENTRY" ? "Ingreso Manual" : "Salida Manual"}
-                                                            </div>
-                                                        );
-                                                    })()}
-                                                    <p className="text-[10px] font-black text-slate-900 uppercase truncate">{entry.destination}</p>
+                                                    <p className="text-xs font-black text-slate-800 truncate uppercase">{entry.name || "Reservado"}</p>
+                                                    <p className="text-[9px] font-bold text-slate-400">
+                                                        {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {new Date(entry.timestamp).toLocaleDateString()}
+                                                    </p>
                                                 </div>
                                             </div>
-                                        </div>
+
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div className="bg-slate-50 rounded-xl p-2 border border-slate-100 flex flex-col justify-center">
+                                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Destino</p>
+                                                    <p className="text-[10px] font-black text-[#B20D30] uppercase truncate">{entry.destination || "---"}</p>
+                                                </div>
+                                                <div className="bg-slate-50 rounded-xl p-2 border border-slate-100 flex flex-col justify-center">
+                                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Cámara / Origen</p>
+                                                    <p className="text-[10px] font-black text-slate-800 uppercase truncate">
+                                                        {entry.accessEvent?.device?.name || "Registro Manual"}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </button>
                                     ));
                                 })()}
                             </div>
@@ -1104,15 +1091,10 @@ export default function GuardIphoneConsole({
                             <div className="absolute top-20 right-4 flex flex-col gap-3">
                                 <button
                                     onClick={() => { setShowReportModal(true); playTactileSound(); }}
-                                    className="w-14 h-14 rounded-2xl bg-orange-600 text-white shadow-2xl flex items-center justify-center active:scale-95 transition-all"
+                                    className="w-16 h-16 rounded-[2rem] bg-[#B20D30] text-white shadow-2xl flex flex-col items-center justify-center active:scale-95 transition-all border-4 border-white"
                                 >
-                                    <UserX size={24} />
-                                </button>
-                                <button
-                                    onClick={() => { setShowReportModal(true); playTactileSound(); }}
-                                    className="w-14 h-14 rounded-2xl bg-red-600 text-white shadow-2xl flex items-center justify-center active:scale-95 transition-all"
-                                >
-                                    <ShieldAlert size={24} />
+                                    <AlertTriangle size={24} />
+                                    <span className="text-[7px] font-black uppercase tracking-tighter mt-0.5">Reportar</span>
                                 </button>
                             </div>
                         </motion.div>

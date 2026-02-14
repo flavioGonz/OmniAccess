@@ -63,6 +63,7 @@ model User {
   accessTags    String[]      @default([])
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+  observations  String?
   accessEvents  AccessEvent[]
   credentials   Credential[]
   parkingSlot   ParkingSlot?  @relation(fields: [parkingSlotId], references: [id])
@@ -103,6 +104,16 @@ model Schedule {
   accessGroup   AccessGroup @relation(fields: [accessGroupId], references: [id], onDelete: Cascade)
 }
 
+model FloorPlan {
+  id        String   @id @default(cuid())
+  name      String
+  imagePath String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  devices   Device[]
+}
+
 model Device {
   id              String           @id @default(cuid())
   name            String
@@ -121,12 +132,19 @@ model Device {
   password        String?
   lastOnlinePull  DateTime?
   lastOnlinePush  DateTime?
+  
+  // Map positioning for Multi-Floor support
+  floorPlanId     String?
+  mapX            Float?
+  mapY            Float?
+  
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   accessEvents    AccessEvent[]
   callEvents      CallEvent[]
   hardwareMirrors HardwareMirror[]
   accessGroups    AccessGroup[]    @relation("AccessGroupToDevice")
+  floorPlan       FloorPlan?       @relation(fields: [floorPlanId], references: [id])
 }
 
 model AccessEvent {
@@ -269,6 +287,9 @@ enum UserRole {
   ADMIN
   PROVIDER
   TEMPORARY_VISITOR
+  BLACKLISTED
+  WHITELISTED
+  SECURITY
 }
 
 enum CredentialType {

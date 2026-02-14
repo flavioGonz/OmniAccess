@@ -920,11 +920,9 @@ const handleWebhook = async (req, res, logPrefix) => {
             console.log(`${logPrefix} 👤 [FACE] Event: ${eventType}, Name: '${personName}', Sim: ${similarity}%`);
 
             // --- FILTER: Only Store Matches ---
+            // Removed filter to allow capturing and displaying all faces including unknown subjects
             if (!personName || personName === "msg.unknown" || personName === "unknown" || personName === "") {
-                console.log(`${logPrefix} 🚫 [FILTER] Ignored non-matched face (Name: ${personName || 'Empty'}).`);
-                res.writeHead(200);
-                res.end(JSON.stringify({ status: "ignored", reason: "No match" }));
-                return;
+                console.log(`${logPrefix} 👤 [FACE] Unknown subject detected. Processing as INTRUSO.`);
             }
 
             // Debug Data Enrichment
@@ -956,19 +954,16 @@ const handleWebhook = async (req, res, logPrefix) => {
             if (images.length > 0) {
                 // Improved Image Classification based on Field Name
                 // Hikvision usually sends 'FaceImage' and 'BackgroundImage'
-                let fullImg = images.find(img => img.name && (img.name.toLowerCase().includes('background') || img.name.toLowerCase().includes('scene')));
-                let faceImg = images.find(img => img.name && (img.name.toLowerCase() === 'faceimage' || img.name.toLowerCase() === 'facecaptured' || img.name.toLowerCase().includes('face')));
+                let fullImg = images.find(img => img.name && (img.name.toLowerCase().includes('background') || img.name.toLowerCase().includes('scene') || img.name.toLowerCase().includes('full')));
+                let faceImg = images.find(img => img.name && (img.name.toLowerCase().includes('face') || img.name.toLowerCase().includes('tracking') || img.name.toLowerCase().includes('capture') || img.name.toLowerCase().includes('snap')));
 
                 // Fallback: Sort by size (Largest = Full, Smallest = Face)
-                if (!fullImg) {
+                if (!fullImg || !faceImg) {
                     images.sort((a, b) => b.size - a.size);
-                    fullImg = images[0];
-                }
-
-                // If we found a full image by size, and still need a face image, pick the smallest one (provided it's not the same as full)
-                if (!faceImg && images.length > 1) {
-                    images.sort((a, b) => a.size - b.size); // Smallest first
-                    if (images[0] !== fullImg) faceImg = images[0];
+                    if (!fullImg) fullImg = images[0];
+                    if (!faceImg && images.length > 1) {
+                        faceImg = images.find(img => img !== fullImg) || images[1];
+                    }
                 }
 
                 try {
@@ -1029,11 +1024,12 @@ const handleWebhook = async (req, res, logPrefix) => {
                     accessType: 'FACE',
                     direction: device?.direction || "ENTRY",
                     decision: finalDecision, // Dynamic Decision
-                    snapshotPath: fullImagePath, // Store FULL image as main snapshot
+                    snapshotPath: faceImagePath || fullImagePath, // Store FACE crop as main snapshot if available
+                    imagePath: fullImagePath || faceImagePath, // Store FULL scene as context
                     plateDetected: null,
                     plateNumber: null,
                     // Store extra details including Face Crop Path
-                    details: `Rostro: ${personName}, ${faceImagePath ? `FaceImage: ${faceImagePath}, ` : ''}Similitud: ${similarity}% (Modo: ${mode})`
+                    details: `Modo: Rostro, Persona: ${personName || "Desconocido"}, CamMatch: ${similarity}% (Local: ${mode})`
                 }
             });
 

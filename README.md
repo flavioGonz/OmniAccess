@@ -16,10 +16,13 @@
 - **Gestión Avanzada**: Control de matrículas con paginación, búsqueda y filtros
 - **Importación Masiva**: Importa matrículas desde el hardware con deduplicación automática
 
-### 👤 Reconocimiento Facial
-- **Akuvox Integration**: Soporte para terminales Akuvox con reconocimiento facial
-- **Gestión de Rostros**: Carga y sincronización de fotos faciales
-- **Eventos en Tiempo Real**: Notificaciones instantáneas de accesos
+### 👤 Reconocimiento Facial & Neural Engine
+- **Akuvox & Hikvision**: Integración con terminales y cámaras para reconocimiento facial.
+- **Dashboard Facial Táctico**: Interfaz de alta precisión con mapa en vivo y popups de alerta.
+- **Buscador de Rostros**: Herramienta de búsqueda manual subiendo fotos de visitantes para verificación instantánea.
+- **Detección Neural**: Segundo motor de comparación facial para máxima seguridad y reducción de falsos positivos.
+- **Gestión de Planos**: Carga de planos JPG/PNG para ubicación geo-espacial de cámaras y eventos.
+- **Alertas en Tiempo Real**: Notificaciones visuales de sujetos en lista negra con popups tácticos.
 
 ### 🏢 Gestión de Residentes
 - **Usuarios y Unidades**: Sistema completo de gestión de residentes
@@ -27,11 +30,12 @@
 - **Vehículos**: Registro detallado de vehículos con marca, modelo y color
 - **Estacionamientos**: Asignación visual de espacios de parking
 
-### 📊 Dashboard en Tiempo Real
-- **Vista en 3 Columnas**: Entradas, Capturas Visuales y Salidas
-- **Filtros Avanzados**: Por tipo de acceso, decisión y dispositivo
-- **Evidencia Visual**: Capturas automáticas con overlay de información
-- **WebSocket Live**: Actualizaciones en tiempo real sin recargar
+### 📊 Dashboards en Tiempo Real
+- **Dashboard LPR**: Vista en 3 columnas (Entradas, Capturas, Salidas) para vehículos.
+- **Dashboard Facial Táctico**: Monitoreo de rostros con mini-capturas e identidad con scroll horizontal.
+- **Mapa Interactivo**: Ubicación de dispositivos y alertas visuales sobre planos de planta.
+- **Evidencia Visual**: Capturas automáticas con overlay de información de identidad y porcentaje de match.
+- **WebSocket Live**: Actualizaciones bidireccionales constantes para estados de conexión y eventos.
 
 ### 🔧 Soporte Multi-Dispositivo
 - **Hikvision**: Cámaras LPR y ANPR

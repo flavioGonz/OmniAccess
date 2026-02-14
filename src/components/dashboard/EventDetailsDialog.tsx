@@ -39,14 +39,17 @@ import { UserFormDialog } from "@/components/UserFormDialog";
 import { UserPlus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Unit, AccessGroup } from "@prisma/client";
+import { getImagePath } from "@/lib/image-path";
 
 interface EventDetailsDialogProps {
     event: any;
-    children: React.ReactNode;
+    children?: React.ReactNode;
     timeStatus?: { label: string; value: string; color: string } | null;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
 }
 
-export function EventDetailsDialog({ event, children, timeStatus }: EventDetailsDialogProps) {
+export function EventDetailsDialog({ event, children, timeStatus, open, onOpenChange }: EventDetailsDialogProps) {
     const router = useRouter();
     const [isEditing, setIsEditing] = useState(false);
     const [editedUser, setEditedUser] = useState(event.user?.name || "");
@@ -126,9 +129,7 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
 
     // Helper to get proper image URL from MinIO
     const getImageUrl = (path: string | null | undefined): string => {
-        if (!path) return "/placeholder-camera.jpg";
-        if (path.startsWith('http') || path.startsWith('/')) return path;
-        return `/api/files/${path}`;
+        return getImagePath(path) || "/placeholder-camera.jpg";
     };
 
     const meta = parseDetails(event.details);
@@ -150,7 +151,8 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
     }
 
     // Robust Mode Extraction (looking for "Modo:" or "Modo")
-    if (meta.Similitud && (meta.Similitud.includes('Modo') || meta.Similitud.includes('whitelist') || meta.Similitud.includes('blacklist'))) {
+    if (event.user?.role === 'BLACKLISTED') detectedMode = 'Lista Negra - PELIGRO';
+    else if (meta.Similitud && (meta.Similitud.includes('Modo') || meta.Similitud.includes('whitelist') || meta.Similitud.includes('blacklist'))) {
         const lower = meta.Similitud.toLowerCase();
         if (lower.includes('whitelist') || lower.includes('lista blanca')) detectedMode = 'Lista Blanca';
         else if (lower.includes('blacklist') || lower.includes('lista negra')) detectedMode = 'Lista Negra';
@@ -188,11 +190,21 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
         }
     };
 
+    // Sync internal state with external if provided
+    useEffect(() => {
+        if (open !== undefined) {
+            setIsOpen(open);
+        }
+    }, [open]);
+
+    const handleOpenChange = (newOpen: boolean) => {
+        setIsOpen(newOpen);
+        if (onOpenChange) onOpenChange(newOpen);
+    };
+
     return (
-        <Dialog onOpenChange={setIsOpen}>
-            <DialogTrigger asChild>
-                {children}
-            </DialogTrigger>
+        <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+            {children && <DialogTrigger asChild>{children}</DialogTrigger>}
             <DialogContent className="p-0 bg-neutral-950 border border-neutral-800 overflow-hidden rounded-2xl shadow-[0_20px_80px_rgba(0,0,0,0.9)] w-[95vw] max-w-5xl" aria-describedby="event-description">
                 <DialogTitle className="sr-only">Ficha de Evento de Acceso</DialogTitle>
                 <p id="event-description" className="sr-only">Detalles del evento</p>
@@ -285,7 +297,10 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
                                             {event.user?.name || meta.Rostro || "Desconocido"}
                                         </h1>
                                         {detectedMode !== 'Estándar' && (
-                                            <div className="inline-block px-3 py-1.5 rounded-lg bg-white/90 backdrop-blur-md border border-white/30 text-xs font-black text-black uppercase tracking-widest shadow-lg">
+                                            <div className={cn(
+                                                "inline-block px-3 py-1.5 rounded-lg backdrop-blur-md border text-xs font-black uppercase tracking-widest shadow-lg",
+                                                detectedMode.includes('Negra') ? "bg-red-600 border-red-400 text-white" : "bg-white/90 border-white/30 text-black"
+                                            )}>
                                                 {detectedMode}
                                             </div>
                                         )}
@@ -537,7 +552,7 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
                                                 <img
                                                     src={userImageUrl || getImageUrl(meta.FaceImage) || getImageUrl(event.snapshotPath)}
                                                     alt="Usuario"
-                                                    className="w-full h-full object-cover"
+                                                    className={cn("w-full h-full object-cover", event.user?.role === 'BLACKLISTED' && "sepia-[0.5] hue-rotate-[-50deg]")}
                                                 />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center"><UserIcon size={32} className="text-neutral-600" /></div>
@@ -557,8 +572,8 @@ export function EventDetailsDialog({ event, children, timeStatus }: EventDetails
                                                         <p className="text-sm font-bold text-blue-400 uppercase truncate">{editedUnit || event.user?.unit?.name || 'Externo'}</p>
                                                     </div>
                                                     <div className="flex gap-2">
-                                                        <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[9px]">
-                                                            {event.user ? "VERIFICADO" : "DETECTADO"}
+                                                        <Badge className={cn("text-[9px]", event.user?.role === 'BLACKLISTED' ? "bg-red-600 text-white" : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20")}>
+                                                            {event.user?.role === 'BLACKLISTED' ? "LISTA NEGRA" : event.user ? "VERIFICADO" : "DETECTADO"}
                                                         </Badge>
                                                     </div>
                                                 </>

@@ -54,26 +54,40 @@ export async function POST(req: NextRequest) {
         let xmlData: any = null;
 
         // Handle multipart/form-data (como lo hace el PHP)
+        let faceImage: File | null = null;
+        let sceneImage: File | null = null;
+
         if (contentType.includes("multipart/form-data")) {
             const formData = await req.formData();
-            logDetails += "MULTIPART_RECEIVED\\n";
+            logDetails += "MULTIPART_RECEIVED\n";
 
             for (const [key, value] of formData.entries()) {
                 if (value instanceof File) {
-                    const fileContent = await value.text();
-
-                    // Check if it's XML
-                    if (value.type.includes("xml") || fileContent.trim().startsWith("<")) {
-                        xmlContent = fileContent;
-                        logDetails += `XML_FILE_FOUND: ${key} \\n`;
+                    // Check if it's XML (only read it once)
+                    if (value.type.includes("xml") && !xmlContent) {
+                        xmlContent = await value.text();
+                        logDetails += `XML_FILE_FOUND: ${key} \n`;
                     }
                     // Check if it's an image
                     else if (value.type.includes("image/")) {
-                        imageFile = value;
-                        logDetails += `IMAGE_FILE_FOUND: ${key}, size: ${value.size} \\n`;
+                        const lowKey = key.toLowerCase();
+                        // Hikvision uses various names for the face crop: 'faceTracking', 'faceImage', 'capture'
+                        if (lowKey.includes('face') || lowKey.includes('tracking') || lowKey.includes('capture')) {
+                            faceImage = value;
+                            logDetails += `FACE_IMAGE_FOUND: ${key} \n`;
+                        } else if (lowKey.includes('scene') || lowKey.includes('detect') || lowKey.includes('background')) {
+                            sceneImage = value;
+                            logDetails += `SCENE_IMAGE_FOUND: ${key} \n`;
+                        } else {
+                            // Fallback logic
+                            if (!faceImage) faceImage = value;
+                            else if (!sceneImage) sceneImage = value;
+                        }
                     }
                 }
             }
+            // Use face image if found, otherwise scene image
+            imageFile = faceImage || sceneImage;
         }
 
         if (!xmlContent) {
@@ -131,6 +145,13 @@ export async function POST(req: NextRequest) {
             idType = 'FACE';
         }
 
+        // Extract Camera Similarity if available
+        let cameraSimilarity = 0;
+        const acEvent = eventNotification.AccessControlEvent || {};
+        const faceMatch = acEvent.FaceMatchingInfo || acEvent.faceMatchingInfo || {};
+        cameraSimilarity = parseFloat(faceMatch.similarity || acEvent.faceSimilarity || acEvent.similarity || 0);
+        if (cameraSimilarity > 0) logDetails += `CAMERA_SIMILARITY: ${cameraSimilarity} \n`;
+
         if (!identifier) {
             logDetails += `WEBHOOK_FAIL: No identifier (plate or face) found in XML. EventType: ${eventType}\\n`;
             console.error(`${logPrefix} ${logDetails} `);
@@ -165,31 +186,37 @@ export async function POST(req: NextRequest) {
         }
         debounceCache.set(debounceKey, now);
 
-        // Save Image (como el PHP)
+        // Save Images
         let relativeImagePath = "";
-        if (imageFile) {
+        let relativeSnapshotPath = "";
+
+        const folder = idType === 'PLATE' ? 'lpr' : 'face';
+        const devName = sanitizeName(device?.name);
+        const fDate = formatEventDate(eventTimestamp);
+        const direction = (device as any)?.direction === 'EXIT' ? 'salida' : 'entrada';
+
+        if (faceImage) {
             try {
-                const buffer = Buffer.from(await imageFile.arrayBuffer());
-                const folder = idType === 'PLATE' ? 'lpr' : 'face';
-
-                const devName = sanitizeName(device?.name);
-                const fDate = formatEventDate(eventTimestamp);
-
-                let filename = "";
-                if (idType === 'PLATE') {
-                    const direction = (device as any)?.direction === 'EXIT' ? 'salida' : 'entrada';
-                    filename = `hik-lpr-${devName}-${direction}-${fDate}-${eventId}.jpg`;
-                } else {
-                    const direction = (device as any)?.direction === 'EXIT' ? 'salida' : 'entrada';
-                    filename = `hik-face-${devName}-${direction}-${fDate}-${eventId}.jpg`;
-                }
-
-                relativeImagePath = await uploadToS3(buffer, filename, imageFile.type || "image/jpeg", folder);
-                logDetails += `IMAGE_SAVED_S3: ${relativeImagePath} \\n`;
-            } catch (imgError: any) {
-                logDetails += `IMAGE_S3_UPLOAD_ERROR: ${imgError.message} \\n`;
-            }
+                const buffer = Buffer.from(await faceImage.arrayBuffer());
+                const filename = `hik-${idType.toLowerCase()}-face-${devName}-${direction}-${fDate}-${eventId}.jpg`;
+                relativeSnapshotPath = await uploadToS3(buffer, filename, faceImage.type || "image/jpeg", folder);
+                logDetails += `FACE_IMAGE_SAVED: ${relativeSnapshotPath} \n`;
+            } catch (e: any) { logDetails += `FACE_UPLOAD_ERR: ${e.message} \n`; }
         }
+
+        if (sceneImage) {
+            try {
+                const buffer = Buffer.from(await sceneImage.arrayBuffer());
+                const filename = `hik-${idType.toLowerCase()}-scene-${devName}-${direction}-${fDate}-${eventId}.jpg`;
+                relativeImagePath = await uploadToS3(buffer, filename, sceneImage.type || "image/jpeg", folder);
+                logDetails += `SCENE_IMAGE_SAVED: ${relativeImagePath} \n`;
+            } catch (e: any) { logDetails += `SCENE_UPLOAD_ERR: ${e.message} \n`; }
+        }
+
+        // Final paths for DB
+        const finalSnapshot = relativeSnapshotPath || relativeImagePath;
+        const finalScene = relativeImagePath || relativeSnapshotPath;
+
 
         // Find Credential & User
         let credential = null;
@@ -272,7 +299,7 @@ export async function POST(req: NextRequest) {
             detailsString = `Marca: ${brandName}, Color: ${vehicleInfo.color || "N/A"}, Tipo: ${anprData.vehicleType || "Vehículo"}`;
         } else {
             const acEvent = eventNotification.AccessControlEvent || {};
-            detailsString = `Modo: ${acEvent.currentVerifyMode || "Rostro"}, Persona: ${personName || "N/A"}`;
+            detailsString = `Modo: ${acEvent.currentVerifyMode || "Rostro"}, Persona: ${personName || "N/A"}${cameraSimilarity > 0 ? `, CamMatch: ${cameraSimilarity}%` : ""}`;
         }
 
         logDetails += `METADATA: ${detailsString} \n`;
@@ -299,7 +326,8 @@ export async function POST(req: NextRequest) {
                 credentialId: (credential as any)?.id,
                 userId: credential?.userId,
                 deviceId: device.id,
-                snapshotPath: relativeImagePath,
+                snapshotPath: finalSnapshot,
+                imagePath: finalScene,
                 decision,
                 plateDetected: idType === 'PLATE' ? identifier : null,
                 details: detailsString,

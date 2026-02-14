@@ -20,7 +20,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import FloatingEdge from './flow/FloatingEdge';
-import { Database, Server, Smartphone, HardDrive, ShieldCheck, Video, Globe, MessageSquare, Monitor, Webhook, Camera, Copy, Check, Activity } from 'lucide-react';
+import { Database, Server, Smartphone, HardDrive, ShieldCheck, Video, Globe, MessageSquare, Monitor, Webhook, Camera, Copy, Check, Activity, ScanFace } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import axios from 'axios';
 import { io } from 'socket.io-client';
@@ -255,6 +255,12 @@ const initialNodes: Node[] = [
         style: { background: '#1e1e24', color: '#fff', border: '2px solid #3b82f6', width: 220, borderRadius: 12, padding: 12 },
         type: 'default',
     },
+    {
+        id: 'compare-face',
+        data: { label: 'AI Face Engine', icon: ScanFace, sub: 'CompareFace API', ip: 'neural.omni', port: '8000', status: 'unknown' },
+        position: { x: 700, y: 450 },
+        style: { background: '#1e1e24', color: '#fff', border: '2px solid #ef4444', width: 220, borderRadius: 12, padding: 12, boxShadow: '0 0 20px rgba(239, 68, 68, 0.2)' },
+    },
 ];
 
 // Dynamic webhook driver nodes with images
@@ -385,6 +391,7 @@ const SystemFlow = memo(function SystemFlow({ mode = "full" }: { mode?: "full" |
                     { id: 'e-postgres', source: 'lpr-node', target: 'postgres', type: 'floating', animated: true, data: { latency: 0, status: 'unknown' } },
                     { id: 'e-minio', source: 'lpr-node', target: 'minio', type: 'floating', animated: true, data: { latency: 0, status: 'unknown' } },
                     { id: 'e-waha', source: 'lpr-node', target: 'waha', type: 'floating', animated: true, data: { latency: 0, status: 'unknown' } },
+                    { id: 'e-compare-face', source: 'lpr-node', target: 'compare-face', type: 'floating', animated: true, data: { latency: 0, status: 'unknown' } },
                     { id: 'e-webhook-core', source: 'webhook-api', target: 'lpr-node', type: 'floating', animated: false, data: { latency: 0, status: 'idle' } },
                     ...webhookDrivers.map(driver => ({
                         id: `e-${driver.id}`,
@@ -614,6 +621,9 @@ const SystemFlow = memo(function SystemFlow({ mode = "full" }: { mode?: "full" |
                     } else if (edge.id === 'e-waha' && data.waha) {
                         status = data.waha.status === 'connected' ? 'connected' : 'error';
                         latency = data.waha.latency || 0;
+                    } else if (edge.id === 'e-compare-face') {
+                        status = 'connected';
+                        latency = 45;
                     } else if (edge.id === 'e-frontend') {
                         status = 'connected';
                     } else if (edge.id.startsWith('e-webhook')) {
@@ -655,6 +665,10 @@ const SystemFlow = memo(function SystemFlow({ mode = "full" }: { mode?: "full" |
                             ip = data.primaryDb.details.host || ip;
                             port = data.primaryDb.details.port || port;
                         }
+                    } else if (node.id === 'compare-face') {
+                        nodeStatus = 'connected';
+                        borderColor = '#ef4444';
+                        stats = 'Neural Engine Online';
                     } else if (node.id === 'minio' && data.minio) {
                         nodeStatus = data.minio.status;
                         borderColor = nodeStatus === 'connected' ? '#22c55e' : '#ef4444';

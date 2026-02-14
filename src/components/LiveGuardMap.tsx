@@ -205,12 +205,14 @@ function MissionMarker({ mission, onAlertClick, myLocation, guards, socketId }: 
 
     useEffect(() => {
         if (mission.status === 'ACCEPTED' && finalResponderLoc) {
+            console.log(`🗺️ Routing mission ${mission.id}: status=${mission.status}, finalResponderLoc=`, finalResponderLoc);
             // OSRM Public Demo for Prototype
             const url = `https://router.project-osrm.org/route/v1/driving/${finalResponderLoc.lng},${finalResponderLoc.lat};${mission.lng},${mission.lat}?overview=full&geometries=geojson`;
 
             fetch(url)
                 .then(res => res.json())
                 .then(data => {
+                    console.log(`✅ OSRM Data for ${mission.id}:`, data);
                     if (data.routes && data.routes.length > 0) {
                         const route = data.routes[0];
                         setMissionStats({
@@ -220,6 +222,8 @@ function MissionMarker({ mission, onAlertClick, myLocation, guards, socketId }: 
                         // GeoJSON uses [lng, lat], Leaflet uses [lat, lng]
                         const coords = route.geometry.coordinates.map((c: any) => [c[1], c[0]]);
                         setRouteCoords(coords);
+                    } else {
+                        console.warn(`⚠️ No routes found for ${mission.id}`);
                     }
                 })
                 .catch(err => console.error("OSRM Error:", err));

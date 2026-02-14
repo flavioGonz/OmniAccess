@@ -690,3 +690,54 @@ export async function syncPlatesToAllDevices() {
         return { success: false, message: error.message };
     }
 }
+
+export async function getFaceDevices() {
+    try {
+        const devices = await prisma.device.findMany({
+            where: {
+                OR: [
+                    { deviceType: 'FACE_TERMINAL' },
+                    { deviceType: 'LPR_CAMERA' }
+                ]
+            }
+        });
+        return devices;
+    } catch (error) {
+        console.error("Error fetching face devices:", error);
+        return [];
+    }
+}
+
+export async function updateDevicePosition(id: string, x: number, y: number, floorPlanId?: string) {
+    try {
+        await prisma.device.update({
+            where: { id },
+            data: {
+                mapX: x,
+                mapY: y,
+                floorPlanId: floorPlanId || undefined
+            }
+        });
+        return { success: true };
+    } catch (error) {
+        console.error("Error updating device position:", error);
+        return { success: false };
+    }
+}
+
+export async function deleteDevicePosition(id: string) {
+    try {
+        await prisma.device.update({
+            where: { id },
+            data: {
+                mapX: null,
+                mapY: null,
+                floorPlanId: null
+            }
+        });
+        return { success: true };
+    } catch (error) {
+        console.error("Error deleting device position:", error);
+        return { success: false };
+    }
+}

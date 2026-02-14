@@ -10,11 +10,24 @@ export async function getAccessEvents(options?: {
     type?: "PLATE" | "FACE" | "TAG" | "ALL",
     direction?: "ENTRY" | "EXIT" | "ALL",
     unit?: string,
+    userId?: string,
+    name?: string,
     from?: Date,
     to?: Date,
     omitEnrichment?: boolean
 }) {
     const whereClause: any = {};
+
+    if (options?.userId) {
+        whereClause.userId = options.userId;
+    }
+
+    if (options?.name) {
+        whereClause.OR = [
+            { user: { name: { contains: options.name, mode: 'insensitive' } } },
+            { bitacora: { name: { contains: options.name, mode: 'insensitive' } } }
+        ];
+    }
 
     if (options?.decision && options.decision !== "ALL") {
         whereClause.decision = options.decision;
@@ -38,12 +51,13 @@ export async function getAccessEvents(options?: {
 
     if (options?.search) {
         const search = options.search.toLowerCase();
-        // search logic (plate OR user name OR device name OR unit name)
+        // search logic (plate OR user name OR device name OR unit name OR details for FaceID)
         whereClause.OR = [
             { plateDetected: { contains: search, mode: 'insensitive' } },
             { user: { name: { contains: search, mode: 'insensitive' } } },
             { user: { unit: { name: { contains: search, mode: 'insensitive' } } } },
-            { device: { name: { contains: search, mode: 'insensitive' } } }
+            { device: { name: { contains: search, mode: 'insensitive' } } },
+            { details: { contains: search, mode: 'insensitive' } }
         ];
     }
 
@@ -150,24 +164,27 @@ export async function getAccessEvents(options?: {
     }
 }
 
-export async function getEventsCountToday() {
+export async function getEventsCountToday(type?: "PLATE" | "FACE" | "TAG") {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
+
+    const baseWhere: any = { timestamp: { gte: startOfDay } };
+    if (type) baseWhere.accessType = type;
 
     try {
         const [total, grants, denies] = await Promise.all([
             prisma.accessEvent.count({
-                where: { timestamp: { gte: startOfDay } }
+                where: baseWhere
             }),
             prisma.accessEvent.count({
                 where: {
-                    timestamp: { gte: startOfDay },
+                    ...baseWhere,
                     decision: "GRANT"
                 }
             }),
             prisma.accessEvent.count({
                 where: {
-                    timestamp: { gte: startOfDay },
+                    ...baseWhere,
                     decision: "DENY"
                 }
             })

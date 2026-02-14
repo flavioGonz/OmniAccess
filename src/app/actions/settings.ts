@@ -624,6 +624,38 @@ export async function testWahaConnection(url: string, apiKey?: string) {
     }
 }
 
+export async function testFaceEngineConnection(url: string, apiKey?: string) {
+    try {
+        const headers: any = {};
+        if (apiKey) headers['x-api-key'] = apiKey;
+
+        // CompareFace usually has a health or status endpoint, but let's try to reach the recognition API
+        // or just a simple ping to the base url
+        const response = await axios.get(`${url}/api/v1/recognition/subjects`, {
+            headers,
+            timeout: 5000
+        });
+
+        if (response.status === 200) {
+            return {
+                success: true,
+                message: "Neural Engine Online (Subjects fetched successfully)"
+            };
+        }
+        return { success: false, message: `Unexpected status code: ${response.status}` };
+    } catch (error: any) {
+        console.error("Face Engine Test Failed:", error.response?.data || error.message);
+        // Even if unauthorized, it means reachable
+        if (error.response?.status === 401) {
+            return { success: false, message: "Error: API Key inválida o no proporcionada" };
+        }
+        return {
+            success: false,
+            message: `Error de conexión: ${error.message}`
+        };
+    }
+}
+
 export async function getWahaSessions(url: string, apiKey?: string) {
     try {
         const headers: any = {};

@@ -393,6 +393,7 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                                             <SelectItem value="TEMPORARY_VISITOR">Visita Temporal</SelectItem>
                                                             <SelectItem value="PROVIDER">Proveedor</SelectItem>
                                                             <SelectItem value="STAFF">Staff</SelectItem>
+                                                            <SelectItem value="WHITELISTED">Lista Blanca</SelectItem>
                                                             <SelectItem value="ADMIN">Administrador</SelectItem>
                                                         </SelectContent>
                                                     </Select>

@@ -25,6 +25,7 @@ import {
     CreditCard,
     FileText,
     Monitor,
+    Camera,
     Shield,
     Siren,
     CheckCircle2,
@@ -163,6 +164,12 @@ export default function AdminLayout({
         };
     }, []);
 
+    // Special layout for Face Dashboard (Standalone Mode)
+    // Only for the main map view. Sub-pages (whitelist, blacklist, etc.) should use the standard admin layout.
+    if (pathname === "/admin/dashboard-face") {
+        return <>{children}</>;
+    }
+
     return (
         <div className="flex min-h-screen bg-gradient-to-br from-neutral-950 via-neutral-900 to-neutral-950 text-neutral-100 font-sans">
             {/* Sidebar */}
@@ -197,9 +204,10 @@ export default function AdminLayout({
                 </div>
 
                 <nav className="flex-1 p-3 space-y-1 overflow-y-auto custom-scrollbar">
-                    <SidebarItem icon={<LayoutDashboard size={18} />} label="Monitor en Vivo" href="/admin/dashboard" active={pathname === "/admin/dashboard"} collapsed={collapsed} />
-                    <SidebarItem icon={<History size={18} />} label="Historial de Acceso" href="/admin/history" active={pathname === "/admin/history"} collapsed={collapsed} />
-                    <SidebarItem icon={<Monitor size={18} />} label="Consola de Guardia" href="/admin/consolas" active={pathname === "/admin/consolas"} collapsed={collapsed} badge={activeConsolesCount} />
+                    <SidebarItem icon={<Monitor size={18} />} label="Monitor LPR" href="/admin/dashboard" active={pathname === "/admin/dashboard"} collapsed={collapsed} />
+                    <SidebarItem icon={<Camera size={18} />} label="Monitor Facial" href="/admin/dashboard-face" active={pathname === "/admin/dashboard-face"} collapsed={collapsed} />
+                    <SidebarItem icon={<History size={18} />} label="Historial Acceso" href="/admin/history" active={pathname === "/admin/history"} collapsed={collapsed} />
+                    <SidebarItem icon={<Monitor size={18} />} label="Consola Guardia" href="/admin/consolas" active={pathname === "/admin/consolas"} collapsed={collapsed} badge={activeConsolesCount} />
 
                     {!collapsed && <div className="pt-3 pb-1 px-3 text-[9px] font-semibold text-neutral-600 uppercase tracking-wider transition-opacity">Gestión</div>}
                     {collapsed && <div className="my-2 border-t border-neutral-800" />}
