@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 import Image from "next/image";
 import { getBlacklist, toggleBlacklist, registerFace, searchUsers } from "@/app/actions/users";
 import { searchByPhotoAction } from "@/app/actions/face-verify";
@@ -52,7 +52,7 @@ export default function FaceSecurityHub() {
             setBlacklist(data);
         } catch (e) {
             console.error(e);
-            toast.error("Error al cargar lista negra");
+            toast.error({ title: "Error al cargar lista negra" });
         } finally {
             setLoading(false);
         }
@@ -108,15 +108,15 @@ export default function FaceSecurityHub() {
                     setRecognizedSubject(result.match);
                     if (result.user) {
                         setSearchResults([result.user]);
-                        toast.success(`Identificación positiva: ${result.user.name}`);
+                        toast.success({ title: `Identificación positiva: ${result.user.name}` });
                     } else {
-                        toast.warning(`Sujeto reconocido como "${result.match.subject}" pero no registrado localmente.`);
+                        toast.warning({ title: `Sujeto reconocido como "${result.match.subject}" pero no registrado localmente.` });
                     }
                 } else {
-                    toast.error("Análisis biométrico fallido: No se detectaron rostros conocidos.");
+                    toast.error({ title: "Análisis biométrico fallido: No se detectaron rostros conocidos." });
                 }
             } catch (err) {
-                toast.error("Error en el motor de reconocimiento");
+                toast.error({ title: "Error en el motor de reconocimiento" });
             } finally {
                 setIsSearchingImg(false);
             }
@@ -127,7 +127,7 @@ export default function FaceSecurityHub() {
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!regName || !regPhoto) {
-            toast.error("Nombre y foto son obligatorios");
+            toast.error({ title: "Nombre y foto son obligatorios" });
             return;
         }
 
@@ -140,13 +140,13 @@ export default function FaceSecurityHub() {
 
         try {
             await registerFace(formData);
-            toast.success("Rostro registrado correctamente");
+            toast.success({ title: "Rostro registrado correctamente" });
             setRegName(""); setRegDni(""); setRegPhoto(null); setRegPreview(null);
             if (regIsBlacklist) fetchBlacklist();
             setActiveTab("blacklist");
         } catch (e) {
             console.error(e);
-            toast.error("Error al registrar rostro");
+            toast.error({ title: "Error al registrar rostro" });
         } finally {
             setIsSubmitting(false);
         }
@@ -155,10 +155,10 @@ export default function FaceSecurityHub() {
     const handleRemoveBlacklist = async (userId: string) => {
         try {
             await toggleBlacklist(userId, false);
-            toast.success("Usuario removido de lista negra");
+            toast.success({ title: "Usuario removido de lista negra" });
             fetchBlacklist();
         } catch (e) {
-            toast.error("Error al actualizar usuario");
+            toast.error({ title: "Error al actualizar usuario" });
         }
     };
 

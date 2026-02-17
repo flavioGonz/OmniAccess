@@ -13,9 +13,11 @@ import Image from "next/image";
 import { getImagePath } from "@/lib/image-path";
 import { getAccessEvents } from "@/app/actions/history";
 import { resolveFaceEventAction } from "@/app/actions/face-resolve";
-import { verifyFaceAction } from "@/app/actions/face-verify";
-import { toast } from "sonner";
-import { RefreshCcw, Scan, Loader2 } from "lucide-react";
+import { verifyFaceAction, purgeSubjectFacesAction } from "@/app/actions/face-verify";
+import { sileo as toast } from "sileo";
+import { RefreshCcw, Scan, Loader2, Trash2, UserPlus, Database } from "lucide-react";
+import { registerFace, toggleBlacklist } from "@/app/actions/users";
+import { syncFaceToAllDevicesAction } from "@/app/actions/face-sync";
 
 interface FaceMatchModalProps {
     event: any;
@@ -24,6 +26,27 @@ interface FaceMatchModalProps {
     onClose: () => void;
 }
 
+const formatSubjectName = (name: string) => {
+    if (!name) return "Sujeto Desconocido";
+    if (name.startsWith("visita_")) {
+        const parts = name.split("_");
+        if (parts.length >= 4) {
+            const dateStr = parts[1]; // 16022026
+            const timeStr = parts[2]; // 1341
+            const loc = parts[3]; // nauticodentro
+
+            const day = dateStr.substring(0, 2);
+            const month = dateStr.substring(2, 4);
+            const hh = timeStr.substring(0, 2);
+            const mm = timeStr.substring(2, 4);
+
+            return `Visita ${day}/${month} ${hh}:${mm} (${loc.toUpperCase()})`;
+        }
+        return name.replace("visita_", "Visita ");
+    }
+    return name;
+};
+
 export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMatchModalProps) {
     const [history, setHistory] = useState<any[]>([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
@@ -31,6 +54,9 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
     const [isResolving, setIsResolving] = useState(false);
     const [verifState, setVerifState] = useState(verification);
     const [showFullScene, setShowFullScene] = useState(false);
+    const [isPurging, setIsPurging] = useState(false);
+    const [isAddingToBase, setIsAddingToBase] = useState(false);
+    const [syncStatus, setSyncStatus] = useState<string | null>(null);
 
     useEffect(() => {
         setVerifState(verification);
@@ -42,14 +68,14 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
             const result = await verifyFaceAction(event.snapshotPath, event.userId || "", event.user?.name);
             setVerifState({ ...result, loading: false });
             if (result.success) {
-                toast.success(`STATUS: ANALISIS NEURAL REFRESCADO`, {
-                    description: `Nueva Coincidencia: ${(result.similarity * 100).toFixed(1)}%`,
-                    className: "bg-emerald-950 border-emerald-500 text-white font-black uppercase tracking-widest"
+                toast.success({
+                    title: `STATUS: ANALISIS NEURAL REFRESCADO`,
+                    description: `Nueva Coincidencia: ${((result.similarity || 0) * 100).toFixed(1)}%`
                 });
             }
         } catch (err) {
             setVerifState((prev: any) => ({ ...prev, loading: false, error: true }));
-            toast.error("Error en el motor de búsqueda neural");
+            toast.error({ title: "Error en el motor de búsqueda neural" });
         }
     };
 
@@ -75,25 +101,38 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
     const isVerified = verifState?.verified;
     const isBlacklisted = (event.user?.role === 'BLACKLISTED') || (verifState?.user?.role === 'BLACKLISTED');
     const isWhiteList = (event.user?.role === 'WHITELISTED') || (verifState?.user?.role === 'WHITELISTED');
+    const isTempVisitor = event.user?.role === 'VISITOR' || event.user?.role === 'TEMPORARY_VISITOR';
     const isLoading = verifState?.loading;
-    // Alarm strictly for blacklisted users as per user request
+
+    // Alerta total para Blacklisted
     const isAlert = isBlacklisted;
-    const isSuccess = !isBlacklisted && !isWhiteList;
+    const isSuspicious = verifState?.isSuspicious;
+    const isConflict = verifState?.isConflict;
+    const isSuccess = !isBlacklisted && !isWhiteList && !isConflict && !isSuspicious;
     const isSpecial = isWhiteList;
 
     // Camera reported similarity
     const camMatchMatch = event.details?.match(/CamMatch: ([\d.]+)%/);
+    const cameraMatchValue = camMatchMatch ? parseFloat(camMatchMatch[1]) : 0;
     const cameraMatch = camMatchMatch ? camMatchMatch[1] : null;
     const cameraParsedName = event.details?.match(/Persona: ([^,]+)/)?.[1];
     const cameraName = event.user?.name || (cameraParsedName !== 'N/A' ? cameraParsedName : null);
 
     const neuralName = verifState?.recognizedAs;
+    const neuralSimilarity = verifState?.similarity ? (verifState.similarity * 100) : 0;
+
+    // Discrepancy logic
+    const isNeuralOnly = cameraMatchValue === 0 && neuralSimilarity > 0;
+    const isDiscrepancy = cameraMatchValue > 0 && neuralSimilarity > 0 && cameraName !== neuralName;
+    const isLowConfidence = verifState?.lowConfidence || (isNeuralOnly && neuralSimilarity < 95);
+
     const displayUser = verifState?.user || event.user;
-    const displayName = neuralName || cameraName || "Sujeto Desconocido";
+    const rawName = neuralName || cameraName || "Sujeto Desconocido";
+    const displayName = displayUser?.name || formatSubjectName(rawName);
 
     const handleResolve = async () => {
         if (isAlert && !comment) {
-            toast.error("Por favor, ingrese un comentario para resolver la alerta");
+            toast.error({ title: "Por favor, ingrese un comentario para resolver la alerta" });
             return;
         }
 
@@ -101,15 +140,101 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
         try {
             const res = await resolveFaceEventAction(event.id, comment);
             if (res.success) {
-                toast.success("Evento resuelto correctamente");
+                toast.success({ title: "Evento resuelto correctamente" });
                 onClose();
             } else {
-                toast.error(res.error || "Error al resolver el evento");
+                toast.error({ title: res.error || "Error al resolver el evento" });
             }
         } catch (err) {
-            toast.error("Error de conexión");
+            toast.error({ title: "Error de conexión" });
         } finally {
             setIsResolving(false);
+        }
+    };
+
+    const handleAddToBase = async (role: 'WHITELISTED' | 'BLACKLISTED') => {
+        setIsAddingToBase(true);
+        setSyncStatus(`CREANDO EN ${role}...`);
+        try {
+            // If the user already exists (identified by neural), we just toggle role
+            let targetUserId = verifState?.user?.id || event.userId;
+            let finalUser = verifState?.user;
+
+            if (!targetUserId) {
+                // Create user from scratch
+                const formData = new FormData();
+                formData.set("name", displayName);
+                formData.set("dni", `AUTO-${Date.now()}`);
+                formData.set("role", role);
+                formData.set("isBlacklisted", role === 'BLACKLISTED' ? "true" : "false");
+                formData.set("reason", comment || `Registro automático como ${role} desde Dashboard`);
+                formData.set("creator", "Sistema");
+
+                // Fetch the image to send it as a file
+                const imgUrl = getImagePath(event.snapshotPath);
+                if (!imgUrl) throw new Error("Snapshot image path not found");
+
+                const resp = await fetch(imgUrl);
+                const blob = await resp.blob();
+                formData.set("photo", blob, "face.jpg");
+
+                const res = await registerFace(formData);
+                targetUserId = res.id;
+                finalUser = res;
+            } else {
+                // Update existing user role
+                if (role === 'BLACKLISTED') {
+                    await toggleBlacklist(targetUserId, true, comment || "Actualizado a Blacklist desde Dashboard", "Sistema");
+                } else {
+                    // For whitelist we don't have a direct toggleWhiltelist yet, but toggleBlacklist(false) works if we update it
+                    await toggleBlacklist(targetUserId, false, comment || "Promovido a Whitelist desde Dashboard", "Sistema");
+                }
+            }
+
+            setSyncStatus("SINCRONIZANDO CAMARAS...");
+            const syncRes = await syncFaceToAllDevicesAction(targetUserId);
+
+            if (syncRes.success) {
+                toast.success({
+                    title: "ACCION COMPLETADA",
+                    description: `${displayName} ahora es ${role} y cámaras actualizadas.`
+                });
+                onClose();
+            } else {
+                toast.show({
+                    title: "REGISTRADO CON ERRORES DE SINCRONIZACION",
+                    description: "El usuario se creó pero algunas cámaras no respondieron."
+                });
+            }
+        } catch (err: any) {
+            console.error("Error adding to base:", err);
+            toast.error({ title: "Fallo al registrar en base de datos" });
+        } finally {
+            setIsAddingToBase(false);
+            setSyncStatus(null);
+        }
+    };
+
+    const handlePurge = async () => {
+        if (!verifState?.recognizedAs || verifState?.recognizedAs === 'Desconocido') return;
+
+        if (!confirm(`¿Está seguro de que desea limpiar el perfil de '${verifState.recognizedAs}'? Esto eliminará todas las fotos asociadas en el motor neural para corregir errores de reconocimiento.`)) {
+            return;
+        }
+
+        setIsPurging(true);
+        try {
+            const res = await purgeSubjectFacesAction(verifState.recognizedAs, verifState.collection === 'Visitors');
+            if (res.success) {
+                toast.success({ title: "Perfil neural limpiado correctamente. Se requiere una nueva captura para re-entrenar." });
+                handleReverify();
+            } else {
+                toast.error({ title: "Error al limpiar el perfil" });
+            }
+        } catch (err) {
+            toast.error({ title: "Error de comunicación con el motor neural" });
+        } finally {
+            setIsPurging(false);
         }
     };
 
@@ -132,17 +257,12 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                         animate={{
                             opacity: 1,
                             scale: 1,
-                            boxShadow: isAlert ? [
-                                "0 0 40px rgba(0,0,0,1)",
-                                "0 0 60px rgba(178,13,48,0.4)",
-                                "0 0 40px rgba(0,0,0,1)"
-                            ] : "0 0 100px rgba(0,0,0,1)"
+                            boxShadow: "0 0 100px rgba(0,0,0,1)"
                         }}
-                        transition={isAlert ? { duration: 2, repeat: Infinity } : { duration: 0.3 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{ duration: 0.3 }}
                         className={cn(
-                            "relative w-full max-w-5xl bg-[#080808] border rounded-lg overflow-hidden flex h-[60vh] max-h-[60vh] transition-colors duration-500",
-                            isAlert ? "border-red-600/50" : "border-white/10"
+                            "relative w-full max-w-[1200px] aspect-video bg-[#0a0a0a]/95 backdrop-blur-2xl rounded-2xl overflow-hidden border",
+                            isAlert ? "border-red-500/50 shadow-[0_0_50px_rgba(239,68,68,0.2)]" : "border-white/10"
                         )}
                     >
                         {isAlert && (
@@ -158,19 +278,53 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                         <div className="flex-1 relative bg-neutral-900 overflow-hidden h-full">
                             {/* Tactical Close Button */}
                             <div className="absolute top-6 right-6 z-50 flex items-center gap-3">
+                                {/* Whitelist Button */}
+                                {!isAlert && !isSpecial && (
+                                    <button
+                                        onClick={() => handleAddToBase('WHITELISTED')}
+                                        disabled={isAddingToBase}
+                                        className="w-10 h-10 rounded-full bg-emerald-600/20 hover:bg-emerald-600 text-emerald-500 hover:text-white flex items-center justify-center transition-all backdrop-blur-md border border-emerald-500/30 shadow-lg"
+                                        title="Lista Blanca"
+                                    >
+                                        {isAddingToBase && syncStatus?.includes('WHITELISTED') ? (
+                                            <Loader2 size={18} className="animate-spin" />
+                                        ) : (
+                                            <ShieldCheck size={18} />
+                                        )}
+                                    </button>
+                                )}
+
+                                {/* Blacklist Button */}
+                                {!isAlert && !isSpecial && (
+                                    <button
+                                        onClick={() => handleAddToBase('BLACKLISTED')}
+                                        disabled={isAddingToBase}
+                                        className="w-10 h-10 rounded-full bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white flex items-center justify-center transition-all backdrop-blur-md border border-red-500/30 shadow-lg"
+                                        title="Lista Negra"
+                                    >
+                                        {isAddingToBase && syncStatus?.includes('BLACKLISTED') ? (
+                                            <Loader2 size={18} className="animate-spin" />
+                                        ) : (
+                                            <UserPlus size={18} />
+                                        )}
+                                    </button>
+                                )}
+
+                                {/* Scene Toggle */}
                                 <button
                                     onClick={() => setShowFullScene(!showFullScene)}
                                     className={cn(
-                                        "px-4 py-2 rounded-full flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all backdrop-blur-md border",
+                                        "w-10 h-10 rounded-full flex items-center justify-center transition-all backdrop-blur-md border shadow-lg",
                                         showFullScene ? "bg-white text-black border-white" : "bg-black/40 text-white/60 border-white/10 hover:text-white"
                                     )}
+                                    title={showFullScene ? "Ver Detalle" : "Ver Escena Completa"}
                                 >
-                                    <Scan size={14} />
-                                    {showFullScene ? "Ver Detalle" : "Ver Escena Completa"}
+                                    <Scan size={18} />
                                 </button>
+
                                 <button
                                     onClick={onClose}
-                                    className="p-2 rounded-full bg-black/40 hover:bg-white/10 text-neutral-500 hover:text-white transition-all backdrop-blur-md border border-white/10"
+                                    className="w-10 h-10 rounded-full bg-black/40 hover:bg-white/10 text-neutral-500 hover:text-white flex items-center justify-center transition-all backdrop-blur-md border border-white/10"
                                 >
                                     <X size={20} />
                                 </button>
@@ -286,22 +440,36 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                             </div>
                                             <h1 className={cn(
                                                 "text-4xl font-black uppercase tracking-tighter leading-none break-words max-w-sm",
-                                                isSpecial ? "text-blue-500" : isSuccess ? "text-white" : "text-red-600 drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]"
+                                                isSpecial ? "text-[#2ecc71]" : isSuccess ? "text-white" : "text-red-600 drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]"
                                             )}>
                                                 {displayName}
                                             </h1>
                                             <div className="flex items-center gap-4 pt-4">
                                                 <div className="flex items-center gap-3">
-                                                    <div className={cn("w-3 h-3 rounded-full", isSpecial ? "bg-blue-500" : isSuccess ? "bg-emerald-500" : "bg-red-600 animate-pulse")} />
+                                                    <div className={cn("w-3 h-3 rounded-full", isSpecial ? "bg-[#2ecc71]" : isConflict ? "bg-amber-600 animate-pulse" : isAlert ? "bg-red-600 animate-pulse" : isSuspicious ? "bg-amber-500" : isSuccess ? "bg-emerald-500" : "bg-neutral-500")} />
                                                     <p className={cn(
                                                         "text-xs font-black uppercase tracking-[0.2em]",
-                                                        isAlert ? "text-red-500 animate-pulse" : "text-neutral-400"
+                                                        isConflict ? "text-amber-600 animate-pulse font-black" :
+                                                            isAlert ? "text-red-500 animate-pulse" :
+                                                                isSuspicious ? "text-amber-500" :
+                                                                    isSpecial ? "text-[#2ecc71]" :
+                                                                        isNeuralOnly ? "text-blue-400" :
+                                                                            "text-neutral-400"
                                                     )}>
-                                                        {isAlert ? "SOSPECHOSO REGISTRADO" : isSpecial ? "Lista Blanca" : "Match Confirmado"}
+                                                        {isConflict ? "CONFLICTO DE IDENTIDAD - ERROR DE HARDWARE" :
+                                                            isAlert ? "SOSPECHOSO - LISTA NEGRA" :
+                                                                isSuspicious ? "SOSPECHOSO - VERIFICACIÓN REQUERIDA" :
+                                                                    isSpecial ? "Personal Autorizado (Lista Blanca)" :
+                                                                        isNeuralOnly ? "Identificación Neural" :
+                                                                            isTempVisitor ? "Visitante Temporal" :
+                                                                                "Identidad Confirmada"}
                                                     </p>
                                                 </div>
                                                 <div className="h-4 w-px bg-white/10" />
-                                                <p className="text-xs font-mono font-bold text-blue-400/60 uppercase tracking-widest">ID: {verifState?.recognizedAs || "Pending"}</p>
+                                                <p className="text-xs font-mono font-bold text-blue-400/60 uppercase tracking-widest">
+                                                    ID: {verifState?.recognizedAs || "Pending"}
+                                                    {isNeuralOnly && <span className="ml-2 text-[8px] text-amber-500/50">(Solo Neural)</span>}
+                                                </p>
                                             </div>
                                         </div>
 
@@ -314,9 +482,21 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                             <div className="flex items-center gap-16">
                                                 <div className="space-y-1">
                                                     <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest block">Neural AI</span>
-                                                    <span className={cn("text-3xl font-black uppercase tracking-tighter", isSpecial ? "text-blue-500" : isSuccess ? "text-emerald-500" : "text-red-500")}>
-                                                        {similarity}%
-                                                    </span>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className={cn("text-3xl font-black uppercase tracking-tighter", isSpecial ? "text-blue-500" : isSuccess ? "text-emerald-500" : "text-red-500")}>
+                                                            {similarity}%
+                                                        </span>
+                                                        {neuralSimilarity > 0 && (
+                                                            <button
+                                                                onClick={handlePurge}
+                                                                disabled={isPurging}
+                                                                title="Limpiar perfil (Corregir error de match)"
+                                                                className="p-1.5 rounded-full bg-red-600/10 text-red-500 hover:bg-red-600 hover:text-white transition-all border border-red-500/20"
+                                                            >
+                                                                {isPurging ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </div>
                                                 <div className="space-y-1">
                                                     <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest block">Cámara</span>
@@ -356,7 +536,7 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                                     onClick={handleResolve}
                                                     disabled={isResolving}
                                                     className={cn(
-                                                        "flex-1 h-11 font-black text-[9px] uppercase tracking-[0.2em] transition-all rounded-lg shadow-xl flex items-center justify-center gap-2",
+                                                        "w-full h-11 font-black text-[9px] uppercase tracking-[0.2em] transition-all rounded-lg shadow-xl flex items-center justify-center gap-2",
                                                         isAlert ? "bg-red-600 text-white hover:bg-red-700" :
                                                             (isSpecial ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-white text-black hover:bg-neutral-200")
                                                     )}
@@ -364,18 +544,10 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                                     {isResolving ? <Loader2 className="animate-spin" size={12} /> : (
                                                         <>
                                                             <CheckCircle2 size={14} />
-                                                            {isAlert ? "Resolver Incidente" : "Finalizar y Guardar"}
+                                                            {isAlert ? "Cerrar" : "Guardar"}
                                                         </>
                                                     )}
                                                 </button>
-                                                {!isAlert && (
-                                                    <button
-                                                        onClick={onClose}
-                                                        className="h-11 px-4 bg-white/5 hover:bg-white/10 border border-white/5 rounded-lg text-[9px] font-black uppercase tracking-widest text-white transition-all"
-                                                    >
-                                                        Solo Cerrar
-                                                    </button>
-                                                )}
                                             </div>
                                         </div>
                                     </motion.div>
@@ -435,8 +607,8 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                         exit={{ opacity: 0 }}
                                         className="absolute bottom-8 right-8 text-right space-y-1"
                                     >
-                                        <p className="text-[9px] font-black text-neutral-500 uppercase tracking-widest leading-none">Terminal de Acceso</p>
-                                        <h4 className="text-xl font-black text-white uppercase tracking-tighter truncate max-w-[300px]">{event.device?.name || "Camara s/n"}</h4>
+                                        <p className="text-[9px] font-black text-neutral-500 uppercase tracking-widest leading-none">Terminal de Acceso / Origen</p>
+                                        <h4 className="text-xl font-black text-white uppercase tracking-tighter truncate max-w-[300px]">{event.device?.name || "Búsqueda Manual"}</h4>
                                     </motion.div>
                                 )}
                             </AnimatePresence>
@@ -446,9 +618,10 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
             )
             }
             <style jsx global>{`
-                .custom-scrollbar::-webkit-scrollbar { width: 3px; }
-                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-                .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; }
+                .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(178,13,48,0.4); border-radius: 10px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(178,13,48,0.8); }
             `}</style>
         </AnimatePresence >
     );

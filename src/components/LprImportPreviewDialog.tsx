@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { importPlateBatch } from "@/app/actions/devices";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -99,11 +99,11 @@ export function LprImportPreviewDialog({
                 setImportProgress(Math.round((processedCount / totalToSync) * 100));
             }
 
-            toast.success(`Importación finalizada correctamente.`);
+            toast.success({ title: `Importación finalizada correctamente.` });
             onSuccess();
             onOpenChange(false);
         } catch (error: any) {
-            toast.error(`Error: ${error.message}`);
+            toast.error({ title: `Error: ${error.message}` });
         } finally {
             setIsImporting(false);
         }

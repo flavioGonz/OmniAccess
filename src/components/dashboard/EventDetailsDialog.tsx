@@ -37,7 +37,7 @@ import { getRelatedSessionEvents } from "@/app/actions/history";
 import { getQuickCreateData } from "@/app/actions/users";
 import { UserFormDialog } from "@/components/UserFormDialog";
 import { UserPlus, Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 import { Unit, AccessGroup } from "@prisma/client";
 import { getImagePath } from "@/lib/image-path";
 
@@ -184,7 +184,7 @@ export function EventDetailsDialog({ event, children, timeStatus, open, onOpenCh
             setShowQuickCreate(true);
         } catch (error) {
             console.error("Error fetching quick create data:", error);
-            toast.error("Error al cargar datos de creación rápida");
+            toast.error({ title: "Error al cargar datos de creación rápida" });
         } finally {
             setLoadingQuickCreateData(false);
         }
@@ -722,7 +722,7 @@ export function EventDetailsDialog({ event, children, timeStatus, open, onOpenCh
                         parkingSlots={quickCreateData.parkingSlots}
                         onSuccess={() => {
                             setShowQuickCreate(false);
-                            toast.success("Usuario creado con éxito");
+                            toast.success({ title: "Usuario creado con éxito" });
                             // Ideally refresh the current view or mark as identified
                         }}
                         initialData={{

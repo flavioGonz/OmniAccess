@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Download, Loader2 } from "lucide-react";
 import ExcelJS from "exceljs";
 import { useState } from "react";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 
 import {
     Tooltip,
@@ -113,10 +113,10 @@ export function ExportUsersButton({ users }: ExportUsersButtonProps) {
             anchor.click();
             window.URL.revokeObjectURL(url);
 
-            toast.success("Excel generado correctamente.");
+            toast.success({ title: "Excel generado correctamente." });
         } catch (error) {
             console.error(error);
-            toast.error("Error al generar Excel.");
+            toast.error({ title: "Error al generar Excel." });
         } finally {
             setExporting(false);
         }

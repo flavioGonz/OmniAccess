@@ -13,7 +13,7 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 import { getHelpDocs, updateHelpDocs, uploadHelpMedia, type HelpDoc, type FaqItem } from "@/app/actions/help";
 
 const ICON_MAP: Record<string, any> = {
@@ -61,10 +61,10 @@ export default function HelpPage() {
         setDocs(newDocs);
         const res = await updateHelpDocs(newDocs);
         if (res.success) {
-            toast.success("Documentación actualizada");
+            toast.success({ title: "Documentación actualizada" });
             setIsEditing(false);
         } else {
-            toast.error("Error al guardar");
+            toast.error({ title: "Error al guardar" });
         }
     };
 
@@ -84,12 +84,12 @@ export default function HelpPage() {
                 } else {
                     setEditingDoc({ ...editingDoc, videoUrl: res.url });
                 }
-                toast.success("Archivo subido correctamente");
+                toast.success({ title: "Archivo subido correctamente" });
             } else {
-                toast.error("Error en la subida");
+                toast.error({ title: "Error en la subida" });
             }
         } catch (err) {
-            toast.error("Error crítico de subida");
+            toast.error({ title: "Error crítico de subida" });
         } finally {
             setUploading(false);
         }

@@ -285,3 +285,19 @@ export async function getPlateAnalysis(plate: string) {
         };
     }
 }
+export async function getAccessEvent(id: string) {
+    try {
+        return await prisma.accessEvent.findUnique({
+            where: { id },
+            include: {
+                user: {
+                    include: { unit: true }
+                },
+                device: true
+            }
+        });
+    } catch (error) {
+        console.error("Error in getAccessEvent:", error);
+        return null;
+    }
+}

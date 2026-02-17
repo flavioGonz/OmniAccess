@@ -6,6 +6,7 @@ import { AccessDecision } from "@prisma/client";
 import { getVehicleBrandName } from "@/lib/hikvision-codes";
 import { sendWahaText, sendWahaImage } from "@/lib/whatsapp";
 import { getSetting } from "@/app/actions/settings";
+import { verifyFaceAction } from "@/app/actions/face-verify";
 
 const debounceCache = new Map<string, number>();
 const DEBOUNCE_TIME = 5000;
@@ -374,9 +375,38 @@ export async function POST(req: NextRequest) {
         }
 
         // Emit Socket.io
+        let finalEvent = event;
+
+        // SERVER-SIDE NEURAL ANALYSIS (Instant result without waiting for dashboard)
+        if (idType === 'FACE' && faceImage) {
+            console.log(`${logPrefix} Dispatched Instant Neural Analysis...`);
+            try {
+                const faceBuffer = Buffer.from(await faceImage.arrayBuffer());
+                const neuralResult = await verifyFaceAction(finalSnapshot, undefined, personName, faceBuffer);
+
+                if (neuralResult.success && neuralResult.recognizedAs !== 'Desconocido') {
+                    // Refetch the updated event with new userId and details (updated inside verifyFaceAction)
+                    const updatedEvent = await prisma.accessEvent.findUnique({
+                        where: { id: event.id },
+                        include: {
+                            user: {
+                                select: {
+                                    id: true, name: true, cara: true, unit: true, vehicles: true
+                                }
+                            },
+                            device: true
+                        }
+                    });
+                    if (updatedEvent) finalEvent = updatedEvent;
+                }
+            } catch (neuralErr) {
+                console.error(`${logPrefix} Neural Analysis Failed:`, neuralErr);
+            }
+        }
+
         if ((global as any).io) {
-            (global as any).io.emit("NEW_ACCESS", event);
-            logDetails += "SOCKET_EMITTED\\n";
+            (global as any).io.emit("NEW_ACCESS", finalEvent);
+            logDetails += "SOCKET_EMITTED_WITH_NEURAL_DATA\\n";
         }
 
         // WAHA Notification

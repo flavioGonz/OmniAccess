@@ -21,7 +21,8 @@ export const metadata: Metadata = {
 };
 
 import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "sonner";
+import { Toaster } from "sileo";
+import "sileo/styles.css";
 
 export default function RootLayout({
   children,
@@ -48,7 +49,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           {children}
-          <Toaster position="top-right" richColors theme="dark" />
+          <Toaster position="top-right" />
         </ThemeProvider>
       </body>
     </html>

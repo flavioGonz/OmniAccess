@@ -51,7 +51,8 @@ import {
     MapPin,
 
     Hash,
-    Truck
+    Truck,
+    ShieldAlert
 } from "lucide-react";
 import { UserFormDialog } from "@/components/UserFormDialog";
 import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
@@ -71,6 +72,8 @@ interface UserWithRelations {
     cara: string | null;
     role: UserRole;
     observations: string | null;
+    blacklistReason: string | null;
+    createdBy: string | null;
     apartment: string | null;
     accessTags: string[];
     createdAt: Date;
@@ -91,6 +94,7 @@ const ROLE_LABELS: Record<string, { label: string, color: string, icon: any }> =
     PROVIDER: { label: "Proveedor", color: "bg-amber-500/10 text-amber-500 border-amber-500/20", icon: Truck },
     ADMIN: { label: "Admin", color: "bg-red-500/10 text-red-400 border-red-500/20", icon: Shield },
     WHITELISTED: { label: "Lista Blanca", color: "bg-blue-500/10 text-blue-400 border-blue-500/20", icon: UserCheck },
+    BLACKLISTED: { label: "Lista Negra", color: "bg-red-500/10 text-red-500 border-red-500/20", icon: ShieldAlert },
 };
 
 export default function UsersPage() {

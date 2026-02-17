@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getParkingSlots, saveParkingSlots, getParkingMap, uploadParkingMap } from "@/app/actions/plazas";
 import { getUnitsWithDetails } from "@/app/actions/units";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 
 interface ParkingSlot {
     id: string;
@@ -139,20 +139,20 @@ export default function PlazasPage() {
 
             const result = await saveParkingSlots(slotsJson);
             if (result.success) {
-                toast.success("¡Configuración Guardada!", {
-                    description: result.message || "Las plazas se han guardado correctamente",
-                    duration: 3000,
+                toast.success({
+                    title: "¡Configuración Guardada!",
+                    description: result.message || "Las plazas se han guardado correctamente"
                 });
             } else {
-                toast.error("Error al Guardar", {
-                    description: result.error || "No se pudo guardar la configuración",
-                    duration: 4000,
+                toast.error({
+                    title: "Error al Guardar",
+                    description: result.error || "No se pudo guardar la configuración"
                 });
             }
         } catch (error: any) {
-            toast.error("Error Inesperado", {
-                description: error.message || "Ocurrió un error al guardar",
-                duration: 4000,
+            toast.error({
+                title: "Error Inesperado",
+                description: error.message || "Ocurrió un error al guardar"
             });
         } finally {
             setIsSaving(false);

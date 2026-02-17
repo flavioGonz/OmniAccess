@@ -12,7 +12,7 @@ import { Loader2, Car, User as UserIcon, Palette, FileText, Check, Plus, Edit, C
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 import Image from "next/image";
 import { getCarLogo, VEHICLE_BRANDS } from "@/lib/car-logos";
 import { Vehicle, User } from "@prisma/client";
@@ -57,15 +57,15 @@ export function VehicleDialog({ users, vehicle, trigger, onSuccess }: VehicleDia
         try {
             if (isEdit) {
                 const res = await updateVehicle(vehicle.id, formData);
-                if (res.success) toast.success("Vehículo actualizado");
+                if (res.success) toast.success({ title: "Vehículo actualizado" });
             } else {
                 const res = await createVehicle(formData);
-                if (res.success) toast.success("Vehículo registrado");
+                if (res.success) toast.success({ title: "Vehículo registrado" });
             }
             setOpen(false);
             if (onSuccess) onSuccess();
         } catch (error) {
-            toast.error("Error al guardar");
+            toast.error({ title: "Error al guardar" });
         } finally {
             setLoading(false);
         }

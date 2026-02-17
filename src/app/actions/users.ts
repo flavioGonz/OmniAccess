@@ -642,16 +642,55 @@ export async function getBlacklist() {
         where: { role: 'BLACKLISTED' },
         include: {
             unit: true,
-            credentials: true
+            credentials: true,
+            accessEvents: {
+                take: 10,
+                orderBy: { timestamp: 'desc' },
+                include: { device: true }
+            }
         },
         orderBy: { updatedAt: 'desc' }
     });
 }
 
-export async function toggleBlacklist(userId: string, isBlacklisted: boolean) {
+export async function getWhitelist() {
+    return await prisma.user.findMany({
+        where: { role: 'WHITELISTED' },
+        include: {
+            unit: true,
+            credentials: true,
+            accessEvents: {
+                take: 5,
+                orderBy: { timestamp: 'desc' },
+                include: { device: true }
+            }
+        },
+        orderBy: { updatedAt: 'desc' }
+    });
+}
+
+export async function toggleBlacklist(userId: string, isBlacklisted: boolean, reason?: string, creator?: string) {
+    // If we are un-blacklisting, check if we should go to WHITELISTED or just VISITOR
+    // For now, if called with isBlacklisted=false, we move to WHITELISTED by default if it was initiated from dashboard as "Promover"
+
+    // Actually, let's look at the current role first
+    const currentUser = await prisma.user.findUnique({ where: { id: userId } });
+
+    let newRole: UserRole = isBlacklisted ? 'BLACKLISTED' : 'WHITELISTED';
+
+    // If it was already STAFF or ADMIN, we shouldn't downgrade it to WHITELISTED/VISITOR unless specified
+    if (!isBlacklisted && currentUser && ['STAFF', 'ADMIN', 'RESIDENT'].includes(currentUser.role)) {
+        newRole = currentUser.role;
+    }
+
     const user = await prisma.user.update({
         where: { id: userId },
-        data: { role: isBlacklisted ? 'BLACKLISTED' : 'VISITOR' }
+        data: {
+            role: newRole,
+            blacklistReason: reason || null,
+            createdBy: creator || null,
+            updatedAt: new Date()
+        }
     });
     revalidatePath("/admin/dashboard-face");
     revalidatePath("/admin/users");
@@ -663,7 +702,11 @@ export async function registerFace(formData: FormData) {
     const name = formData.get("name") as string;
     const dni = formData.get("dni") as string;
     const isBlacklisted = formData.get("isBlacklisted") === "true";
+    const isWhitelisted = formData.get("isWhitelisted") === "true";
+    const requestedRole = formData.get("role") as UserRole | null;
     const photoFile = formData.get("photo") as File;
+    const reason = formData.get("reason") as string;
+    const creator = formData.get("creator") as string;
 
     let photoPath = "";
     let photoBuffer: Buffer | null = null;
@@ -674,12 +717,16 @@ export async function registerFace(formData: FormData) {
         photoPath = await uploadToS3(photoBuffer, filename, photoFile.type || "image/jpeg", "face");
     }
 
+    const role = requestedRole || (isBlacklisted ? 'BLACKLISTED' : (isWhitelisted ? 'WHITELISTED' : 'VISITOR'));
+
     const user = await prisma.user.create({
         data: {
             name,
             dni,
-            role: isBlacklisted ? 'BLACKLISTED' : 'VISITOR',
-            cara: photoPath || null
+            role,
+            cara: photoPath || null,
+            blacklistReason: reason || null,
+            createdBy: creator || null
         }
     });
 

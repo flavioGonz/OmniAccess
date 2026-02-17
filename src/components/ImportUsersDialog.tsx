@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/table";
 import { Loader2, Upload, FileSpreadsheet, CheckCircle2, AlertCircle, X, Download } from "lucide-react";
 import ExcelJS from "exceljs";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 import { importUserBatch } from "@/app/actions/users";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -97,11 +97,11 @@ export function ImportUsersDialog({ onSuccess }: ImportUsersDialogProps) {
             });
 
             setPreviewData(rows);
-            if (rows.length === 0) toast.warning("El archivo parece vacío o no se reconocieron las columnas.");
+            if (rows.length === 0) toast.warning({ title: "El archivo parece vacío o no se reconocieron las columnas." });
 
         } catch (error) {
             console.error(error);
-            toast.error("Error al leer el archivo Excel.");
+            toast.error({ title: "Error al leer el archivo Excel." });
         } finally {
             setLoading(false);
         }
@@ -112,7 +112,7 @@ export function ImportUsersDialog({ onSuccess }: ImportUsersDialogProps) {
         try {
             const result = await importUserBatch(previewData);
             if (result.success) {
-                toast.success(`Importación completada: ${result.count} procesados, ${result.failed} fallidos.`);
+                toast.success({ title: `Importación completada: ${result.count} procesados, ${result.failed} fallidos.` });
                 if (result.errors.length > 0) {
                     console.warn("Errors during import:", result.errors);
                 }
@@ -121,11 +121,11 @@ export function ImportUsersDialog({ onSuccess }: ImportUsersDialogProps) {
                 setFile(null);
                 setPreviewData([]);
             } else {
-                toast.error("Error en la importación masiva.");
+                toast.error({ title: "Error en la importación masiva." });
             }
         } catch (error) {
             console.error(error);
-            toast.error("Error del servidor.");
+            toast.error({ title: "Error del servidor." });
         } finally {
             setImporting(false);
         }

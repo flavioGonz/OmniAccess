@@ -6,7 +6,7 @@ import { getCredentials } from "@/app/actions/credentials";
 import { getVehicles } from "@/app/actions/vehicles";
 import { LprImportPreviewDialog } from "./LprImportPreviewDialog";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 import { Progress } from "@/components/ui/progress";
 import {
     Dialog,
@@ -172,7 +172,7 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
             }
         } catch (error: any) {
             console.error("Fetch error:", error);
-            toast.error(`Error: ${error.message || "Conexión fallida"}`);
+            toast.error({ title: `Error: ${error.message || "Conexión fallida"}` });
         } finally {
             setLoading(false);
             setFetchProgress(100);
@@ -182,7 +182,7 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
     const handleAddPlate = async () => {
         const clean = newPlate.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
         if (!clean || clean.length < 3) {
-            toast.error("Matrícula no válida");
+            toast.error({ title: "Matrícula no válida" });
             return;
         }
 
@@ -190,14 +190,14 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
         try {
             const result = await addDevicePlate(device.id, clean);
             if (result.success) {
-                toast.success(result.message);
+                toast.success({ title: result.message });
                 setNewPlate("");
                 loadPlates();
             } else {
-                toast.error(result.message);
+                toast.error({ title: result.message });
             }
         } catch (error: any) {
-            toast.error(error.message);
+            toast.error({ title: error.message });
         } finally {
             setIsAdding(false);
         }
@@ -210,7 +210,7 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
         setSyncProgress(0);
         try {
             // First wipe using the existing action or just tell the user we are starting
-            toast.info("Iniciando sincronización total...");
+            toast.info({ title: "Iniciando sincronización total..." });
 
             // To show real progress, we should ideally do the wipe and then individual adds
             // but for now let's just use the server action and simulate progress or refactor.
@@ -226,13 +226,13 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
 
             if (result.success) {
                 setSyncProgress(100);
-                toast.success(result.message);
+                toast.success({ title: result.message });
                 loadPlates();
             } else {
-                toast.error(result.message);
+                toast.error({ title: result.message });
             }
         } catch (error: any) {
-            toast.error(error.message);
+            toast.error({ title: error.message });
         } finally {
             setIsSyncingToCamera(false);
         }
@@ -247,7 +247,7 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
 
     const handleDelete = async (plate: string) => {
         if (!confirm(`¿Eliminar matrícula ${plate} de la cámara?`)) return;
-        toast.info("Borrado individual deshabilitado por seguridad.");
+        toast.info({ title: "Borrado individual deshabilitado por seguridad." });
     };
 
     const allFilteredPlates = useMemo(() => {

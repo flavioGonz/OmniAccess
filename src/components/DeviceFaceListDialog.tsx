@@ -29,7 +29,7 @@ import {
     User,
     Power
 } from "lucide-react";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 import { getDeviceFaces, exportAllToDevice } from "@/app/actions/deviceMemory";
 import { getUsers } from "@/app/actions/users";
 import { cn } from "@/lib/utils";
@@ -67,7 +67,7 @@ export function DeviceFaceListDialog({ device, open, onOpenChange }: DeviceFaceL
             setFaces(deviceFaces);
             setSystemUsers(appUsers);
         } catch (error) {
-            toast.error("Error al cargar datos.");
+            toast.error({ title: "Error al cargar datos." });
             console.error(error);
         } finally {
             setLoading(false);
@@ -84,12 +84,12 @@ export function DeviceFaceListDialog({ device, open, onOpenChange }: DeviceFaceL
         setIsSyncingToCamera(true);
         try {
             const result = await exportAllToDevice(device.id);
-            toast.success(`Sincronización enviada: ${result.processed} usuarios procesados.`);
+            toast.success({ title: `Sincronización enviada: ${result.processed} usuarios procesados.` });
             // Reload faces to see changes (might take a moment for device to reflect)
             setTimeout(loadData, 2000);
         } catch (error) {
             console.error(error);
-            toast.error("Error al sincronizar con la cámara.");
+            toast.error({ title: "Error al sincronizar con la cámara." });
         } finally {
             setIsSyncingToCamera(false);
         }

@@ -76,7 +76,7 @@ import {
 import { getUsers } from "@/app/actions/users";
 import { getUnits } from "@/app/actions/units";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
 import { DEVICE_MODELS, DRIVER_MODELS } from "@/lib/driver-models";
 
@@ -197,15 +197,15 @@ export function DeviceMemoryDialog({ device, open, onOpenChange }: DeviceMemoryD
         const promise = syncUserToDevice(device.id, userId);
 
         toast.promise(promise, {
-            loading: 'Inyectando usuario y rostro al equipo...',
+            loading: { title: 'Inyectando usuario y rostro al equipo...' },
             success: (data) => {
                 setTimeout(async () => {
                     await loadFaces();
                     setShowSync(false);
                 }, 1000);
-                return "Usuario inyectado correctamente";
+                return { title: "Usuario inyectado correctamente" };
             },
-            error: "Error al sincronizar con el equipo"
+            error: { title: "Error al sincronizar con el equipo" }
         });
 
         try { await promise; } catch (err) { console.error(err); } finally { setIsSyncing(null); }
@@ -214,7 +214,7 @@ export function DeviceMemoryDialog({ device, open, onOpenChange }: DeviceMemoryD
     const handleDownloadAll = () => {
         const total = faces.length;
         if (total === 0 && doorlogs.length === 0 && calllogs.length === 0) {
-            toast.error("No hay registros para descargar.");
+            toast.error({ title: "No hay registros para descargar." });
             return;
         }
 
@@ -245,7 +245,7 @@ export function DeviceMemoryDialog({ device, open, onOpenChange }: DeviceMemoryD
             setDbStats(stats);
             setSyncMode('export');
         } catch (error) {
-            toast.error("Error al analizar base de datos");
+            toast.error({ title: "Error al analizar base de datos" });
         } finally {
             setLoading(false);
         }
@@ -279,7 +279,7 @@ export function DeviceMemoryDialog({ device, open, onOpenChange }: DeviceMemoryD
             setProgress(((i + 1) / total) * 100);
         }
         setImportStatus('completed');
-        toast.success("Sincronización finalizada");
+        toast.success({ title: "Sincronización finalizada" });
     };
 
     const startExport = async () => {
@@ -287,10 +287,10 @@ export function DeviceMemoryDialog({ device, open, onOpenChange }: DeviceMemoryD
         setLoading(true);
         try {
             const res = await exportAllToDevice(device.id);
-            toast.success(`Completado: ${res.processed} usuarios sincronizados`);
+            toast.success({ title: `Completado: ${res.processed} usuarios sincronizados` });
             loadFaces();
         } catch (e: any) {
-            toast.error("Error: " + e.message);
+            toast.error({ title: "Error: " + e.message });
         } finally {
             setLoading(false);
         }
@@ -881,7 +881,7 @@ export function DeviceMemoryDialog({ device, open, onOpenChange }: DeviceMemoryD
                                                                     }}
                                                                     onSuccess={() => {
                                                                         setFaces(prev => prev.filter(item => item.ID !== f.ID));
-                                                                        toast.success("Rostro eliminado correctamente");
+                                                                        toast.success({ title: "Rostro eliminado correctamente" });
                                                                     }}
                                                                 >
                                                                     <Button variant="ghost" size="icon" className="w-10 h-10 rounded-xl text-neutral-500 hover:text-rose-500 hover:bg-rose-500/10 transition-all">

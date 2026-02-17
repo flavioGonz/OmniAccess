@@ -64,6 +64,8 @@ model User {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   observations  String?
+  blacklistReason String?     // Motivo de inclusión en lista negra/especial
+  createdBy     String?       // Quién realizó el registro
   accessEvents  AccessEvent[]
   credentials   Credential[]
   parkingSlot   ParkingSlot?  @relation(fields: [parkingSlotId], references: [id])

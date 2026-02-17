@@ -6,7 +6,7 @@ import { Camera, Upload, Image as ImageIcon, Trash2, ChevronDown, Ban, X, Clock 
 import { cn } from "@/lib/utils";
 import { getFaceDevices, updateDevicePosition, deleteDevicePosition } from "@/app/actions/devices";
 import { getSetting, updateSetting } from "@/app/actions/settings";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 import { getImagePath } from "@/lib/image-path";
 
 interface CameraNode {
@@ -87,14 +87,14 @@ export default function FaceDashboardMap({
         setCameras(prev => [...prev.filter(c => c.id !== camId), newNode]);
         await updateDevicePosition(camId, newNode.x, newNode.y, currentFloorPlan.id);
         setContextMenu(null);
-        toast.success(`Cámara ubicada en ${currentFloorPlan.name}`);
+        toast.success({ title: `Cámara ubicada en ${currentFloorPlan.name}` });
     };
 
     const removeCamera = async (e: React.MouseEvent, camId: string) => {
         e.stopPropagation();
         setCameras(prev => prev.filter(c => c.id !== camId));
         await deleteDevicePosition(camId);
-        toast.info("Cámara retirada del plano");
+        toast.info({ title: "Cámara retirada del plano" });
     };
 
     useEffect(() => {
@@ -109,9 +109,9 @@ export default function FaceDashboardMap({
                 {contextMenu && (
                     <div className="absolute z-[100] bg-[#0A0A0A] border border-white/10 rounded-xl shadow-2xl py-2 min-w-[220px] backdrop-blur-xl" style={{ top: contextMenu.y, left: contextMenu.x }}>
                         <div className="px-4 py-2 border-b border-white/5 mb-2"><p className="text-[8px] font-black uppercase text-neutral-500 tracking-widest">UBICAR DISPOSITIVO</p></div>
-                        {cameras.map(cam => (
-                            <button key={cam.id} onClick={() => placeCamera(cam.id)} className="w-full text-left px-4 py-3 text-[10px] font-black text-neutral-400 uppercase tracking-widest hover:bg-[#B20D30] hover:text-white transition-all flex items-center justify-between group">
-                                {cam.name} <Camera size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                        {allFaceDevices.map(device => (
+                            <button key={device.id} onClick={() => placeCamera(device.id)} className="w-full text-left px-4 py-3 text-[10px] font-black text-neutral-400 uppercase tracking-widest hover:bg-[#B20D30] hover:text-white transition-all flex items-center justify-between group">
+                                {device.name} <Camera size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                             </button>
                         ))}
                     </div>

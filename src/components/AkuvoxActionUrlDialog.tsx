@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Check, Copy, ExternalLink, Info, Zap, ShieldCheck, Activity } from "lucide-react";
 import { useState, useEffect } from "react";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 import { Badge } from "./ui/badge";
 
 interface AkuvoxActionUrlDialogProps {
@@ -98,7 +98,7 @@ export function AkuvoxActionUrlDialog({ device, open, onOpenChange }: AkuvoxActi
     const copyToClipboard = (text: string, id: string) => {
         navigator.clipboard.writeText(text);
         setCopied(id);
-        toast.success("URL copiada al portapapeles");
+        toast.success({ title: "URL copiada al portapapeles" });
         setTimeout(() => setCopied(null), 2000);
     };
 

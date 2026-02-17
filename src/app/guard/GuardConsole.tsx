@@ -65,7 +65,7 @@ import { getQuickCreateData, getGuardsList } from "@/app/actions/users";
 import { resolveFaceEventAction } from "@/app/actions/face-resolve";
 import { UserFormDialog } from "@/components/UserFormDialog";
 import { searchByPhotoAction } from "@/app/actions/face-verify";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { io } from "socket.io-client";
@@ -77,6 +77,7 @@ import { getSocketUrl } from "@/lib/socket-config";
 import dynamic from 'next/dynamic';
 const LiveGuardMap = dynamic(() => import('@/components/LiveGuardMap'), { ssr: false });
 const OCRScanner = dynamic(() => import('@/components/OCRScannerTF'), { ssr: false });
+const FaceScannerOverlay = dynamic(() => import('@/components/FaceScannerOverlay'), { ssr: false });
 
 interface GuardConsoleProps {
     initialEntries: any[];
@@ -108,6 +109,7 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
     const [isCameraActive, setIsCameraActive] = useState(false);
+    const [cameraFacingMode, setCameraFacingMode] = useState<"user" | "environment">("environment");
     const [isOCRActive, setIsOCRActive] = useState(false);
     const [currentTime, setCurrentTime] = useState<Date | null>(null);
     const [showSuccessOverlay, setShowSuccessOverlay] = useState(false);
@@ -609,7 +611,7 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
             setShowQuickCreate(true);
         } catch (error) {
             console.error("Error fetching quick create data:", error);
-            toast.error("Error al cargar datos de creación rápida");
+            toast.error({ title: "Error al cargar datos de creación rápida" });
         } finally {
             setLoadingQuickCreateData(false);
         }
@@ -623,7 +625,7 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
             setGuardsList(guards);
         } catch (e) {
             console.error(e);
-            toast.error("Error al cargar lista de guardias");
+            toast.error({ title: "Error al cargar lista de guardias" });
         } finally {
             setLoadingGuards(false);
         }
@@ -776,14 +778,14 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                 if (photoUrl) localStorage.setItem("bitacora_guard_photo", photoUrl);
             }
             playTactileSound();
-            toast.success(`Bienvenido, ${guard.name}`);
+            toast.success({ title: `Bienvenido, ${guard.name}` });
 
             // Reset form
             setLoginUser("");
             setLoginPass("");
         } else {
             playTactileSound();
-            toast.error("Credenciales incorrectas");
+            toast.error({ title: "Credenciales incorrectas" });
         }
     };
 
@@ -997,7 +999,7 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
 
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: "environment" },
+                    video: { facingMode: cameraFacingMode },
                     audio: false
                 });
                 streamRef.current = stream;
@@ -1018,7 +1020,7 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                 streamRef.current = null;
             }
         };
-    }, [isCameraActive]);
+    }, [isCameraActive, cameraFacingMode]);
 
     const takePhoto = () => {
         if (videoRef.current && canvasRef.current) {
@@ -1032,6 +1034,10 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                 setIsCameraActive(false);
             }
         }
+    };
+
+    const toggleCameraFacingMode = () => {
+        setCameraFacingMode(prev => prev === "user" ? "environment" : "user");
     };
 
     // FACE RECOGNITION HELPERS
@@ -1678,433 +1684,14 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                             </motion.div>
                         )}
                         {activeTab === "face" && (
-                            <motion.div
-                                key="face"
-                                initial={{ opacity: 0, x: -20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: 20 }}
-                                className="h-full w-full overflow-y-auto custom-scrollbar bg-slate-50 relative pb-40"
-                            >
-                                <div className="max-w-7xl mx-auto px-4 py-6 md:p-10 flex flex-col gap-6 md:gap-10">
-                                    {/* Responsive Header */}
-                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                        <div>
-                                            <h2 className="text-2xl md:text-4xl font-black uppercase tracking-tighter text-black">Reconocimiento Facial</h2>
-                                            <p className="text-[9px] md:text-[10px] text-[#B20D30] font-black uppercase tracking-[0.3em] mt-1 italic">Módulo de Vigilancia Neural</p>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            <label className="p-3 bg-white border-2 border-slate-100 text-slate-400 rounded-xl hover:text-[#B20D30] hover:border-[#B20D30]/30 transition-all active:scale-95 cursor-pointer">
-                                                <Upload size={18} />
-                                                <input
-                                                    type="file"
-                                                    accept="image/*"
-                                                    className="hidden"
-                                                    onChange={async (e) => {
-                                                        const file = e.target.files?.[0];
-                                                        if (file) {
-                                                            setIsAnalyzingFace(true);
-                                                            try {
-                                                                const reader = new FileReader();
-                                                                reader.onload = async (event) => {
-                                                                    const dataUrl = event.target?.result as string;
-                                                                    const response = await fetch(dataUrl);
-                                                                    const blob = await response.blob();
-                                                                    const arrayBuffer = await blob.arrayBuffer();
-                                                                    const buffer = new Uint8Array(arrayBuffer);
-                                                                    const result = await searchByPhotoAction(buffer as any);
-                                                                    if (result.success) {
-                                                                        setFaceMatchResult({ ...result, capturedImage: dataUrl });
-                                                                        stopFaceCamera();
-                                                                    }
-                                                                };
-                                                                reader.readAsDataURL(file);
-                                                            } finally {
-                                                                setIsAnalyzingFace(false);
-                                                            }
-                                                        }
-                                                    }}
-                                                />
-                                            </label>
-                                            <div className="px-4 py-2 bg-white border-2 border-slate-100 rounded-xl flex items-center gap-2">
-                                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                                                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">IA Conectada</span>
-                                            </div>
-                                            {faceMatchResult && (
-                                                <button
-                                                    onClick={() => { setFaceMatchResult(null); startFaceCamera(); }}
-                                                    className="p-3 bg-white border-2 border-[#B20D30] text-[#B20D30] rounded-xl hover:bg-slate-50 transition-all active:scale-95"
-                                                >
-                                                    <RefreshCcw size={18} />
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    <div className="flex flex-col xl:flex-row gap-6 md:gap-10">
-                                        {/* Scanner Viewport */}
-                                        <div className="flex-1 min-h-[300px] md:min-h-[500px] bg-black rounded-[2rem] md:rounded-[3rem] overflow-hidden relative shadow-2xl border-4 border-white">
-                                            <AnimatePresence mode="wait">
-                                                {faceMatchResult ? (
-                                                    <motion.div
-                                                        key="result-img"
-                                                        initial={{ opacity: 0 }}
-                                                        animate={{ opacity: 1 }}
-                                                        className="absolute inset-0"
-                                                    >
-                                                        <Image
-                                                            src={faceMatchResult.capturedImage}
-                                                            alt="Captured"
-                                                            fill
-                                                            className="object-cover"
-                                                        />
-                                                    </motion.div>
-                                                ) : isFaceCameraActive ? (
-                                                    <motion.div
-                                                        key="live-feed"
-                                                        initial={{ opacity: 0 }}
-                                                        animate={{ opacity: 1 }}
-                                                        className="absolute inset-0"
-                                                    >
-                                                        <video
-                                                            ref={faceVideoRef}
-                                                            autoPlay
-                                                            playsInline
-                                                            className="w-full h-full object-cover transition-all duration-700"
-                                                        />
-                                                        {/* Scanning HUD */}
-                                                        <div className="absolute inset-0 pointer-events-none p-6 md:p-12">
-                                                            <div className="w-full h-full border-2 border-white/20 rounded-2xl md:rounded-[2.5rem] relative">
-                                                                <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-[#B20D30]" />
-                                                                <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-[#B20D30]" />
-                                                                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-[#B20D30]" />
-                                                                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-[#B20D30]" />
-                                                                <motion.div
-                                                                    animate={{ top: ['10%', '90%', '10%'] }}
-                                                                    transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-                                                                    className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-[#B20D30] to-transparent shadow-[0_0_15px_#B20D30]"
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                    </motion.div>
-                                                ) : (
-                                                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900 gap-6">
-                                                        <div className="w-24 h-24 rounded-full bg-white/5 flex items-center justify-center border-2 border-dashed border-white/20">
-                                                            <Camera size={40} className="text-white/20" />
-                                                        </div>
-                                                        <button
-                                                            onClick={startFaceCamera}
-                                                            className="px-8 py-4 bg-[#B20D30] text-white rounded-2xl font-black uppercase text-sm tracking-widest shadow-2xl active:scale-95 transition-all"
-                                                        >
-                                                            Iniciar Cámara de Seguridad
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </AnimatePresence>
-
-                                            {/* Analyzing Screen overlay */}
-                                            <AnimatePresence>
-                                                {isAnalyzingFace && (
-                                                    <motion.div
-                                                        initial={{ opacity: 0 }}
-                                                        animate={{ opacity: 1 }}
-                                                        exit={{ opacity: 0 }}
-                                                        className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center gap-6 z-30"
-                                                    >
-                                                        <Loader2 className="w-16 h-16 text-white animate-spin" />
-                                                        <div className="text-center">
-                                                            <h3 className="text-xl font-black text-white uppercase tracking-tighter">Analizando Biometría</h3>
-                                                            <p className="text-[10px] text-white/50 font-black uppercase tracking-[0.3em] mt-2">Accediendo a Base de Datos Neural</p>
-                                                        </div>
-                                                    </motion.div>
-                                                )}
-                                            </AnimatePresence>
-                                        </div>
-
-                                        {/* Control & Result Card */}
-                                        <div className="w-full xl:w-[450px] flex flex-col gap-6">
-                                            <div className="bg-white rounded-[2rem] md:rounded-[3rem] border-2 border-slate-100 p-6 md:p-8 flex flex-col shadow-sm">
-                                                {!faceMatchResult ? (
-                                                    <div className="py-10 flex flex-col items-center justify-center text-center gap-6 opacity-30">
-                                                        <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center">
-                                                            <Monitor size={32} className="text-slate-400" />
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-md font-black uppercase text-slate-900">En Espera</p>
-                                                            <p className="text-xs font-bold text-slate-400 mt-1">Presione el botón para escanear</p>
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <motion.div
-                                                        initial={{ opacity: 0, y: 10 }}
-                                                        animate={{ opacity: 1, y: 0 }}
-                                                        className="space-y-6"
-                                                    >
-                                                        <div className="space-y-4">
-                                                            <div className={cn(
-                                                                "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest inline-block shadow-sm",
-                                                                faceMatchResult.user
-                                                                    ? (faceMatchResult.user.role === 'BLACKLISTED' ? "bg-red-600 animate-pulse text-white" : "bg-emerald-500 text-white")
-                                                                    : (faceMatchResult.match ? "bg-amber-500 text-white" : "bg-red-500 text-white")
-                                                            )}>
-                                                                {faceMatchResult.user
-                                                                    ? (faceMatchResult.user.role === 'BLACKLISTED' ? "⚠️ BLACKLIST DETECTED" : "Identidad Verificada")
-                                                                    : (faceMatchResult.match ? "Sujeto Reconocido (Sin Registro Local)" : "Desconocido")}
-                                                            </div>
-
-                                                            {faceMatchResult.user ? (
-                                                                <div className="space-y-4">
-                                                                    <div>
-                                                                        <h3 className="text-2xl md:text-3xl font-black uppercase tracking-tight text-slate-900 leading-none">{faceMatchResult.user.name}</h3>
-                                                                        {faceMatchResult.user.unit && (
-                                                                            <p className="text-sm md:text-lg font-black text-[#B20D30] uppercase tracking-wide mt-1">📍 {faceMatchResult.user.unit.name}</p>
-                                                                        )}
-                                                                    </div>
-
-                                                                    {/* User Status / Observations */}
-                                                                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
-                                                                        <div className="flex items-center justify-between">
-                                                                            <span className="text-[9px] font-black text-slate-400 uppercase">Rol / Categoría</span>
-                                                                            <span className={cn(
-                                                                                "text-[10px] font-black uppercase",
-                                                                                faceMatchResult.user.role === 'BLACKLISTED' ? "text-red-600" : "text-emerald-600"
-                                                                            )}>{faceMatchResult.user.role}</span>
-                                                                        </div>
-                                                                        {faceMatchResult.user.observations && (
-                                                                            <div className="pt-2 border-t border-slate-200">
-                                                                                <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Observaciones / VIP Note</p>
-                                                                                <p className="text-xs font-bold text-slate-700 italic">"{faceMatchResult.user.observations}"</p>
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-
-                                                                    <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-50">
-                                                                        <div>
-                                                                            <p className="text-[9px] font-black text-slate-400 uppercase">DNI/CI</p>
-                                                                            <p className="text-sm font-bold truncate">{faceMatchResult.user.dni || "N/A"}</p>
-                                                                        </div>
-                                                                        <div>
-                                                                            <p className="text-[9px] font-black text-slate-400 uppercase">Aprobación</p>
-                                                                            <p className={cn(
-                                                                                "text-sm font-black",
-                                                                                faceMatchResult.user.role === 'BLACKLISTED' ? "text-red-600" : "text-emerald-600"
-                                                                            )}>{faceMatchResult.user.role === 'BLACKLISTED' ? "BLOQUEADO" : "HABILITADO"}</p>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            ) : faceMatchResult.match ? (
-                                                                <div className="space-y-4">
-                                                                    <div>
-                                                                        <h3 className="text-2xl md:text-3xl font-black uppercase tracking-tight text-[#B20D30] leading-none mb-1">{faceMatchResult.match.subject}</h3>
-                                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Identificado por Motor Neural Externo</p>
-                                                                    </div>
-                                                                    <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200">
-                                                                        <p className="text-[10px] font-black text-amber-600 uppercase mb-1">⚠️ Aviso de Seguridad</p>
-                                                                        <p className="text-xs font-bold text-amber-800">El sujeto está en la base neural pero no tiene un perfil de residente/usuario creado en este sistema.</p>
-                                                                    </div>
-                                                                </div>
-                                                            ) : (
-                                                                <div className="py-4">
-                                                                    <h3 className="text-2xl font-black uppercase tracking-tight text-slate-300">No se encontraron registros</h3>
-                                                                    <p className="text-xs font-bold text-slate-400 mt-2 uppercase tracking-widest">Sujeto No Identificado</p>
-                                                                </div>
-                                                            )}
-                                                        </div>
-
-                                                        {faceMatchResult.match && (
-                                                            <div className="bg-slate-50 p-4 rounded-2xl md:rounded-[2rem] border border-slate-100">
-                                                                <div className="flex items-center justify-between mb-2">
-                                                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Confianza</span>
-                                                                    <span className="text-md font-black text-slate-900">{(faceMatchResult.match.similarity * 100).toFixed(0)}%</span>
-                                                                </div>
-                                                                <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
-                                                                    <motion.div
-                                                                        initial={{ width: 0 }}
-                                                                        animate={{ width: `${faceMatchResult.match.similarity * 100}%` }}
-                                                                        className={cn(
-                                                                            "h-full rounded-full transition-all",
-                                                                            faceMatchResult.match.similarity >= 0.8 ? "bg-emerald-500" :
-                                                                                faceMatchResult.match.similarity >= 0.6 ? "bg-amber-500" : "bg-red-500"
-                                                                        )}
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {/* DETECTION TIMELINE */}
-                                                        <div className="mt-6 pt-6 border-t border-slate-100 space-y-4">
-                                                            <div className="flex items-center gap-2 text-slate-400">
-                                                                <History size={14} />
-                                                                <span className="text-[9px] font-black uppercase tracking-widest">Historial de Detección (Local)</span>
-                                                            </div>
-                                                            <div className="space-y-3">
-                                                                {entries.filter(e => {
-                                                                    const nameToMatch = faceMatchResult.user?.name || faceMatchResult.match?.subject;
-                                                                    if (!nameToMatch) return false;
-
-                                                                    return (faceMatchResult.user && e.userId === faceMatchResult.user.id) ||
-                                                                        (e.user?.name?.toLowerCase() === nameToMatch.toLowerCase()) ||
-                                                                        (e.bitacora?.name?.toLowerCase() === nameToMatch.toLowerCase());
-                                                                }).slice(0, 3).map((hist) => (
-                                                                    <div key={hist.id} className="flex gap-3 items-start p-3 bg-slate-50 rounded-xl border border-slate-100/50">
-                                                                        <div className={cn(
-                                                                            "w-2 h-2 rounded-full mt-1 shrink-0",
-                                                                            hist.type === "ENTRY" || hist.direction === "ENTRY" ? "bg-emerald-500" : "bg-orange-500"
-                                                                        )} />
-                                                                        <div className="flex-1">
-                                                                            <p className="text-[10px] font-black text-slate-900 uppercase">{hist.deviceName || hist.device?.name || "Punto de Acceso"}</p>
-                                                                            <p className="text-[8px] font-bold text-slate-400 uppercase mt-0.5">{new Date(hist.timestamp || hist.createdAt).toLocaleString()}</p>
-                                                                        </div>
-                                                                    </div>
-                                                                ))}
-                                                                {entries.filter(e => {
-                                                                    const nameToMatch = faceMatchResult.user?.name || faceMatchResult.match?.subject;
-                                                                    if (!nameToMatch) return false;
-                                                                    return (faceMatchResult.user && e.userId === faceMatchResult.user.id) ||
-                                                                        (e.user?.name?.toLowerCase() === nameToMatch.toLowerCase()) ||
-                                                                        (e.bitacora?.name?.toLowerCase() === nameToMatch.toLowerCase());
-                                                                }).length === 0 && (
-                                                                        <p className="text-[10px] font-bold text-slate-300 uppercase italic">Sin detecciones previas registradas</p>
-                                                                    )}
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="pt-2 space-y-3">
-                                                            {faceMatchResult.user && (
-                                                                <button
-                                                                    onClick={() => {
-                                                                        setName(faceMatchResult.user.name);
-                                                                        setDni(faceMatchResult.user.dni || "");
-                                                                        if (faceMatchResult.user.unit) setSelectedUnit(faceMatchResult.user.unit);
-                                                                        handleTabChange("control");
-                                                                        setFaceMatchResult(null);
-                                                                    }}
-                                                                    className="w-full h-14 md:h-16 bg-[#B20D30] text-white rounded-xl md:rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg shadow-red-900/10 active:scale-95 flex items-center justify-center gap-3 transition-all"
-                                                                >
-                                                                    <UserCheck size={20} /> Autocompletar Registro
-                                                                </button>
-                                                            )}
-
-                                                            <div className="pt-4 space-y-3 border-t border-slate-100">
-                                                                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Ajuste Manual / Registro</Label>
-                                                                <Input
-                                                                    placeholder="NOMBRE DEL SUJETO"
-                                                                    value={faceResultName}
-                                                                    onChange={e => setFaceResultName(e.target.value)}
-                                                                    className="h-10 bg-slate-50 border-slate-200 text-xs font-black uppercase"
-                                                                />
-                                                                <div className="grid grid-cols-2 gap-3">
-                                                                    <Input
-                                                                        placeholder="DNI / CI"
-                                                                        value={faceResultDni}
-                                                                        onChange={e => setFaceResultDni(e.target.value)}
-                                                                        className="h-10 bg-slate-50 border-slate-200 text-xs font-black uppercase"
-                                                                    />
-                                                                    <Input
-                                                                        placeholder="UNIDAD (OPCIONAL)"
-                                                                        value={faceResultUnit}
-                                                                        onChange={e => setFaceResultUnit(e.target.value)}
-                                                                        className="h-10 bg-slate-50 border-slate-200 text-xs font-black uppercase"
-                                                                    />
-                                                                </div>
-                                                                <Input
-                                                                    placeholder="OBSERVACIONES"
-                                                                    value={faceResultNotes}
-                                                                    onChange={e => setFaceResultNotes(e.target.value)}
-                                                                    className="h-10 bg-slate-50 border-slate-200 text-xs font-black uppercase"
-                                                                />
-
-                                                                <Button
-                                                                    onClick={async () => {
-                                                                        setIsResolvingFace(true);
-                                                                        try {
-                                                                            // Manual creation
-                                                                            const formData = new FormData();
-                                                                            formData.append("type", "ENTRY");
-                                                                            formData.append("name", faceResultName || "Sujeto Desconocido");
-                                                                            formData.append("dni", faceResultDni || "---");
-                                                                            formData.append("destination", faceResultUnit || "");
-                                                                            formData.append("notes", faceResultNotes || "Validación Manual Facial");
-                                                                            formData.append("guardName", (typeof guardName === 'string' ? guardName : "Admin Sentinel"));
-
-                                                                            if (location) {
-                                                                                formData.append("latitude", location.lat.toString());
-                                                                                formData.append("longitude", location.lng.toString());
-                                                                            }
-
-                                                                            if (faceMatchResult.capturedImage) {
-                                                                                const res = await fetch(faceMatchResult.capturedImage);
-                                                                                const blob = await res.blob();
-                                                                                formData.append("photo", blob, "face_check.jpg");
-                                                                            }
-
-                                                                            const entry = await createBitacoraEntry(formData);
-                                                                            if (entry) {
-                                                                                toast.success("Ingreso registrado correctamente");
-                                                                                setEntries(prev => [entry, ...prev]);
-                                                                                setFaceMatchResult(null);
-                                                                                setTimeout(startFaceCamera, 100);
-                                                                            }
-                                                                        } catch (error) {
-                                                                            toast.error("Error al registrar ingreso");
-                                                                            console.error(error);
-                                                                        } finally {
-                                                                            setIsResolvingFace(false);
-                                                                        }
-                                                                    }}
-                                                                    disabled={isResolvingFace}
-                                                                    className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black uppercase text-xs tracking-widest"
-                                                                >
-                                                                    {isResolvingFace ? <Loader2 className="animate-spin" /> : <><CheckCircle2 className="mr-2" size={16} /> Registrar Ingreso Rapidamente</>}
-                                                                </Button>
-                                                            </div>
-                                                            <button
-                                                                onClick={() => {
-                                                                    setFaceMatchResult(null);
-                                                                    setTimeout(startFaceCamera, 100);
-                                                                }}
-                                                                className="w-full h-12 md:h-14 bg-slate-100 text-slate-900 rounded-xl md:rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-slate-200 transition-colors"
-                                                            >
-                                                                Reiniciar Cámara
-                                                            </button>
-                                                        </div>
-                                                    </motion.div>
-                                                )}
-                                            </div>
-
-                                            {/* Status Badge */}
-                                            <div className="bg-[#B20D30] rounded-2xl md:rounded-[2rem] p-5 md:p-6 text-white shadow-xl flex items-center justify-between">
-                                                <div className="space-y-0.5">
-                                                    <p className="text-[9px] font-black uppercase tracking-widest opacity-60">Seguridad Predictiva</p>
-                                                    <p className="text-lg md:text-xl font-black tracking-tighter italic">LIVE SCANNER</p>
-                                                </div>
-                                                <div className="w-10 h-10 md:w-12 md:h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                                                    <Zap size={24} className={isAnalyzingFace ? "animate-pulse" : ""} />
-                                                </div>
-                                            </div>
-
-                                            {/* SCAN BUTTON (TOUCH OPTIMIZED) */}
-                                            {!faceMatchResult && (
-                                                <motion.button
-                                                    whileHover={{ scale: 1.02 }}
-                                                    whileTap={{ scale: 0.95 }}
-                                                    onClick={captureAndAnalyzeFace}
-                                                    disabled={isAnalyzingFace}
-                                                    className="w-full h-20 md:h-24 bg-white border-4 border-[#B20D30] text-[#B20D30] rounded-2xl md:rounded-[2rem] shadow-xl flex items-center gap-4 px-8 group transition-all"
-                                                >
-                                                    <div className="w-12 h-12 bg-[#B20D30] rounded-xl flex items-center justify-center text-white group-hover:scale-110 transition-transform shadow-lg shadow-red-900/20">
-                                                        <Camera size={28} />
-                                                    </div>
-                                                    <div className="text-left font-black uppercase tracking-tight">
-                                                        <p className="text-[10px] opacity-60 m-0">Neural Sensor</p>
-                                                        <p className="text-xl md:text-2xl m-0 leading-none">TOMAR FOTO</p>
-                                                    </div>
-                                                </motion.button>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                                <canvas ref={faceCanvasRef} className="hidden" />
-                            </motion.div>
+                            <FaceScannerOverlay
+                                onClose={() => handleTabChange("control")}
+                                guardName={guardName}
+                                location={myLocation}
+                                recentEntries={entries}
+                                cameraFacingMode={cameraFacingMode}
+                                toggleCameraFacingMode={toggleCameraFacingMode}
+                            />
                         )}
                         {activeTab === "control" && (
                             <motion.div key="control" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.02 }} transition={{ duration: 0.2 }} className="h-full w-full overflow-y-auto p-4 pr-20 md:p-8 pb-64 custom-scrollbar">
@@ -2277,6 +1864,8 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                         <OCRScanner
                                             onDetected={handleOCRDetected}
                                             onClose={() => setIsOCRActive(false)}
+                                            cameraFacingMode={cameraFacingMode}
+                                            toggleCameraFacingMode={toggleCameraFacingMode}
                                         />
                                     )}
                                 </AnimatePresence>
@@ -3820,10 +3409,10 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                                         setGuardPhoto(guard.cara); // Assuming 'cara' is the photo URL
                                                         if (guard.cara) localStorage.setItem("guard_photo", guard.cara);
                                                         setShowGuardList(false);
-                                                        toast.success(`Sesión iniciada como ${guard.name}`);
+                                                        toast.success({ title: `Sesión iniciada como ${guard.name}` });
                                                         window.location.reload(); // Refresh to ensure full state reset
                                                     } else if (pinCheck) {
-                                                        toast.error("PIN Incorrecto");
+                                                        toast.error({ title: "PIN Incorrecto" });
                                                     }
                                                 }}
                                                 className="bg-slate-50 hover:bg-slate-100 border-2 border-slate-100 hover:border-[#B20D30]/20 rounded-3xl p-6 flex flex-col items-center gap-4 transition-all group"
@@ -3892,9 +3481,9 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                             navigator.mediaDevices.getUserMedia({ video: true, audio: true })
                                                 .then(stream => {
                                                     stream.getTracks().forEach(t => t.stop());
-                                                    toast.success("Permisos solicitados correctamente");
+                                                    toast.success({ title: "Permisos solicitados correctamente" });
                                                 })
-                                                .catch(() => toast.error("Permisos denegados o error de hardware"));
+                                                .catch(() => toast.error({ title: "Permisos denegados o error de hardware" }));
                                         }}
                                         className="w-full py-4 bg-white border-2 border-black/10 rounded-xl text-xs font-bold uppercase tracking-widest text-black hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition-all flex items-center justify-center gap-2"
                                     >
@@ -3991,14 +3580,14 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                                     "GUARD_APP_ICONS": JSON.stringify(customIcons)
                                                 });
                                                 if (res.success) {
-                                                    toast.success("Configuración de marca actualizada con éxito");
+                                                    toast.success({ title: "Configuración de marca actualizada con éxito" });
                                                     setShowSettingsModal(false);
                                                     window.location.reload();
                                                 } else {
-                                                    toast.error("Error al guardar: " + res.message);
+                                                    toast.error({ title: "Error al guardar: " + res.message });
                                                 }
                                             } catch (e) {
-                                                toast.error("Error de red al guardar");
+                                                toast.error({ title: "Error de red al guardar" });
                                             } finally {
                                                 setIsSavingBranding(false);
                                             }
@@ -4025,7 +3614,7 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                             parkingSlots={quickCreateData.parkingSlots}
                             onSuccess={() => {
                                 setShowQuickCreate(false);
-                                toast.success("Usuario creado con éxito");
+                                toast.success({ title: "Usuario creado con éxito" });
                             }}
                             initialData={quickCreateContext}
                         />
@@ -4478,7 +4067,7 @@ function HistoryItem({ entry, onDelete }: any) {
                                 const audio = new Audio(entry.audioPath);
                                 audio.play().catch(err => {
                                     console.error("Audio playback error:", err);
-                                    toast.error("Error al reproducir audio. El formato podría no ser compatible.");
+                                    toast.error({ title: "Error al reproducir audio. El formato podría no ser compatible." });
                                 });
                             }} className="w-10 h-10 rounded-xl bg-slate-50 text-black/40 hover:text-blue-500 hover:bg-blue-50 transition-all flex items-center justify-center">
                                 <Volume2 size={18} />

@@ -41,7 +41,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 
 interface ExtendedUser extends User {
     vehicles: { plate: string }[];
@@ -168,16 +168,16 @@ export default function UnitsPage() {
         try {
             if (editingUnit) {
                 await updateUnit(editingUnit.id, payload);
-                toast.success("Propiedad actualizada");
+                toast.success({ title: "Propiedad actualizada" });
             } else {
                 await createUnit(payload);
-                toast.success("Propiedad creada");
+                toast.success({ title: "Propiedad creada" });
             }
             setShowEditDialog(false);
             setMode('list');
             loadUnits();
         } catch (e) {
-            toast.error("Error al guardar");
+            toast.error({ title: "Error al guardar" });
         }
     };
 
@@ -185,11 +185,11 @@ export default function UnitsPage() {
         if (!editingUnit) return;
         try {
             await bulkCreateSubUnits(editingUnit.id, bulkPattern);
-            toast.success("Generación masiva completada");
+            toast.success({ title: "Generación masiva completada" });
             setShowBulkDialog(false);
             loadUnits();
         } catch (e) {
-            toast.error("Error en la generación masiva");
+            toast.error({ title: "Error en la generación masiva" });
         }
     };
 
@@ -939,7 +939,7 @@ export default function UnitsPage() {
                                                         <Button
                                                             onClick={async () => {
                                                                 await unassignUserFromUnit(user.id);
-                                                                toast.success(`${user.name} desvinculado`);
+                                                                toast.success({ title: `${user.name} desvinculado` });
                                                                 loadUnits();
                                                                 loadAvailableUsers();
                                                             }}
@@ -995,7 +995,7 @@ export default function UnitsPage() {
                                                         onClick={async () => {
                                                             if (editingUnit) {
                                                                 await assignUserToUnit(user.id, editingUnit.id);
-                                                                toast.success(`${user.name} vinculado correctamente`);
+                                                                toast.success({ title: `${user.name} vinculado correctamente` });
                                                                 setShowAssignDialog(false);
                                                                 loadUnits();
                                                                 loadAvailableUsers();

@@ -17,7 +17,7 @@ import { HIKVISION_VEHICLE_BRANDS } from "@/lib/hikvision-codes";
 import { getCarLogo } from "@/lib/car-logos";
 import carLogos from "@/lib/car-logos.json";
 import { saveHikvisionBrands } from "@/app/actions/settings";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -146,7 +146,7 @@ export function DriverDetailsDialog({ brand, isOpen, onClose }: DriverDetailsDia
     const handleUpdateModel = async () => {
         if (!editingModel) return;
         if (!editValues.label || !editValues.category) {
-            toast.error("Nombre y categoría son requeridos");
+            toast.error({ title: "Nombre y categoría son requeridos" });
             return;
         }
 
@@ -156,11 +156,11 @@ export function DriverDetailsDialog({ brand, isOpen, onClose }: DriverDetailsDia
         setIsUpdating(false);
 
         if (result.success) {
-            toast.success("Modelo actualizado exitosamente");
+            toast.success({ title: "Modelo actualizado exitosamente" });
             setEditingModel(null);
             window.location.reload();
         } else {
-            toast.error("Error al actualizar: " + result.error);
+            toast.error({ title: "Error al actualizar: " + result.error });
         }
     };
 
@@ -698,17 +698,17 @@ function BrandEditor() {
 
     const handleAdd = () => {
         if (!newCode || !newName) {
-            toast.error("Complete ambos campos");
+            toast.error({ title: "Complete ambos campos" });
             return;
         }
         if (brands.some(b => b.code === newCode)) {
-            toast.error("El código ya existe");
+            toast.error({ title: "El código ya existe" });
             return;
         }
         setBrands(prev => [...prev, { code: newCode, name: newName }].sort((a, b) => parseInt(a.code) - parseInt(b.code)));
         setNewCode("");
         setNewName("");
-        toast.success("Marca agregada a la lista temporal");
+        toast.success({ title: "Marca agregada a la lista temporal" });
     };
 
     const handleSave = async () => {
@@ -719,13 +719,13 @@ function BrandEditor() {
             const result = await saveHikvisionBrands(map);
 
             if (result.success) {
-                toast.success("Marcas guardadas correctamente. Reiniciando UI...", { duration: 3000 });
+                toast.success({ title: "Marcas guardadas correctamente. Reiniciando UI..." });
                 setTimeout(() => window.location.reload(), 1500);
             } else {
-                toast.error("Error al guardar: " + result.message);
+                toast.error({ title: "Error al guardar: " + result.message });
             }
         } catch (e) {
-            toast.error("Error inesperado al guardar");
+            toast.error({ title: "Error inesperado al guardar" });
         }
         setIsSaving(false);
     };

@@ -29,7 +29,7 @@ import {
     Info,
     RotateCw
 } from "lucide-react";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 import { importFaceBatch } from "@/app/actions/devices"; // We will create this
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -77,11 +77,11 @@ export function FaceImportPreviewDialog({
         try {
             const result = await importFaceBatch(deviceId, newFaces);
             setResult({ success: result.count || 0, failed: result.failed || 0 });
-            toast.success(`Importación completada: ${result.count || 0} usuarios creados.`);
+            toast.success({ title: `Importación completada: ${result.count || 0} usuarios creados.` });
             onSuccess();
         } catch (error) {
             console.error(error);
-            toast.error("Error al importar rostros.");
+            toast.error({ title: "Error al importar rostros." });
         } finally {
             setImporting(false);
         }

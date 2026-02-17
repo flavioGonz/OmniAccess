@@ -1,17 +1,18 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { io, Socket } from "socket.io-client";
-import { getAccessEvents, getEventsCountToday } from "@/app/actions/history";
+import { getAccessEvents, getEventsCountToday, getAccessEvent } from "@/app/actions/history";
 import { getSetting, updateSetting, testFaceEngineConnection } from "@/app/actions/settings";
 import { searchByPhotoAction } from "@/app/actions/face-verify";
 import {
     SlidersHorizontal, Upload, Trash2, Map as MapIcon, Bell, Settings,
     Users, UserPlus, Ban, ArrowLeft, MoreVertical, Check, X,
     ScanFace, Cpu, ShieldAlert, ShieldCheck, Info, Activity,
-    Search, RefreshCcw, Brain, UserSearch, Loader2
+    Search, RefreshCcw, Brain, UserSearch, Loader2, Maximize2
 } from "lucide-react";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -49,6 +50,15 @@ interface FullAccessEvent extends AccessEvent {
 }
 
 export default function FaceDashboard() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin text-red-600" /></div>}>
+            <FaceDashboardContent />
+        </Suspense>
+    );
+}
+
+function FaceDashboardContent() {
+    const searchParams = useSearchParams();
     const [events, setEvents] = useState<FullAccessEvent[]>([]);
     const [socket, setSocket] = useState<Socket | null>(null);
     const [stats, setStats] = useState({ total: 0, grants: 0, denies: 0 });
@@ -60,10 +70,15 @@ export default function FaceDashboard() {
     const [mounted, setMounted] = useState(false);
     const [verifications, setVerifications] = useState<Record<string, any>>({});
     const [neuralDetections, setNeuralDetections] = useState<FullAccessEvent[]>([]);
+    const [entryIndex, setEntryIndex] = useState(0);
+    const [exitIndex, setExitIndex] = useState(0);
+    const [neuralIndex, setNeuralIndex] = useState(0);
     const [isAutoPopupEnabled, setIsAutoPopupEnabled] = useState(true);
     const [selectedViewEvent, setSelectedViewEvent] = useState<FullAccessEvent | null>(null);
     const [currentTime, setCurrentTime] = useState(new Date());
     const [blacklistEvents, setBlacklistEvents] = useState<FullAccessEvent[]>([]);
+    const [showModeConfirm, setShowModeConfirm] = useState(false);
+    const [pendingMode, setPendingMode] = useState<"BLACKLIST" | "WHITELIST" | null>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
     // Floor Plan State
@@ -105,9 +120,18 @@ export default function FaceDashboard() {
             const fps = await getFloorPlans();
             setFloorPlans(fps);
             if (fps.length > 0) setCurrentFloorPlan(fps[0]);
+
+            // Handle URL Search Params for specific event
+            const eventId = searchParams.get('event');
+            if (eventId) {
+                const event = await getAccessEvent(eventId);
+                if (event) {
+                    setSelectedViewEvent(event as FullAccessEvent);
+                }
+            }
         };
         loadInitialData();
-    }, []);
+    }, [searchParams]);
 
     const handleMapUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -121,11 +145,11 @@ export default function FaceDashboard() {
                 const newFP = await createFloorPlan(`Plano ${floorPlans.length + 1}`, url);
                 setFloorPlans(prev => [...prev, newFP]);
                 setCurrentFloorPlan(newFP);
-                toast.success("Nuevo plano añadido");
+                toast.success({ title: "Nuevo plano añadido" });
             };
             reader.readAsDataURL(file);
         } catch (err) {
-            toast.error("Error al subir plano");
+            toast.error({ title: "Error al subir plano" });
         } finally {
             setIsUploadingMap(false);
             if (mapFileInputRef.current) mapFileInputRef.current.value = "";
@@ -133,18 +157,18 @@ export default function FaceDashboard() {
     };
 
     const handleSaveThreshold = async (val: number) => {
-        setSimilarityThreshold(val);
         setIsSavingThreshold(true);
-        try {
-            await updateSetting("COMPAREFACE_MIN_SIM", (val / 100).toString());
-            toast.success(`Umbral actualizado a ${val}%`, {
-                className: "bg-emerald-950 border-emerald-500 text-white font-black uppercase tracking-widest"
-            });
-        } catch (e) {
-            toast.error("Error al guardar umbral");
-        } finally {
-            setIsSavingThreshold(false);
-        }
+        await updateSetting("COMPAREFACE_MIN_SIM", (val / 100).toString());
+        setIsSavingThreshold(false);
+    };
+
+    const handleHorizontalScroll = (e: React.WheelEvent<HTMLDivElement>) => {
+        const container = e.currentTarget;
+        const scrollAmount = e.deltaY;
+        container.scrollTo({
+            left: container.scrollLeft + scrollAmount,
+            behavior: 'auto'
+        });
     };
 
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -152,23 +176,52 @@ export default function FaceDashboard() {
         if (!file) return;
 
         setIsSearchingFace(true);
-        setSearchResult(null);
-
-        const toastId = toast.loading("Buscando rostro en base de datos...");
+        const toastId = toast.show({ title: "Buscando rostro en base de datos...", duration: null });
 
         try {
             const buffer = await file.arrayBuffer();
-            // Use visitors collection as priority for manual search if requested, or just both
-            const result = await searchByPhotoAction(new Uint8Array(buffer), true);
+            const result = await searchByPhotoAction(new Uint8Array(buffer));
 
             if (result.success && result.match) {
-                setSearchResult(result);
-                toast.success(`Rostro identificado: ${result.match.subject} (${(result.match.similarity * 100).toFixed(1)}%)`, { id: toastId });
+                // To show in Splash Screen, we create a 'Phantom Event'
+                const phantomEvent: any = {
+                    id: `search-${Date.now()}`,
+                    timestamp: new Date(),
+                    snapshotPath: result.match.snapshot_path || result.match.preview_url, // Path to image used for match
+                    accessType: 'FACE',
+                    details: `Manual Search: ${result.match.subject}, Similarity: ${(result.match.similarity * 100).toFixed(1)}%`,
+                    user: result.user || null,
+                    deviceId: 'manual-search',
+                    device: { name: 'Terminal de Búsqueda Manual' }
+                };
+
+                // Add to neural detections to persist the finding 
+                setNeuralDetections(prev => [phantomEvent, ...prev].slice(0, 5));
+
+                // Add verification state for this phantom event
+                setVerifications(prev => ({
+                    ...prev,
+                    [phantomEvent.id]: {
+                        success: true,
+                        verified: result.match.similarity > 0.8,
+                        similarity: result.match.similarity,
+                        recognizedAs: result.match.subject,
+                        user: result.user,
+                        loading: false
+                    }
+                }));
+
+                // Open Splash Screen immediately
+                setSelectedViewEvent(phantomEvent);
+                toast.success({ title: `Rostro identificado: ${result.match.subject}` });
+                toast.dismiss(toastId);
             } else {
-                toast.error("No se encontraron coincidencias para este rostro", { id: toastId });
+                toast.error({ title: "No se encontraron coincidencias para este rostro" });
+                toast.dismiss(toastId);
             }
         } catch (err) {
-            toast.error("Error al procesar la búsqueda", { id: toastId });
+            toast.error({ title: "Error al procesar la búsqueda" });
+            toast.dismiss(toastId);
         } finally {
             setIsSearchingFace(false);
             if (fileInputRef.current) fileInputRef.current.value = "";
@@ -195,35 +248,40 @@ export default function FaceDashboard() {
                 [event.id]: { ...result, loading: false }
             }));
 
-            // If it matched someone in Neural Engine, add to detections list
-            if (result.similarity > 0) {
+            setLastEvent(event);
+
+            // If it matched someone in Neural Engine OR Camera, add to detections list (bubbles)
+            if (result && ((result.similarity || 0) > 0 || result.recognizedAs !== 'Desconocido')) {
                 setNeuralDetections(prev => {
                     // Avoid duplicates and keep last 5
                     const filtered = prev.filter(e => e.id !== event.id);
                     return [event, ...filtered].slice(0, 5);
                 });
+                setNeuralIndex(0);
             }
 
-            // If blacklisted, add to map alerts
-            if (event.user?.role === 'BLACKLISTED' || result.user?.role === 'BLACKLISTED') {
+            // If blacklisted and confidence >= 90% (camera) or neural match, add to map alerts
+            if (event.user?.role === 'BLACKLISTED' || result?.alertTriggered) {
                 setBlacklistEvents(prev => {
                     const filtered = prev.filter(e => e.id !== event.id);
                     return [event, ...filtered];
                 });
             }
-
-            if (result.verified) {
-                toast.success(`STATUS: IDENTIDAD VERIFICADA`, {
-                    description: `${result.recognizedAs} | Confianza: ${(result.similarity * 100).toFixed(1)}%`,
-                    className: "bg-emerald-950 border-emerald-500 text-white font-black uppercase tracking-widest"
+            if (result?.verified) {
+                toast.success({
+                    title: `STATUS: IDENTIDAD VERIFICADA`,
+                    description: `${result.recognizedAs} | Confianza: ${((result.similarity || 0) * 100).toFixed(1)}%`
                 });
             }
+
+            return result;
         } catch (err) {
             console.error("Verification failed", err);
             setVerifications(prev => ({
                 ...prev,
                 [event.id]: { loading: false, error: true }
             }));
+            return null;
         }
     };
 
@@ -236,9 +294,46 @@ export default function FaceDashboard() {
         const loadInitialData = async () => {
             try {
                 const data = await getAccessEvents({ take: 30, type: 'FACE' });
-                setEvents(data.events as FullAccessEvent[]);
+                const fetchedEvents = data.events as FullAccessEvent[];
+                setEvents(fetchedEvents);
+
+                // Initialize blacklist events for the map from recent history
+                const activeBlacklist = fetchedEvents.filter(e =>
+                    e.user?.role === 'BLACKLISTED' &&
+                    // Optional: only show alerts from the last 2 hours 
+                    (new Date().getTime() - new Date(e.timestamp).getTime()) < (2 * 60 * 60 * 1000)
+                );
+                setBlacklistEvents(activeBlacklist);
+
                 const todayStats = await getEventsCountToday('FACE');
                 setStats(todayStats);
+
+                // PERSISTENCE: Populate neural detections from history
+                // We consider "neural detection" any face event where the subject is not 'Unknown' or has a match in details
+                const historyNeural = fetchedEvents.filter(e => {
+                    const hasSubject = e.details?.includes('Persona:') && !e.details?.includes('Persona: Desconocido');
+                    return hasSubject || e.user;
+                }).slice(0, 5);
+
+                setNeuralDetections(historyNeural);
+
+                // Also pre-populate verifications for these historical events
+                const initialVerifs: Record<string, any> = {};
+                historyNeural.forEach(e => {
+                    const match = e.details?.match(/Persona: ([^,]+)/)?.[1];
+                    const simMatch = e.details?.match(/CamMatch: ([\d.]+)%/);
+                    const similarity = simMatch ? parseFloat(simMatch[1]) / 100 : 0.9; // Default high if identified
+
+                    initialVerifs[e.id] = {
+                        success: true,
+                        verified: true,
+                        similarity: similarity,
+                        recognizedAs: e.user?.name || match || "Identificado",
+                        loading: false
+                    };
+                });
+                setVerifications(prev => ({ ...initialVerifs, ...prev }));
+
             } catch (error) {
                 console.error("Error loading data:", error);
             }
@@ -252,25 +347,64 @@ export default function FaceDashboard() {
         newSocket.on("connect", () => setIsConnected(true));
         newSocket.on("disconnect", () => setIsConnected(false));
 
-        const handleNewEvent = (event: FullAccessEvent) => {
+        const handleNewEvent = async (event: FullAccessEvent) => {
             if (event.accessType !== 'FACE' && !event.snapshotPath?.includes('face')) return;
 
-            setEvents((prev) => [event, ...prev].slice(0, 30));
+            setEvents((prev) => {
+                // Deduplicate by ID
+                if (prev.find(e => e.id === event.id)) return prev;
+
+                // Deduplicate by Content (Plate/Subject) within a 3-second window
+                const isDuplicate = prev.some(e => {
+                    const sameSubject = event.details && e.details && (event.details.split(',')[1] === e.details.split(',')[1]);
+                    const closeTime = Math.abs(new Date(e.timestamp).getTime() - new Date(event.timestamp).getTime()) < 3000;
+                    return sameSubject && closeTime;
+                });
+
+                if (isDuplicate) return prev;
+                return [event, ...prev].slice(0, 30);
+            });
+
+            // Update stats
             setStats(prev => ({
                 total: prev.total + 1,
                 grants: prev.grants + (event.decision === "GRANT" ? 1 : 0),
                 denies: prev.denies + (event.decision === "DENY" ? 1 : 0)
             }));
-            setLastEvent(event);
 
-            // Trigger double verification
-            handleVerification(event);
+            if (event.direction === 'EXIT') setExitIndex(0);
+            else setEntryIndex(0);
 
-            // Auto-popup only if camera has compared data (positive ID)
-            const nativeName = event.details?.match(/Persona: ([^,]+)/)?.[1];
-            const isCompared = nativeName && nativeName !== 'Desconocido' && nativeName !== 'N/A' && nativeName !== 'Unknown';
+            // OPTIMIZATION: Check if server already identified the subject (Instant UI)
+            const neuralMatch = event.details?.match(/Neural ID: (.+?) \((\d+\.?\d*)%\)/);
+            let result: any = null;
 
-            if (isAutoPopupEnabled && isCompared) {
+            if (neuralMatch) {
+                const subject = neuralMatch[1];
+                const sim = parseFloat(neuralMatch[2]) / 100;
+                result = {
+                    success: true,
+                    verified: true,
+                    similarity: sim,
+                    recognizedAs: subject,
+                    user: event.user,
+                    loading: false
+                };
+                setVerifications(prev => ({ ...prev, [event.id]: result }));
+
+                // Add to bubbles if it's a valid identification
+                if (subject !== 'Desconocido') {
+                    setNeuralDetections(prev => [event, ...prev.filter(e => e.id !== event.id)].slice(0, 5));
+                    setNeuralIndex(0);
+                }
+            } else {
+                // Background identification for events missing neural data
+                result = await handleVerification(event);
+            }
+
+            // Auto-popup logic: Activate ONLY on Blacklisted events if AUTO is enabled
+            const isAlert = event.user?.role === 'BLACKLISTED' || result?.alertTriggered;
+            if (isAutoPopupEnabled && isAlert) {
                 setSelectedViewEvent(event);
             }
         };
@@ -312,8 +446,8 @@ export default function FaceDashboard() {
                                 <span className="text-[11px] font-black uppercase tracking-[0.3em] text-white/60">Monitor En Vivo (ENTRADA)</span>
                             </div>
 
-                            <div className="flex items-center gap-4 px-6 pt-12 pb-4 overflow-x-auto overflow-y-hidden custom-scrollbar h-full flex-nowrap scroll-smooth">
-                                {events.filter(e => e.snapshotPath && (e.direction === 'ENTRY' || !e.direction)).slice(0, 15).map((event) => (
+                            <div className="flex items-center gap-4 px-6 pt-12 pb-4 h-full overflow-x-auto custom-scrollbar pointer-events-auto">
+                                {events.filter(e => e.snapshotPath && (e.direction === 'ENTRY' || !e.direction)).slice(0, 15).map(event => (
                                     <FeedCard
                                         key={event.id}
                                         event={event}
@@ -322,281 +456,206 @@ export default function FaceDashboard() {
                                         onClick={() => setSelectedViewEvent(event)}
                                     />
                                 ))}
-                                {events.length === 0 && !isConnected && (
-                                    <div className="w-full h-full flex items-center justify-center">
-                                        <p className="text-[10px] font-black text-neutral-800 uppercase tracking-widest">Enlazando sistema de monitoreo...</p>
-                                    </div>
-                                )}
                             </div>
                         </div>
                     </div>
 
-                    {/* Middle Area: Neural Detections Row */}
-                    <div className="flex-1 relative">
-                        <div className="absolute bottom-10 left-10 right-10 flex gap-4 pointer-events-none">
-                            <AnimatePresence>
-                                {neuralDetections.map((detEvent) => (
-                                    <motion.div
-                                        key={detEvent.id}
-                                        initial={{ opacity: 0, y: 20, scale: 0.9 }}
-                                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                                        exit={{ opacity: 0, scale: 0.8, x: -20 }}
-                                        className="w-72 bg-black/40 backdrop-blur-md border border-white/5 shadow-2xl z-40 overflow-hidden rounded-3xl group/scanning pointer-events-auto shrink-0"
-                                    >
-                                        <div className="absolute inset-0">
-                                            <img
-                                                src={getImagePath(detEvent.snapshotPath) || ""}
-                                                className="w-full h-full object-cover grayscale opacity-40 group-hover/scanning:scale-110 transition-transform duration-[2000ms]"
-                                                alt="Subject"
-                                            />
-                                            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent" />
+                    <div className="flex-1" />
+
+                    {/* Right Toolbar Area */}
+                    <div className="absolute top-1/2 -translate-y-1/2 right-6 flex flex-col gap-4 pointer-events-auto z-40 items-end">
+                        <div className="flex flex-col gap-2 p-1.5 bg-black/40 backdrop-blur-md border border-white/10 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.4)]">
+                            <Link href="/admin/dashboard-face/whitelist" title="Lista Blanca" className="w-10 h-10 rounded-full flex items-center justify-center text-emerald-500 hover:bg-emerald-500/10 transition-colors">
+                                <Users size={18} />
+                            </Link>
+                            <Link href="/admin/dashboard-face/blacklist" title="Lista Negra" className="w-10 h-10 rounded-full flex items-center justify-center text-red-500 hover:bg-red-500/10 transition-colors">
+                                <Ban size={18} />
+                            </Link>
+                            <Link href="/admin/dashboard-face/upload" title="Inscribir" className="w-10 h-10 rounded-full flex items-center justify-center text-blue-500 hover:bg-blue-500/10 transition-colors">
+                                <UserPlus size={18} />
+                            </Link>
+
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                title="Buscar Rostro Manualmente"
+                                className={cn(
+                                    "w-10 h-10 rounded-full flex items-center justify-center transition-all",
+                                    isSearchingFace ? "animate-pulse text-amber-500" : "text-amber-500 hover:bg-amber-500/10"
+                                )}
+                            >
+                                {isSearchingFace ? <Loader2 className="animate-spin" size={18} /> : <Search size={18} />}
+                            </button>
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                className="hidden"
+                                accept="image/*"
+                                onChange={handleFileSelect}
+                            />
+
+                            <div className="h-[1px] w-6 bg-white/10 mx-auto my-1" />
+
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <button className="w-10 h-10 rounded-full flex items-center justify-center text-white hover:bg-white/10 transition-all" title="AI Configuration">
+                                        <Brain size={18} />
+                                    </button>
+                                </PopoverTrigger>
+                                <PopoverContent side="left" className="w-80 bg-black/90 border-white/10 backdrop-blur-xl p-6 rounded-2xl shadow-2xl z-[100]">
+                                    <div className="space-y-6">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <Cpu className="text-red-500" size={16} />
+                                            <h3 className="text-xs font-black text-white uppercase tracking-widest">AI Face Engine</h3>
                                         </div>
 
-                                        <div className="relative p-6 space-y-5">
-                                            <div className="flex items-start justify-between">
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <div className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse" />
-                                                        <p className="text-[8px] font-black text-red-500 uppercase tracking-[0.2em]">Detección Neural</p>
-                                                    </div>
-                                                    <h3 className="text-xl font-black uppercase tracking-tight truncate leading-tight">
-                                                        {detEvent.user?.name || (verifications[detEvent.id]?.recognizedAs || "No Identificado")}
-                                                    </h3>
-                                                    <p className="text-[8px] font-mono text-neutral-500 mt-1 uppercase tracking-widest">
-                                                        Time: {new Date(detEvent.timestamp || detEvent.createdAt).toLocaleTimeString()}
-                                                    </p>
-                                                </div>
-
-                                                <button
-                                                    onClick={() => setNeuralDetections(prev => prev.filter(d => d.id !== detEvent.id))}
-                                                    className="p-1 hover:bg-white/10 rounded-full text-neutral-500 hover:text-white transition-all"
-                                                >
-                                                    <X size={14} />
-                                                </button>
-                                            </div>
-
-                                            <div className="space-y-3 pt-4 border-t border-white/10">
-                                                <StatusRow label="Terminal" value={detEvent.device?.name || "Access Point"} />
-                                                <StatusRow
-                                                    label="Verificación"
-                                                    value={verifications[detEvent.id]?.loading ? "PROCESANDO..." : (verifications[detEvent.id]?.verified ? "CONCORDANCIA" : "DESCONOCIDO")}
-                                                    color={verifications[detEvent.id]?.verified ? "text-emerald-500" : "text-amber-500"}
+                                        <div className="space-y-3">
+                                            <div className="space-y-1">
+                                                <Label className="text-[9px] font-black uppercase text-neutral-500 tracking-widest pl-1">Endpoint</Label>
+                                                <Input
+                                                    value={aiConfig.endpoint}
+                                                    onChange={(e) => setAiConfig({ ...aiConfig, endpoint: e.target.value })}
+                                                    placeholder="http://..."
+                                                    className="bg-white/5 border-white/5 h-9 text-[10px] font-mono"
                                                 />
                                             </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-[9px] font-black uppercase text-neutral-500 tracking-widest pl-1">API Key</Label>
+                                                <Input
+                                                    type="password"
+                                                    value={aiConfig.apiKey}
+                                                    onChange={(e) => setAiConfig({ ...aiConfig, apiKey: e.target.value })}
+                                                    className="bg-white/5 border-white/5 h-9 text-[10px] font-mono"
+                                                />
+                                            </div>
+                                            <div className="pt-2">
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <Label className="text-[9px] font-black uppercase text-neutral-500 tracking-widest">Confianza</Label>
+                                                    <span className="text-xs font-black text-red-500">{Math.round(similarityThreshold)}%</span>
+                                                </div>
+                                                <input
+                                                    type="range"
+                                                    min="50" max="99"
+                                                    value={similarityThreshold}
+                                                    onChange={(e) => {
+                                                        const val = parseInt(e.target.value);
+                                                        setSimilarityThreshold(val);
+                                                        handleSaveThreshold(val);
+                                                    }}
+                                                    className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-red-600"
+                                                />
+                                            </div>
+                                        </div>
 
+                                        <div className="flex gap-2">
                                             <button
-                                                onClick={() => setSelectedViewEvent(detEvent)}
-                                                className="w-full h-11 bg-white/10 backdrop-blur-md border border-white/10 text-[9px] font-black uppercase tracking-[0.2em] hover:bg-[#B20D30] hover:text-white transition-all rounded-xl mt-2 flex items-center justify-center gap-2"
+                                                onClick={async () => {
+                                                    setTestingAi(true);
+                                                    const res = await testFaceEngineConnection(aiConfig.endpoint, aiConfig.apiKey);
+                                                    if (res.success) toast.success({ title: res.message });
+                                                    else toast.error({ title: res.message });
+                                                    setTestingAi(false);
+                                                }}
+                                                className="flex-1 h-8 bg-white/5 hover:bg-white/10 rounded-lg text-white font-black text-[9px] uppercase tracking-widest transition-all"
                                             >
-                                                <Search size={12} />
-                                                Inspeccionar
+                                                {testingAi ? "Test..." : "Test"}
+                                            </button>
+                                            <button
+                                                onClick={async () => {
+                                                    setSavingAi(true);
+                                                    await updateSetting("COMPAREFACE_URL", aiConfig.endpoint);
+                                                    await updateSetting("COMPAREFACE_KEY", aiConfig.apiKey);
+                                                    toast.success({ title: "AI config actualizada" });
+                                                    setSavingAi(false);
+                                                }}
+                                                className="flex-1 h-8 bg-red-600 hover:bg-red-700 rounded-lg text-white font-black text-[9px] uppercase tracking-widest transition-all"
+                                            >
+                                                {savingAi ? "..." : "Guardar"}
                                             </button>
                                         </div>
-                                    </motion.div>
-                                ))}
-                            </AnimatePresence>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
+
+                            <div className="h-[1px] w-6 bg-white/10 mx-auto my-1" />
+
+                            <button
+                                onClick={() => {
+                                    const newMode = faceMode === "BLACKLIST" ? "WHITELIST" : "BLACKLIST";
+                                    setPendingMode(newMode);
+                                    setShowModeConfirm(true);
+                                }}
+                                className={cn(
+                                    "w-10 h-10 rounded-full flex items-center justify-center transition-all",
+                                    faceMode === "WHITELIST" ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)]" : "bg-red-600 text-white shadow-[0_0_15px_rgba(220,38,38,0.5)]"
+                                )}
+                                title={`Modo actual: ${faceMode === "BLACKLIST" ? "LISTA NEGRA" : "LISTA BLANCA"}`}
+                            >
+                                {faceMode === "WHITELIST" ? <ShieldCheck size={18} /> : <ShieldAlert size={18} />}
+                            </button>
+
+                            <div className="h-[1px] w-6 bg-white/10 mx-auto my-1" />
+
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <button className="w-10 h-10 rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all" title="Gestionar Planos">
+                                        <MapIcon size={18} />
+                                    </button>
+                                </PopoverTrigger>
+                                <PopoverContent side="left" className="w-64 bg-black/90 border-white/10 backdrop-blur-xl p-4 rounded-2xl shadow-2xl z-[100]">
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                                            <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest leading-none">PLANOS DISPONIBLES</span>
+                                            <button
+                                                onClick={() => mapFileInputRef.current?.click()}
+                                                className="w-6 h-6 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all text-white"
+                                            >
+                                                <Upload size={12} />
+                                            </button>
+                                        </div>
+                                        <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar">
+                                            {floorPlans.map(fp => (
+                                                <button
+                                                    key={fp.id}
+                                                    onClick={() => setCurrentFloorPlan(fp)}
+                                                    className={cn(
+                                                        "w-full text-left px-3 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all",
+                                                        currentFloorPlan?.id === fp.id ? "bg-[#B20D30] text-white" : "text-neutral-400 hover:bg-white/5"
+                                                    )}
+                                                >
+                                                    {fp.name}
+                                                </button>
+                                            ))}
+                                            {floorPlans.length === 0 && (
+                                                <p className="text-[9px] text-neutral-600 uppercase font-black tracking-widest text-center py-4">Sin planos cargados</p>
+                                            )}
+                                        </div>
+                                        <input
+                                            type="file"
+                                            ref={mapFileInputRef}
+                                            className="hidden"
+                                            accept="image/*"
+                                            onChange={handleMapUpload}
+                                        />
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
                         </div>
 
-                        <div className="absolute top-0 right-6 flex flex-col gap-4 pointer-events-auto z-40 items-end">
-                            <div className="flex flex-col gap-2 p-1.5 bg-black/40 backdrop-blur-md border border-white/10 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.4)]">
-                                <Link href="/admin/dashboard-face/whitelist" title="Lista Blanca" className="w-10 h-10 rounded-full flex items-center justify-center text-emerald-500 hover:bg-emerald-500/10 transition-colors">
-                                    <Users size={18} />
-                                </Link>
-                                <Link href="/admin/dashboard-face/blacklist" title="Lista Negra" className="w-10 h-10 rounded-full flex items-center justify-center text-red-500 hover:bg-red-500/10 transition-colors">
-                                    <Ban size={18} />
-                                </Link>
-                                <Link href="/admin/dashboard-face/upload" title="Inscribir" className="w-10 h-10 rounded-full flex items-center justify-center text-blue-500 hover:bg-blue-500/10 transition-colors">
-                                    <UserPlus size={18} />
-                                </Link>
+                        <div className="bg-black/60 backdrop-blur-xl border border-white/10 p-3 rounded-3xl shadow-2xl flex flex-col items-center gap-2">
+                            <Switch
+                                id="auto-popup-float"
+                                checked={isAutoPopupEnabled}
+                                onCheckedChange={setIsAutoPopupEnabled}
+                                className="scale-75 data-[state=checked]:bg-[#B20D30]"
+                            />
+                            <Label htmlFor="auto-popup-float" className="text-[8px] font-black uppercase tracking-widest text-white/40 cursor-pointer text-center leading-none">
+                                AUTO
+                            </Label>
+                        </div>
 
-                                <button
-                                    onClick={() => fileInputRef.current?.click()}
-                                    title="Buscar Rostro Manualmente"
-                                    className={cn(
-                                        "w-10 h-10 rounded-full flex items-center justify-center transition-all",
-                                        isSearchingFace ? "animate-pulse text-amber-500" : "text-amber-500 hover:bg-amber-500/10"
-                                    )}
-                                >
-                                    {isSearchingFace ? <Loader2 className="animate-spin" size={18} /> : <UserSearch size={18} />}
-                                </button>
-                                <input
-                                    type="file"
-                                    ref={fileInputRef}
-                                    className="hidden"
-                                    accept="image/*"
-                                    onChange={handleFileSelect}
-                                />
-
-                                <div className="h-[1px] w-6 bg-white/10 mx-auto my-1" />
-
-                                {/* AI Config Popover requested by user */}
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                        <button className="w-10 h-10 rounded-full flex items-center justify-center text-white hover:bg-white/10 transition-all" title="AI Configuration">
-                                            <Brain size={18} />
-                                        </button>
-                                    </PopoverTrigger>
-                                    <PopoverContent side="left" className="w-80 bg-black/90 border-white/10 backdrop-blur-xl p-6 rounded-2xl shadow-2xl z-[100]">
-                                        <div className="space-y-6">
-                                            <div className="flex items-center gap-2 mb-4">
-                                                <Cpu className="text-red-500" size={16} />
-                                                <h3 className="text-xs font-black text-white uppercase tracking-widest">AI Face Engine</h3>
-                                            </div>
-
-                                            <div className="space-y-3">
-                                                <div className="space-y-1">
-                                                    <Label className="text-[9px] font-black uppercase text-neutral-500 tracking-widest pl-1">Endpoint</Label>
-                                                    <Input
-                                                        value={aiConfig.endpoint}
-                                                        onChange={(e) => setAiConfig({ ...aiConfig, endpoint: e.target.value })}
-                                                        placeholder="http://..."
-                                                        className="bg-white/5 border-white/5 h-9 text-[10px] font-mono"
-                                                    />
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <Label className="text-[9px] font-black uppercase text-neutral-500 tracking-widest pl-1">API Key</Label>
-                                                    <Input
-                                                        type="password"
-                                                        value={aiConfig.apiKey}
-                                                        onChange={(e) => setAiConfig({ ...aiConfig, apiKey: e.target.value })}
-                                                        className="bg-white/5 border-white/5 h-9 text-[10px] font-mono"
-                                                    />
-                                                </div>
-                                                <div className="pt-2">
-                                                    <div className="flex justify-between items-center mb-2">
-                                                        <Label className="text-[9px] font-black uppercase text-neutral-500 tracking-widest">Confianza</Label>
-                                                        <span className="text-xs font-black text-red-500">{Math.round(similarityThreshold)}%</span>
-                                                    </div>
-                                                    <input
-                                                        type="range"
-                                                        min="50" max="99"
-                                                        value={similarityThreshold}
-                                                        onChange={(e) => {
-                                                            const val = parseInt(e.target.value);
-                                                            setSimilarityThreshold(val);
-                                                            handleSaveThreshold(val);
-                                                        }}
-                                                        className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-red-600"
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={async () => {
-                                                        setTestingAi(true);
-                                                        const res = await testFaceEngineConnection(aiConfig.endpoint, aiConfig.apiKey);
-                                                        if (res.success) toast.success(res.message);
-                                                        else toast.error(res.message);
-                                                        setTestingAi(false);
-                                                    }}
-                                                    className="flex-1 h-8 bg-white/5 hover:bg-white/10 rounded-lg text-white font-black text-[9px] uppercase tracking-widest transition-all"
-                                                >
-                                                    {testingAi ? "Test..." : "Test"}
-                                                </button>
-                                                <button
-                                                    onClick={async () => {
-                                                        setSavingAi(true);
-                                                        await updateSetting("COMPAREFACE_URL", aiConfig.endpoint);
-                                                        await updateSetting("COMPAREFACE_KEY", aiConfig.apiKey);
-                                                        toast.success("AI config actualizada");
-                                                        setSavingAi(false);
-                                                    }}
-                                                    className="flex-1 h-8 bg-red-600 hover:bg-red-700 rounded-lg text-white font-black text-[9px] uppercase tracking-widest transition-all"
-                                                >
-                                                    {savingAi ? "..." : "Guardar"}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </PopoverContent>
-                                </Popover>
-
-                                <div className="h-[1px] w-6 bg-white/10 mx-auto my-1" />
-
-                                {/* Mode Face Control Toggle requested by user */}
-                                <button
-                                    onClick={async () => {
-                                        const newMode = faceMode === "BLACKLIST" ? "WHITELIST" : "BLACKLIST";
-                                        setFaceMode(newMode);
-                                        await updateSetting("MODE_FACE", newMode);
-                                        toast.success(`Modo Face: ${newMode}`);
-                                    }}
-                                    className={cn(
-                                        "w-10 h-10 rounded-full flex items-center justify-center transition-all",
-                                        faceMode === "WHITELIST" ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)]" : "bg-red-600 text-white shadow-[0_0_15px_rgba(220,38,38,0.5)]"
-                                    )}
-                                    title={`Modo actual: ${faceMode === "BLACKLIST" ? "LISTA NEGRA" : "LISTA BLANCA"}`}
-                                >
-                                    {faceMode === "WHITELIST" ? <ShieldCheck size={18} /> : <ShieldAlert size={18} />}
-                                </button>
-
-                                <div className="h-[1px] w-6 bg-white/10 mx-auto my-1" />
-
-                                {/* Floor Plan Controls moved to horizontal menu group */}
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                        <button className="w-10 h-10 rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all" title="Gestionar Planos">
-                                            <MapIcon size={18} />
-                                        </button>
-                                    </PopoverTrigger>
-                                    <PopoverContent side="left" className="w-64 bg-black/90 border-white/10 backdrop-blur-xl p-4 rounded-2xl shadow-2xl z-[100]">
-                                        <div className="space-y-4">
-                                            <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                                                <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest leading-none">PLANOS DISPONIBLES</span>
-                                                <button
-                                                    onClick={() => mapFileInputRef.current?.click()}
-                                                    className="w-6 h-6 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all text-white"
-                                                >
-                                                    <Upload size={12} />
-                                                </button>
-                                            </div>
-                                            <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar">
-                                                {floorPlans.map(fp => (
-                                                    <button
-                                                        key={fp.id}
-                                                        onClick={() => setCurrentFloorPlan(fp)}
-                                                        className={cn(
-                                                            "w-full text-left px-3 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all",
-                                                            currentFloorPlan?.id === fp.id ? "bg-[#B20D30] text-white" : "text-neutral-400 hover:bg-white/5"
-                                                        )}
-                                                    >
-                                                        {fp.name}
-                                                    </button>
-                                                ))}
-                                                {floorPlans.length === 0 && (
-                                                    <p className="text-[9px] text-neutral-600 uppercase font-black tracking-widest text-center py-4">Sin planos cargados</p>
-                                                )}
-                                            </div>
-                                            <input
-                                                type="file"
-                                                ref={mapFileInputRef}
-                                                className="hidden"
-                                                accept="image/*"
-                                                onChange={handleMapUpload}
-                                            />
-                                        </div>
-                                    </PopoverContent>
-                                </Popover>
-                            </div>
-
-                            {/* Auto Popup Toggle */}
-                            <div className="bg-black/60 backdrop-blur-xl border border-white/10 p-3 rounded-3xl shadow-2xl flex flex-col items-center gap-2">
-                                <Switch
-                                    id="auto-popup-float"
-                                    checked={isAutoPopupEnabled}
-                                    onCheckedChange={setIsAutoPopupEnabled}
-                                    className="scale-75 data-[state=checked]:bg-[#B20D30]"
-                                />
-                                <Label htmlFor="auto-popup-float" className="text-[8px] font-black uppercase tracking-widest text-white/40 cursor-pointer text-center leading-none">
-                                    AUTO
-                                </Label>
-                            </div>
-
-                            {/* Connectivity Status (Minimal) */}
-                            <div className="flex flex-col items-center gap-1 mt-2">
-                                <div className={cn("w-1.5 h-1.5 rounded-full animate-pulse", isConnected ? "bg-emerald-500 shadow-[0_0_10px_#10b981]" : "bg-red-600 shadow-[0_0_10px_#dc2626]")} />
-                                <span className="text-[7px] font-black text-white/20 uppercase tracking-tighter">{isConnected ? "ONLINE" : "OFFLINE"}</span>
-                            </div>
+                        <div className="flex flex-col items-center gap-1 mt-2">
+                            <div className={cn("w-1.5 h-1.5 rounded-full animate-pulse", isConnected ? "bg-emerald-500 shadow-[0_0_10px_#10b981]" : "bg-red-600 shadow-[0_0_10px_#dc2626]")} />
+                            <span className="text-[7px] font-black text-white/20 uppercase tracking-tighter">{isConnected ? "ONLINE" : "OFFLINE"}</span>
                         </div>
                     </div>
 
@@ -608,8 +667,8 @@ export default function FaceDashboard() {
                                 <span className="text-[11px] font-black uppercase tracking-[0.3em] text-white/60">Monitor En Vivo (SALIDA)</span>
                             </div>
 
-                            <div className="flex items-center gap-4 px-6 pt-12 pb-4 overflow-x-auto overflow-y-hidden custom-scrollbar h-full flex-nowrap scroll-smooth">
-                                {events.filter(e => e.snapshotPath && e.direction === 'EXIT').slice(0, 15).map((event) => (
+                            <div className="flex items-center gap-4 px-6 pt-12 pb-4 h-full overflow-x-auto custom-scrollbar pointer-events-auto">
+                                {events.filter(e => e.snapshotPath && e.direction === 'EXIT').slice(0, 15).map(event => (
                                     <FeedCard
                                         key={event.id}
                                         event={event}
@@ -624,9 +683,6 @@ export default function FaceDashboard() {
                 </div>
             </div>
 
-            {/* Removed Floating Hub */}
-
-            {/* Tactical Face Match Modal */}
             {selectedViewEvent && (
                 <FaceMatchModal
                     event={selectedViewEvent}
@@ -638,6 +694,71 @@ export default function FaceDashboard() {
                     }}
                 />
             )}
+
+            <AnimatePresence>
+                {showModeConfirm && (
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                            onClick={() => setShowModeConfirm(false)}
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="relative w-full max-w-md bg-[#0A0A0A] border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
+                        >
+                            <div className={cn(
+                                "p-6 flex flex-col items-center text-center",
+                                pendingMode === 'WHITELIST' ? "bg-emerald-950/20" : "bg-red-950/20"
+                            )}>
+                                <div className={cn(
+                                    "w-16 h-16 rounded-full flex items-center justify-center mb-4 border",
+                                    pendingMode === 'WHITELIST' ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500" : "bg-red-500/10 border-red-500/20 text-red-500"
+                                )}>
+                                    {pendingMode === 'WHITELIST' ? <ShieldCheck size={32} /> : <ShieldAlert size={32} />}
+                                </div>
+                                <h3 className="text-xl font-black uppercase tracking-widest text-white mb-2">
+                                    ¿Activar Modo {pendingMode === 'WHITELIST' ? 'Lista Blanca' : 'Lista Negra'}?
+                                </h3>
+                                <p className="text-sm text-neutral-400 mb-6 px-4 leading-relaxed">
+                                    {pendingMode === 'WHITELIST'
+                                        ? "Este modo prioriza la detección de residentes autorizados. El sistema registrará ingresos cotidianos y alertará solo en casos de discrepancias críticas con la base de datos de confianza."
+                                        : "Este modo es restrictivo. El sistema buscará activamente sujetos marcados en la Lista Negra y disparará una alerta sensorial inmediata (visual y sonora) al detectar coincidencias."
+                                    }
+                                </p>
+                                <div className="flex gap-3 w-full">
+                                    <button
+                                        onClick={() => setShowModeConfirm(false)}
+                                        className="flex-1 h-12 bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest text-neutral-400 transition-all rounded-xl"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        onClick={async () => {
+                                            if (pendingMode) {
+                                                setFaceMode(pendingMode);
+                                                await updateSetting("MODE_FACE", pendingMode);
+                                                toast.success({ title: `PROTOCOLO ACTUALIZADO: ${pendingMode}` });
+                                            }
+                                            setShowModeConfirm(false);
+                                        }}
+                                        className={cn(
+                                            "flex-1 h-12 text-[10px] font-black uppercase tracking-widest text-white transition-all rounded-xl",
+                                            pendingMode === 'WHITELIST' ? "bg-emerald-600 hover:bg-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.3)]" : "bg-red-600 hover:bg-red-500 shadow-[0_0_20px_rgba(220,38,38,0.3)]"
+                                        )}
+                                    >
+                                        Confirmar Protocolo
+                                    </button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
 
             <style jsx global>{`
                 @font-face {
@@ -700,46 +821,99 @@ function FeedCard({ event, verification, currentTime, onClick }: FeedCardProps) 
         ? (verification.similarity * 100).toFixed(0)
         : cameraSimilarity;
 
-    const isIntruso = (verification && !verification.verified && verification.loading === false) || event.user?.role === 'BLACKLISTED';
-    const isWhiteList = event.user?.role === 'WHITELISTED';
+    const timeStr = new Date(event.timestamp).toLocaleTimeString('es-ES', {
+        hour: '2-digit', minute: '2-digit', hour12: false
+    });
+
     const personaName = event.details?.match(/Persona: ([^,]+)/)?.[1];
+
+    // Identity logic: Use neural identification if available, fallback to camera identify
+    const displayName = verification?.recognizedAs && verification.recognizedAs !== 'Desconocido'
+        ? verification.recognizedAs
+        : (personaName && !['Desconocido', 'N/A', 'Persona'].some(s => personaName.includes(s)) ? personaName : "Sujeto Desconocido");
+
+    const isWhiteList = event.user?.role === 'WHITELISTED';
+    const isBlacklisted = event.user?.role === 'BLACKLISTED' || verification?.alertTriggered;
+    const isConflict = verification?.isConflict;
+    const isSuspicious = verification?.isSuspicious;
 
     return (
         <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            whileHover={{ y: -4, scale: 1.05 }}
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            whileHover={{ y: -2 }}
             onClick={onClick}
-            className={cn(
-                "aspect-square h-full bg-black/5 backdrop-blur-sm relative overflow-hidden cursor-pointer group rounded-xl transition-all shrink-0 border border-white/5",
-                isIntruso && "ring-2 ring-red-600 shadow-[0_0_20px_rgba(220,38,38,0.4)]",
-                isWhiteList && "ring-2 ring-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.4)]"
-            )}
+            className="flex flex-col gap-2 shrink-0 group cursor-pointer"
         >
+            {/* Image Container */}
             <div className={cn(
-                "absolute inset-0 transition-all duration-700",
-                isWhiteList ? "grayscale-0" : "grayscale group-hover:grayscale-0"
+                "w-24 h-24 bg-neutral-900 relative rounded-xl overflow-hidden border transition-all duration-300",
+                isBlacklisted ? "border-red-600 shadow-[0_0_15px_rgba(220,38,38,0.3)]" :
+                    isWhiteList ? "border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.2)]" :
+                        isConflict || isSuspicious ? "border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)]" :
+                            "border-white/5 opacity-80 group-hover:opacity-100 group-hover:border-white/20"
             )}>
                 <img
                     src={getImagePath(event.snapshotPath) || ""}
-                    className="w-full h-full object-cover"
+                    className={cn(
+                        "w-full h-full object-cover transition-transform duration-500 group-hover:scale-110",
+                        !isBlacklisted && !isWhiteList && "grayscale group-hover:grayscale-0"
+                    )}
                     alt=""
                 />
+
+                {/* Time Overlay (Top Right) */}
+                <div className="absolute top-1 right-1 bg-black/60 backdrop-blur-md px-1.5 py-0.5 rounded-md border border-white/10 z-10">
+                    <span className="text-[8px] font-black text-white/90 font-mono tracking-tighter">
+                        {timeStr}
+                    </span>
+                </div>
+
+                {/* Blacklist Alert Overlay */}
+                <AnimatePresence>
+                    {isBlacklisted && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: [0.2, 0.5, 0.2] }}
+                            transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                            className="absolute inset-0 bg-red-600 pointer-events-none z-0"
+                        />
+                    )}
+                </AnimatePresence>
+
+                {/* Status Indicator (Dot) */}
+                <div className="absolute top-1 left-1">
+                    <div className={cn(
+                        "w-2 h-2 rounded-full",
+                        isBlacklisted ? "bg-red-600 animate-pulse" :
+                            isWhiteList ? "bg-emerald-500" :
+                                isConflict || isSuspicious ? "bg-amber-500 animate-pulse" : "bg-neutral-600"
+                    )} />
+                </div>
+
+                {/* Similarity tag if identified */}
+                {similarity && similarity !== "0" && (
+                    <div className="absolute bottom-1 right-1 bg-black/40 backdrop-blur-sm px-1 rounded border border-white/5">
+                        <span className="text-[7px] font-bold text-white/60">{similarity}%</span>
+                    </div>
+                )}
             </div>
 
-            {/* Identity Overlay requested by user */}
-            <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-md px-1 py-0.5 border-t border-white/5">
-                <p className="text-[7.5px] font-black text-white uppercase truncate text-center leading-none">
-                    {personaName || "Desconocido"}
-                </p>
-                {similarity && (
-                    <p className={cn(
-                        "text-[6px] font-bold text-center mt-0.5",
-                        isIntruso ? "text-red-500" : isWhiteList ? "text-blue-400" : "text-emerald-500/60"
-                    )}>
-                        {similarity}%
-                    </p>
-                )}
+            {/* Identity Info (Below Image) */}
+            <div className="flex flex-col items-center gap-0.5 w-24">
+                <span className={cn(
+                    "text-[9px] font-black uppercase text-center leading-tight truncate w-full px-1",
+                    isBlacklisted ? "text-red-500" :
+                        isWhiteList ? "text-emerald-500" :
+                            isConflict || isSuspicious ? "text-amber-500" : "text-white/70 group-hover:text-white"
+                )}>
+                    {displayName.split(' ')[0]} {/* Show first name only if too long */}
+                </span>
+
+                {/* Tactical Role Label (Tiny) */}
+                <span className="text-[6px] font-black tracking-widest text-white/20 uppercase leading-none truncate w-full text-center">
+                    {event.device?.name?.replace('Terminal ', '') || (event.direction === 'EXIT' ? 'SALIDA' : 'ENTRADA')}
+                </span>
             </div>
         </motion.div>
     );

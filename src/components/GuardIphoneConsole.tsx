@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { io } from "socket.io-client";
 import { getSocketUrl } from "@/lib/socket-config";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 import { createBitacoraEntry } from "@/app/actions/bitacora";
 import { getAccessEvents as getLprHistory, getPlateAnalysis } from "@/app/actions/history";
 import { searchUsers } from "@/app/actions/search";
@@ -143,12 +143,12 @@ export default function GuardIphoneConsole({
 
         socketRef.current.on("connect", () => {
             console.log("Socket connected:", socketRef.current?.id);
-            toast.success("Conectado al servidor en tiempo real", { id: 'socket-status' });
+            toast.success({ title: "Conectado al servidor en tiempo real" });
         });
 
         socketRef.current.on("disconnect", () => {
             console.warn("Socket disconnected");
-            toast.loading("Reconectando...", { id: 'socket-status' });
+            toast.show({ title: "Reconectando...", duration: null });
         });
 
         socketRef.current.on("new_bitacora", (entry: any) => {
@@ -180,9 +180,8 @@ export default function GuardIphoneConsole({
 
                 if (prev !== data.active) {
                     if (data.active) {
-                        toast.error(`⚠️ ALERTA ACTIVADA${data.triggeredBy ? ` por ${data.triggeredBy}` : ""}`, {
-                            id: "alert-active",
-                            duration: 10000,
+                        toast.error({
+                            title: `⚠️ ALERTA ACTIVADA${data.triggeredBy ? ` por ${data.triggeredBy}` : ""}`
                         });
                         // Browser push notification
                         if ("Notification" in window && Notification.permission === "granted") {
@@ -197,7 +196,7 @@ export default function GuardIphoneConsole({
                         const message = data.explanation
                             ? `Sistema normalizado. Motivo: ${data.explanation}`
                             : "Sistema normalizado correctamente.";
-                        toast.success(`✅ ${message}`, { id: "alert-inactive", duration: 8000 });
+                        toast.success({ title: `✅ ${message}` });
                         if ('clearAppBadge' in navigator) (navigator as any).clearAppBadge().catch(() => { });
                     }
                 }
@@ -223,7 +222,7 @@ export default function GuardIphoneConsole({
             });
             if ("vibrate" in navigator) navigator.vibrate([200, 100, 200, 100, 500]);
             playTactileSound();
-            toast.error(`⚠️ ALERTA: ${data.type} por ${data.requesterName}`, { duration: 10000 });
+            toast.error({ title: `⚠️ ALERTA: ${data.type} por ${data.requesterName}` });
 
             // Browser push notification (Local)
             if ("Notification" in window && Notification.permission === "granted") {
@@ -243,20 +242,20 @@ export default function GuardIphoneConsole({
                     : m
             ));
             if (data.accepted) {
-                toast.success(`${data.responderName} aceptó la solicitud.`);
+                toast.success({ title: `${data.responderName} aceptó la solicitud.` });
             }
         });
 
         socketRef.current.on('backup_resolved', (data: any) => {
             setMonitoringMissions(prev => prev.filter(m => m.id !== data.requestId));
             setIncomingBackup(null);
-            toast.success(`Incidente resuelto por ${data.resolverName}.`);
+            toast.success({ title: `Incidente resuelto por ${data.resolverName}.` });
         });
 
         socketRef.current.on('backup_cancelled', (data: any) => {
             setMonitoringMissions(prev => prev.filter(m => m.id !== data.requestId));
             setIncomingBackup(null);
-            toast.info(`Alerta cancelada.`);
+            toast.info({ title: `Alerta cancelada.` });
         });
 
         return () => {
@@ -329,7 +328,7 @@ export default function GuardIphoneConsole({
 
     const handleRegister = async () => {
         if (!plate.trim()) {
-            toast.error("La matrícula es obligatoria");
+            toast.error({ title: "La matrícula es obligatoria" });
             return;
         }
 
@@ -362,7 +361,7 @@ export default function GuardIphoneConsole({
 
             const result = await createBitacoraEntry(formData);
             if (result) {
-                toast.success("Acceso registrado correctamente");
+                toast.success({ title: "Acceso registrado correctamente" });
                 setPlate("");
                 setName("");
                 setDni("");
@@ -375,7 +374,7 @@ export default function GuardIphoneConsole({
             }
         } catch (error) {
             console.error("Register error:", error);
-            toast.error("Error al registrar el acceso");
+            toast.error({ title: "Error al registrar el acceso" });
         } finally {
             setIsSubmitting(false);
         }
@@ -400,7 +399,7 @@ export default function GuardIphoneConsole({
 
     const handleReportSupport = async (type: string) => {
         if (!socketRef.current || !location) {
-            toast.error("Ubicación GPS no disponible");
+            toast.error({ title: "Ubicación GPS no disponible" });
             return;
         }
 
@@ -420,10 +419,10 @@ export default function GuardIphoneConsole({
             socketRef.current.emit('request_backup', mission);
             setShowReportModal(false);
             setBackupDetail("");
-            toast.success("Solicitud de apoyo enviada");
+            toast.success({ title: "Solicitud de apoyo enviada" });
         } catch (error) {
             console.error("SOS Error:", error);
-            toast.error("Error al enviar SOS");
+            toast.error({ title: "Error al enviar SOS" });
         } finally {
             setIsReporting(false);
         }
@@ -438,9 +437,9 @@ export default function GuardIphoneConsole({
             localStorage.setItem("bitacora_guard_name", guard.name);
             if (photoUrl) localStorage.setItem("bitacora_guard_photo", photoUrl);
             setShowIdentityOverlay(false);
-            toast.success(`Bienvenido, ${guard.name}`);
+            toast.success({ title: `Bienvenido, ${guard.name}` });
         } else if (pinCheck) {
-            toast.error("PIN Incorrecto");
+            toast.error({ title: "PIN Incorrecto" });
         }
     };
 
@@ -456,13 +455,13 @@ export default function GuardIphoneConsole({
             localStorage.setItem("bitacora_guard_name", guard.name);
             if (photoUrl) localStorage.setItem("bitacora_guard_photo", photoUrl);
             setShowIdentityOverlay(false);
-            toast.success(`Bienvenido, ${guard.name}`);
+            toast.success({ title: `Bienvenido, ${guard.name}` });
 
             // Reset form
             setLoginUser("");
             setLoginPass("");
         } else {
-            toast.error("Credenciales incorrectas");
+            toast.error({ title: "Credenciales incorrectas" });
         }
     };
 
@@ -475,7 +474,7 @@ export default function GuardIphoneConsole({
             cameraStreamRef.current = stream;
             if (videoRef.current) videoRef.current.srcObject = stream;
         } catch (err) {
-            toast.error("No se pudo acceder a la cámara");
+            toast.error({ title: "No se pudo acceder a la cámara" });
             setIsCameraActive(false);
         }
     };
@@ -498,7 +497,7 @@ export default function GuardIphoneConsole({
             canvas.getContext("2d")?.drawImage(video, 0, 0);
             setCapturedPhoto(canvas.toDataURL("image/jpeg"));
             stopCamera();
-            toast.success("Foto capturada");
+            toast.success({ title: "Foto capturada" });
         }
     };
 
@@ -516,7 +515,7 @@ export default function GuardIphoneConsole({
             mediaRecorderRef.current.start();
             setIsRecording(true);
         } catch (err) {
-            toast.error("Permiso de micrófono denegado");
+            toast.error({ title: "Permiso de micrófono denegado" });
         }
     };
 
@@ -524,7 +523,7 @@ export default function GuardIphoneConsole({
         if (mediaRecorderRef.current && isRecording) {
             mediaRecorderRef.current.stop();
             setIsRecording(false);
-            toast.success("Audio grabado");
+            toast.success({ title: "Audio grabado" });
         }
     };
 
@@ -727,7 +726,7 @@ export default function GuardIphoneConsole({
                                                                     }
                                                                     setShowSuggestions(false);
                                                                     playTactileSound();
-                                                                    toast.success("✅ Datos autocompletados");
+                                                                    toast.success({ title: "✅ Datos autocompletados" });
                                                                 }
                                                             }}
                                                             className="w-full p-4 text-left hover:bg-blue-50 transition-colors active:bg-blue-100"
@@ -1347,7 +1346,7 @@ export default function GuardIphoneConsole({
                                             className="w-full h-8"
                                             onError={(e) => {
                                                 console.error("Audio Load Error:", e);
-                                                toast.error("Error al cargar el audio. El archivo podría estar procesándose.");
+                                                toast.error({ title: "Error al cargar el audio. El archivo podría estar procesándose." });
                                             }}
                                         />
                                     </div>
@@ -1485,7 +1484,7 @@ export default function GuardIphoneConsole({
                                                     responderId: socketRef.current.id
                                                 });
                                                 setShowResolutionModal(false);
-                                                toast.success("Apoyo aceptado");
+                                                toast.success({ title: "Apoyo aceptado" });
                                             }}
                                             className="h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center gap-3 shadow-lg shadow-blue-600/20 active:scale-95 transition-all text-xs font-black uppercase tracking-widest"
                                         >
@@ -1503,7 +1502,7 @@ export default function GuardIphoneConsole({
                                             });
                                             setShowResolutionModal(false);
                                             setBackupDetail("");
-                                            toast.success("Misión completada");
+                                            toast.success({ title: "Misión completada" });
                                         }}
                                         className="h-16 bg-emerald-600 text-white rounded-2xl flex items-center justify-center gap-3 shadow-lg shadow-emerald-600/20 active:scale-95 transition-all text-xs font-black uppercase tracking-widest"
                                     >
@@ -1614,7 +1613,7 @@ export default function GuardIphoneConsole({
                                             if (newPhoto) {
                                                 setGuardPhoto(newPhoto);
                                                 localStorage.setItem("bitacora_guard_photo", newPhoto);
-                                                toast.success("Foto de perfil actualizada");
+                                                toast.success({ title: "Foto de perfil actualizada" });
                                             }
                                         }}
                                         className="absolute -bottom-2 -right-2 w-12 h-12 rounded-2xl bg-blue-600 text-white shadow-lg flex items-center justify-center border-4 border-white active:scale-90 transition-all"
@@ -1648,12 +1647,12 @@ export default function GuardIphoneConsole({
                                             (DeviceOrientationEvent as any).requestPermission()
                                                 .then((permissionState: string) => {
                                                     if (permissionState === 'granted') {
-                                                        toast.success("Sensores activados correctamente");
+                                                        toast.success({ title: "Sensores activados correctamente" });
                                                     }
                                                 })
                                                 .catch(console.error);
                                         } else {
-                                            toast.info("Los sensores ya están activos o no requieren permiso manual");
+                                            toast.info({ title: "Los sensores ya están activos o no requieren permiso manual" });
                                         }
                                     }}
                                     className="w-full h-16 bg-slate-50 rounded-3xl px-6 flex items-center gap-4 group active:bg-slate-100 transition-all"

@@ -14,7 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { updateProjectStructure } from "@/app/actions/structure";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 
 interface TreeDiagramProps {
     data: TreeNode;
@@ -65,9 +65,9 @@ export function TreeDiagram({ data: initialData }: TreeDiagramProps) {
         setIsSaving(true);
         try {
             await updateProjectStructure(data);
-            toast.success("Arquitectura sincronizada");
+            toast.success({ title: "Arquitectura sincronizada" });
         } catch (error) {
-            toast.error("Error al guardar cambios");
+            toast.error({ title: "Error al guardar cambios" });
         } finally {
             setIsSaving(false);
         }

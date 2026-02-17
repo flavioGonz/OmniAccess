@@ -3,16 +3,18 @@
 
 import { useRef, useState, useEffect } from "react";
 import { Camera, X, Loader2, RefreshCcw, Image as ImageIcon, ScanLine } from "lucide-react";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 import * as Tesseract from 'tesseract.js';
 import { cn } from "@/lib/utils";
 
 interface OCRScannerTFProps {
     onClose: () => void;
     onDetected: (plate: string | null, imageBlob: Blob) => void;
+    cameraFacingMode?: "environment" | "user";
+    toggleCameraFacingMode?: () => void;
 }
 
-export default function OCRScannerTF({ onClose, onDetected }: OCRScannerTFProps) {
+export default function OCRScannerTF({ onClose, onDetected, cameraFacingMode, toggleCameraFacingMode }: OCRScannerTFProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
@@ -27,7 +29,11 @@ export default function OCRScannerTF({ onClose, onDetected }: OCRScannerTFProps)
     const [lastDetected, setLastDetected] = useState<string>("");
 
     // Camera & Mode State
-    const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
+    // Camera & Mode State
+    const [internalFacingMode, setInternalFacingMode] = useState<"environment" | "user">("environment");
+    const facingMode = cameraFacingMode || internalFacingMode;
+    const toggleFacingMode = toggleCameraFacingMode || (() => setInternalFacingMode(prev => prev === "environment" ? "user" : "environment"));
+
     const [isPhotoMode, setIsPhotoMode] = useState(false);
 
     // Initialize TensorFlow.js and Tesseract
@@ -88,7 +94,7 @@ export default function OCRScannerTF({ onClose, onDetected }: OCRScannerTFProps)
         } catch (error) {
             console.error("Model Init Error:", error);
             setWorkerStatus("Error en IA");
-            toast.error("Error al cargar TensorFlow.js o OCR");
+            toast.error({ title: "Error al cargar TensorFlow.js o OCR" });
         }
     };
 
@@ -130,7 +136,7 @@ export default function OCRScannerTF({ onClose, onDetected }: OCRScannerTFProps)
             }
         } catch (error) {
             console.error("Camera Error:", error);
-            toast.error("No se pudo acceder a la cámara. Verifique los permisos.");
+            toast.error({ title: "No se pudo acceder a la cámara. Verifique los permisos." });
         }
     };
 
@@ -317,16 +323,16 @@ export default function OCRScannerTF({ onClose, onDetected }: OCRScannerTFProps)
                     }
                 }, "image/jpeg", 0.9);
 
-                toast.success(`Matrícula detectada: ${finalPlate}`);
+                toast.success({ title: `Matrícula detectada: ${finalPlate}` });
                 stopCamera();
             } else {
                 setLastDetected("¿?");
-                toast.warning("Lectura incierta. Reintente más cerca.");
+                toast.warning({ title: "Lectura incierta. Reintente más cerca." });
             }
 
         } catch (error) {
             console.error("OCR Error:", error);
-            toast.error("Error al procesar la captura");
+            toast.error({ title: "Error al procesar la captura" });
         } finally {
             isProcessingRef.current = false;
             setWorkerStatus("Listo");
@@ -347,7 +353,7 @@ export default function OCRScannerTF({ onClose, onDetected }: OCRScannerTFProps)
                 if (blob) {
                     onDetected(null, blob);
                     onClose();
-                    toast.success("Foto capturada");
+                    toast.success({ title: "Foto capturada" });
                 }
             }, "image/jpeg", 0.9);
         }
@@ -433,7 +439,7 @@ export default function OCRScannerTF({ onClose, onDetected }: OCRScannerTFProps)
                 <div className="absolute inset-x-0 bottom-8 px-6 flex items-center justify-between pointer-events-none">
                     {/* Camera Switch */}
                     <button
-                        onClick={() => setFacingMode(prev => prev === "user" ? "environment" : "user")}
+                        onClick={toggleFacingMode}
                         className="pointer-events-auto w-12 h-12 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white ring-1 ring-white/20 active:scale-95 transition-all"
                     >
                         <RefreshCcw size={20} />

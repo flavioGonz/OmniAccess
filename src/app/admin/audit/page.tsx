@@ -45,7 +45,7 @@ import {
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 import { cn } from "@/lib/utils";
 import {
     Table,
@@ -107,7 +107,7 @@ export default function AuditPage() {
             setDevices(devs);
         } catch (error) {
             console.error("Error loading audit data:", error);
-            toast.error("Error al cargar datos de auditoría");
+            toast.error({ title: "Error al cargar datos de auditoría" });
         } finally {
             setLoading(false);
         }
@@ -137,7 +137,7 @@ export default function AuditPage() {
             }
         } catch (error) {
             console.error(error);
-            toast.error("Error al obtener logs");
+            toast.error({ title: "Error al obtener logs" });
         } finally {
             setLoadingDbLogs(false);
         }
@@ -153,7 +153,7 @@ export default function AuditPage() {
             setDbLogsLimit(newLimit);
         } catch (error) {
             console.error(error);
-            toast.error("Error al cargar más registros");
+            toast.error({ title: "Error al cargar más registros" });
         } finally {
             setLoadingDbLogs(false);
         }
@@ -202,7 +202,7 @@ export default function AuditPage() {
             setHardwareCallPreview(callPreview);
         } catch (error) {
             console.error(error);
-            toast.error("Error al consultar memoria del hardware");
+            toast.error({ title: "Error al consultar memoria del hardware" });
             setPreviewDialogOpen(false);
         } finally {
             setLoadingPreview(false);
@@ -219,15 +219,15 @@ export default function AuditPage() {
 
             if (resDoor.success || resCall.success) {
                 const total = (resDoor.count || 0) + (resCall.count || 0);
-                toast.success(`Sincronizados ${total} eventos (Door: ${resDoor.count || 0}, Call: ${resCall.count || 0})`);
+                toast.success({ title: `Sincronizados ${total} eventos (Door: ${resDoor.count || 0}, Call: ${resCall.count || 0})` });
                 if (selectedDeviceLogs) handleOpenDbLogs(selectedDeviceLogs);
                 setPreviewDialogOpen(false);
             } else {
-                toast.error("Error al sincronizar");
+                toast.error({ title: "Error al sincronizar" });
             }
         } catch (error) {
             console.error(error);
-            toast.error("Error al sincronizar con el dispositivo");
+            toast.error({ title: "Error al sincronizar con el dispositivo" });
         } finally {
             setSyncing(null);
         }
@@ -260,7 +260,7 @@ export default function AuditPage() {
 
     const exportToCSV = (data: any[], filename: string) => {
         if (data.length === 0) {
-            toast.error("No hay datos para exportar");
+            toast.error({ title: "No hay datos para exportar" });
             return;
         }
 
@@ -293,10 +293,10 @@ export default function AuditPage() {
             // Fetch a larger set for export (e.g., last 500)
             const allLogs = await getDeviceDoorlogs(selectedDeviceLogs.id, 500, 0);
             exportToCSV(allLogs, `Doorlog_${selectedDeviceLogs.name}`);
-            toast.success("Doorlog exportado correctamente");
+            toast.success({ title: "Doorlog exportado correctamente" });
         } catch (error) {
             console.error(error);
-            toast.error("Error al exportar doorlog");
+            toast.error({ title: "Error al exportar doorlog" });
         } finally {
             setLoadingHardwareLogs(false);
         }
@@ -308,10 +308,10 @@ export default function AuditPage() {
         try {
             const allLogs = await getDeviceCalllogs(selectedDeviceLogs.id, 500, 0);
             exportToCSV(allLogs, `Calllog_${selectedDeviceLogs.name}`);
-            toast.success("Calllog exportado correctamente");
+            toast.success({ title: "Calllog exportado correctamente" });
         } catch (error) {
             console.error(error);
-            toast.error("Error al exportar calllog");
+            toast.error({ title: "Error al exportar calllog" });
         } finally {
             setLoadingHardwareLogs(false);
         }
@@ -354,7 +354,7 @@ export default function AuditPage() {
                             Actualizar
                         </Button>
                         <Button
-                            onClick={() => toast.info("Función de pull masivo deshabilitada temporalmente por seguridad")}
+                            onClick={() => toast.info({ title: "Función de pull masivo deshabilitada temporalmente por seguridad" })}
                             disabled={loading}
                             className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black uppercase tracking-widest text-xs h-12 px-8 rounded-xl shadow-xl shadow-blue-900/20"
                         >

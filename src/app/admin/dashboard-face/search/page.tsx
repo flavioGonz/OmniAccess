@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Search, Image as ImageIcon, Loader2, Fingerprint, ChevronLeft, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 import { searchUsers } from "@/app/actions/users";
 import { searchByPhotoAction } from "@/app/actions/face-verify";
 import { getImagePath } from "@/lib/image-path";
@@ -57,13 +57,13 @@ export default function SearchFacePage() {
                     setMatch(result.match);
                     if (result.user) {
                         setResults([result.user]);
-                        toast.success(`Identificación positiva: ${result.user.name}`);
+                        toast.success({ title: `Identificación positiva: ${result.user.name}` });
                     }
                 } else {
-                    toast.error("No se detectaron rostros conocidos.");
+                    toast.error({ title: "No se detectaron rostros conocidos." });
                 }
             } catch (err) {
-                toast.error("Error en el motor biométrico");
+                toast.error({ title: "Error en el motor biométrico" });
             } finally {
                 setIsSearchingImg(false);
             }

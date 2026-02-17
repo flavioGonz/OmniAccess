@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader2, Camera, AlertTriangle, CheckCircle2, XCircle, Server, Database, ArrowRight } from "lucide-react";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 import { syncPlatesToAllDevices } from "@/app/actions/devices";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -40,14 +40,14 @@ export function SyncToDevicesDialog({ onSuccess }: SyncToDevicesDialogProps) {
 
             if (result.success) {
                 setResults(result);
-                toast.success(`Sincronización completada en ${result.totalDevices} dispositivos`);
+                toast.success({ title: `Sincronización completada en ${result.totalDevices} dispositivos` });
                 onSuccess();
             } else {
-                toast.error(result.message || "Error en la sincronización");
+                toast.error({ title: result.message || "Error en la sincronización" });
             }
         } catch (error: any) {
             console.error(error);
-            toast.error("Error del servidor");
+            toast.error({ title: "Error del servidor" });
         } finally {
             setSyncing(false);
         }

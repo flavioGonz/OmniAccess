@@ -48,7 +48,7 @@ import { DRIVER_MODELS, type DeviceBrand } from "@/lib/driver-models";
 import { updateSetting, getSetting, testS3Connection, getBucketLifecycle, updateBucketLifecycle, testDbConnection, getBucketStats, getDbStats, downloadBackup, restoreBackup, populateDatabase, testWahaConnection, getWahaHistory, testExternalDbConnection, updateDatabaseUrl, runDatabaseMigrations, getLearnedPlates, clearLearnedPlates, testFaceEngineConnection } from "@/app/actions/settings";
 import { getAdminsList as getAdmins, saveAdmin as saveAdminAction, deleteAdmin as deleteAdminAction } from "@/app/actions/users";
 import { useEffect, useTransition } from "react";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 import { Switch } from "@/components/ui/switch";
 import {
     Dialog,
@@ -397,32 +397,32 @@ function DatabaseSection() {
         try {
             const res = await testDbConnection();
             if (res.success) {
-                toast.success("¡Conexión Exitosa con PostgreSQL!");
+                toast.success({ title: "¡Conexión Exitosa con PostgreSQL!" });
                 loadStats();
             } else {
-                toast.error(`Error de conexión: ${res.message}`);
+                toast.error({ title: `Error de conexión: ${res.message}` });
             }
         } catch (err) {
-            toast.error("Error crítico al intentar conectar con la base de datos");
+            toast.error({ title: "Error crítico al intentar conectar con la base de datos" });
         } finally {
             setTesting(false);
         }
     };
 
     const handleTestExternal = async () => {
-        if (!newDbUrl) return toast.error("Por favor ingresa una URL de conexión");
+        if (!newDbUrl) return toast.error({ title: "Por favor ingresa una URL de conexión" });
         setTestingExternal(true);
         setExternalStatus(null);
         try {
             const res = await testExternalDbConnection(newDbUrl);
             setExternalStatus(res);
             if (res.success) {
-                toast.success(res.isVirgin ? "Conexión exitosa. Base de datos virgen detectada." : "Conexión exitosa con base de datos existente.");
+                toast.success({ title: res.isVirgin ? "Conexión exitosa. Base de datos virgen detectada." : "Conexión exitosa con base de datos existente." });
             } else {
-                toast.error("Error de conexión externa: " + res.message);
+                toast.error({ title: "Error de conexión externa: " + res.message });
             }
         } catch (err) {
-            toast.error("Error al testear base de datos externa");
+            toast.error({ title: "Error al testear base de datos externa" });
         } finally {
             setTestingExternal(false);
         }
@@ -434,10 +434,10 @@ function DatabaseSection() {
         if (confirm("¿Estás seguro de cambiar la base de datos? La aplicación se reiniciará.")) {
             const res = await updateDatabaseUrl(newDbUrl);
             if (res.success) {
-                toast.success("Configuración actualizada. Reiniciando...");
+                toast.success({ title: "Configuración actualizada. Reiniciando..." });
                 setTimeout(() => window.location.reload(), 3000);
             } else {
-                toast.error("Error al actualizar: " + res.message);
+                toast.error({ title: "Error al actualizar: " + res.message });
             }
         }
     };
@@ -447,14 +447,14 @@ function DatabaseSection() {
         try {
             const res = await runDatabaseMigrations();
             if (res.success) {
-                toast.success("Migraciones completadas correctamente");
+                toast.success({ title: "Migraciones completadas correctamente" });
                 loadStats();
                 setExternalStatus(prev => prev ? { ...prev, isVirgin: false } : null);
             } else {
-                toast.error("Error en migraciones: " + res.message);
+                toast.error({ title: "Error en migraciones: " + res.message });
             }
         } catch (err) {
-            toast.error("Error crítico en migraciones");
+            toast.error({ title: "Error crítico en migraciones" });
         } finally {
             setMigrating(false);
         }
@@ -474,12 +474,12 @@ function DatabaseSection() {
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-                toast.success("Respaldo generado y descargado con éxito");
+                toast.success({ title: "Respaldo generado y descargado con éxito" });
             } else {
-                toast.error("Error al generar el respaldo: " + res.message);
+                toast.error({ title: "Error al generar el respaldo: " + res.message });
             }
         } catch (err) {
-            toast.error("Error durante el proceso de respaldo");
+            toast.error({ title: "Error durante el proceso de respaldo" });
         } finally {
             setBackingUp(false);
         }
@@ -522,7 +522,7 @@ function DatabaseSection() {
                 setMergeMode(false); // Reset to default (Replace)
                 setPendingAction({ type: 'IMPORT', file, analysis });
             } catch (err) {
-                toast.error("Archivo de respaldo inválido");
+                toast.error({ title: "Archivo de respaldo inválido" });
             }
         }
     };
@@ -539,14 +539,14 @@ function DatabaseSection() {
 
                 const res = await restoreBackup(json, mergeMode);
                 if (res.success) {
-                    toast.success(`Base de datos restaurada correctamente`);
+                    toast.success({ title: `Base de datos restaurada correctamente` });
                     loadStats();
                 } else {
-                    toast.error("Error al restaurar: " + res.message);
+                    toast.error({ title: "Error al restaurar: " + res.message });
                 }
             } catch (error) {
                 console.error(error);
-                toast.error("Error al procesar el archivo de respaldo");
+                toast.error({ title: "Error al procesar el archivo de respaldo" });
             } finally {
                 setImporting(false);
             }
@@ -555,13 +555,13 @@ function DatabaseSection() {
             try {
                 const res = await populateDatabase();
                 if (res.success) {
-                    toast.success(res.message || "Base de datos inicializada con datos de prueba");
+                    toast.success({ title: res.message || "Base de datos inicializada con datos de prueba" });
                     loadStats();
                 } else {
-                    toast.error("Error al poblar: " + res.message);
+                    toast.error({ title: "Error al poblar: " + res.message });
                 }
             } catch (error) {
-                toast.error("Error al poblar la base de datos");
+                toast.error({ title: "Error al poblar la base de datos" });
             } finally {
                 setPopulating(false);
             }
@@ -1019,7 +1019,7 @@ function StorageSection() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        toast.success("Configuración exportada con éxito");
+        toast.success({ title: "Configuración exportada con éxito" });
     };
 
     const triggerImportConfig = () => {
@@ -1052,14 +1052,14 @@ function StorageSection() {
                 updateBucketLifecycle(s3.bucketFace, lifecycle.face)
             ]);
 
-            toast.success("Configuración importada y aplicada correctamente");
+            toast.success({ title: "Configuración importada y aplicada correctamente" });
             // Reload local state
             loadConfig();
             loadLifecycles();
 
         } catch (error: any) {
             console.error(error);
-            toast.error("Error al importar configuración: " + error.message);
+            toast.error({ title: "Error al importar configuración: " + error.message });
         } finally {
             setImportingConfig(false);
             if (configFileRef.current) configFileRef.current.value = "";
@@ -1084,9 +1084,9 @@ function StorageSection() {
                 updateSetting("S3_BUCKET_LPR", config.bucketLpr),
                 updateSetting("S3_BUCKET_FACE", config.bucketFace)
             ]);
-            toast.success("Configuración de almacenamiento guardada");
+            toast.success({ title: "Configuración de almacenamiento guardada" });
         } catch (err) {
-            toast.error("Error al guardar la configuración");
+            toast.error({ title: "Error al guardar la configuración" });
         } finally {
             setSaving(false);
         }
@@ -1099,13 +1099,13 @@ function StorageSection() {
             const resFace = await testS3Connection("face");
 
             if (resLpr.success && resFace.success) {
-                toast.success("¡Prueba exitosa! Ambos buckets son accesibles.");
+                toast.success({ title: "¡Prueba exitosa! Ambos buckets son accesibles." });
             } else {
-                if (!resLpr.success) toast.error(`LPR: ${resLpr.message}`);
-                if (!resFace.success) toast.error(`FACE: ${resFace.message}`);
+                if (!resLpr.success) toast.error({ title: `LPR: ${resLpr.message}` });
+                if (!resFace.success) toast.error({ title: `FACE: ${resFace.message}` });
             }
         } catch (err) {
-            toast.error("Error crítico al intentar conectar con el servidor S3");
+            toast.error({ title: "Error crítico al intentar conectar con el servidor S3" });
         } finally {
             setTesting(false);
         }
@@ -1118,12 +1118,12 @@ function StorageSection() {
             const resFace = await updateBucketLifecycle(config.bucketFace, lifecycles.face);
 
             if (resLpr.success && resFace.success) {
-                toast.success("Políticas de retención actualizadas correctamente");
+                toast.success({ title: "Políticas de retención actualizadas correctamente" });
             } else {
-                toast.error("Error al actualizar algunas políticas");
+                toast.error({ title: "Error al actualizar algunas políticas" });
             }
         } catch (err) {
-            toast.error("Error de comunicación S3");
+            toast.error({ title: "Error de comunicación S3" });
         } finally {
             setSavingLifecycle(false);
         }
@@ -1367,13 +1367,13 @@ function ModeConfiguration({ title, description, settingKey, options }: {
         try {
             const res = await clearLearnedPlates();
             if (res.success) {
-                toast.success("Lista de aprendizaje limpiada");
+                toast.success({ title: "Lista de aprendizaje limpiada" });
                 setLearnedPlates([]);
             } else {
-                toast.error(res.message);
+                toast.error({ title: res.message });
             }
         } catch (err) {
-            toast.error("Error al limpiar la lista");
+            toast.error({ title: "Error al limpiar la lista" });
         }
     };
 
@@ -1384,7 +1384,7 @@ function ModeConfiguration({ title, description, settingKey, options }: {
             setCurrentMode(res?.value || null);
         } catch (err) {
             console.error("Error loading setting:", err);
-            toast.error("Error al cargar la configuración");
+            toast.error({ title: "Error al cargar la configuración" });
         } finally {
             setLoading(false);
         }
@@ -1405,10 +1405,10 @@ function ModeConfiguration({ title, description, settingKey, options }: {
 
         try {
             await updateSetting(settingKey, pendingMode);
-            toast.success("Modo actualizado exitosamente");
+            toast.success({ title: "Modo actualizado exitosamente" });
         } catch (err) {
             setCurrentMode(prev);
-            toast.error("Error al guardar el modo");
+            toast.error({ title: "Error al guardar el modo" });
         } finally {
             setSaving(false);
         }
@@ -1800,9 +1800,9 @@ function WhatsAppSection() {
                 updateSetting("WAHA_API_KEY", config.apiKey),
                 updateSetting("WAHA_COMMANDS", commandsConfig)
             ]);
-            toast.success("Configuración de WAHA guardada");
+            toast.success({ title: "Configuración de WAHA guardada" });
         } catch (err) {
-            toast.error("Error al guardar la configuración");
+            toast.error({ title: "Error al guardar la configuración" });
         } finally {
             setSaving(false);
         }
@@ -1810,7 +1810,7 @@ function WhatsAppSection() {
 
     const handleTest = async () => {
         if (!config.url) {
-            toast.error("Por favor ingresa la URL de WAHA");
+            toast.error({ title: "Por favor ingresa la URL de WAHA" });
             return;
         }
 
@@ -1818,13 +1818,13 @@ function WhatsAppSection() {
         try {
             const result = await testWahaConnection(config.url, config.apiKey);
             if (result.success) {
-                toast.success(result.message);
+                toast.success({ title: result.message });
                 setSessions(result.sessions || []);
             } else {
-                toast.error(result.message);
+                toast.error({ title: result.message });
             }
         } catch (err) {
-            toast.error("Error crítico al conectar con WAHA");
+            toast.error({ title: "Error crítico al conectar con WAHA" });
         } finally {
             setTesting(false);
         }
@@ -2058,7 +2058,7 @@ function CompareFaceSection() {
 
     const handleTestConnection = async () => {
         if (!config.endpoint) {
-            toast.error("Por favor ingresa la URL del Neural Engine");
+            toast.error({ title: "Por favor ingresa la URL del Neural Engine" });
             return;
         }
 
@@ -2068,12 +2068,12 @@ function CompareFaceSection() {
             const result = await testFaceEngineConnection(config.endpoint, config.apiKey);
             setTestStatus(result);
             if (result.success) {
-                toast.success(result.message);
+                toast.success({ title: result.message });
             } else {
-                toast.error(result.message);
+                toast.error({ title: result.message });
             }
         } catch (err) {
-            toast.error("Error crítico al conectar con Neural Engine");
+            toast.error({ title: "Error crítico al conectar con Neural Engine" });
         } finally {
             setTesting(false);
         }
@@ -2087,9 +2087,9 @@ function CompareFaceSection() {
                 updateSetting("COMPAREFACE_KEY", config.apiKey),
                 updateSetting("COMPAREFACE_MIN_SIM", config.minSimilarity.toString())
             ]);
-            toast.success("Configuración de Face Engine guardada");
+            toast.success({ title: "Configuración de Face Engine guardada" });
         } catch (err) {
-            toast.error("Error al guardar");
+            toast.error({ title: "Error al guardar" });
         } finally {
             setSaving(false);
         }
@@ -2238,14 +2238,14 @@ function AdminsSection() {
             const list = await getAdmins();
             setAdmins(list);
         } catch (error) {
-            toast.error("Error al cargar administradores");
+            toast.error({ title: "Error al cargar administradores" });
         } finally {
             setLoading(false);
         }
     };
 
     const handleSubmit = async () => {
-        if (!formData.name) return toast.error("El nombre de usuario es requerido");
+        if (!formData.name) return toast.error({ title: "El nombre de usuario es requerido" });
 
         const data = new FormData();
         if (editingAdmin) data.append("id", editingAdmin.id);
@@ -2257,13 +2257,13 @@ function AdminsSection() {
 
         try {
             await saveAdminAction(data);
-            toast.success(editingAdmin ? "Administrador actualizado" : "Administrador creado");
+            toast.success({ title: editingAdmin ? "Administrador actualizado" : "Administrador creado" });
             setIsDialogOpen(false);
             loadAdmins();
             setEditingAdmin(null);
             setFormData({ name: "", email: "", password: "", photo: null, currentPhoto: "" });
         } catch (error: any) {
-            toast.error(error.message || "Error al guardar administrador");
+            toast.error({ title: error.message || "Error al guardar administrador" });
         }
     };
 
@@ -2271,10 +2271,10 @@ function AdminsSection() {
         if (confirm("¿Estás seguro de eliminar este administrador?")) {
             try {
                 await deleteAdminAction(id);
-                toast.success("Administrador eliminado");
+                toast.success({ title: "Administrador eliminado" });
                 loadAdmins();
             } catch (error) {
-                toast.error("Error al eliminar");
+                toast.error({ title: "Error al eliminar" });
             }
         }
     };

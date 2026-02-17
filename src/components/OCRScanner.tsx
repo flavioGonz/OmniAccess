@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect, useState } from "react";
 import { X, Camera, RefreshCcw, Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 
 interface OCRScannerProps {
     onDetected: (plate: string, imageBlob: Blob) => void;
@@ -51,7 +51,7 @@ export default function OCRScanner({ onDetected, onClose }: OCRScannerProps) {
             setWorkerStatus("Listo");
         } catch (error) {
             console.error("OCR Worker Init Error:", error);
-            toast.error("Error iniciando motor OCR local");
+            toast.error({ title: "Error iniciando motor OCR local" });
         }
     };
 
@@ -99,7 +99,7 @@ export default function OCRScanner({ onDetected, onClose }: OCRScannerProps) {
             }
         } catch (err) {
             console.error("OCR Camera error:", err);
-            toast.error("No se pudo iniciar la cámara.");
+            toast.error({ title: "No se pudo iniciar la cámara." });
             onClose();
         }
     };
@@ -253,18 +253,18 @@ export default function OCRScanner({ onDetected, onClose }: OCRScannerProps) {
                     }
                 }, "image/jpeg", 0.95);
 
-                toast.success(`Matrícula: ${bestResult.validPlate}`);
+                toast.success({ title: `Matrícula: ${bestResult.validPlate}` });
                 stopCamera();
             } else {
                 const lastText = bestResult?.text || "Sin texto";
                 setLastDetected("¿" + lastText + "?");
-                toast.warning("Intente de nuevo con mejor encuadre");
+                toast.warning({ title: "Intente de nuevo con mejor encuadre" });
                 console.log("❌ All attempts failed. Best was:", bestResult);
             }
 
         } catch (error) {
             console.error("OCR Error:", error);
-            toast.error("Error en OCR");
+            toast.error({ title: "Error en OCR" });
         } finally {
             isProcessingRef.current = false;
             setWorkerStatus("Listo");

@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import axios from "axios";
 import FormData from "form-data";
 import { getImagePath } from "@/lib/image-path";
+import { getSetting } from "@/app/actions/settings";
+import { revalidatePath } from "next/cache";
 
 const COMPARE_FACE_URL = process.env.COMPARE_FACE_URL || "https://compareface.infratec.com.uy";
 
@@ -14,281 +16,318 @@ const API_KEYS = {
     VISITORS: "d7bdb468-26af-4306-b35d-499e5373ac4a"
 };
 
-export async function verifyFaceAction(eventSnapshot: string, userId?: string, nativeName?: string) {
-    if (!eventSnapshot) {
-        return { success: false, error: "Missing snapshot" };
+/**
+ * Main Face Verification Protocol (Neural AI v3 - SERIOUS LOGIC)
+ * Now supports direct buffer for 0-latency server-side processing.
+ */
+export async function verifyFaceAction(
+    eventSnapshot: string,
+    userId?: string,
+    nativeName?: string,
+    providedBuffer?: Buffer
+) {
+    if (!eventSnapshot && !providedBuffer) {
+        return { success: false, error: "Missing data" };
     }
 
+    const start = Date.now();
+    console.log(`[Neural AI] Starting analysis for: ${nativeName || eventSnapshot}`);
+
     try {
-        const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:10001").replace(/\/$/, "");
-        const imagePath = eventSnapshot.startsWith('http') ? eventSnapshot : getImagePath(eventSnapshot);
-        const imgUrl = imagePath?.startsWith('http') ? imagePath : `${appUrl}${imagePath}`;
+        // 1. DATA PREPARATION
+        let buffer = providedBuffer;
+        if (!buffer) {
+            const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:10001").replace(/\/$/, "");
+            const imagePath = eventSnapshot.startsWith('http') ? eventSnapshot : getImagePath(eventSnapshot);
+            const imgUrl = imagePath?.startsWith('http') ? imagePath : `${appUrl}${imagePath}`;
+            const imageResponse = await axios.get(imgUrl, { responseType: 'arraybuffer', timeout: 5000 });
+            buffer = Buffer.from(imageResponse.data);
+        }
 
-        // Fetch threshold from DB - Using 0.9 as per user request (+90%)
-        const simSetting = await prisma.setting.findUnique({ where: { key: "COMPAREFACE_MIN_SIM" } });
-        const minSimilarity = parseFloat(simSetting?.value || "0.9");
+        // 2. CONFIGURATION & THRESHOLDS
+        const thresholdSetting = await getSetting("COMPAREFACE_MIN_SIM");
+        const SUCCESS_THRESHOLD = parseFloat(thresholdSetting?.value || "0.90");
+        const VISITOR_LINK_THRESHOLD = 0.65; // Don't duplicate if match > 65% in visitors
+        const NEW_VISITOR_THRESHOLD = 0.40;  // Only register as "New" if match < 40%
 
-        // Fetch image buffer once
-        const imageResponse = await axios.get(imgUrl, { responseType: 'arraybuffer' });
-        const buffer = Buffer.from(imageResponse.data);
-
-        const hasCameraData = nativeName && !['Desconocido', 'N/A', 'Unknown', 'Persona'].some(s => nativeName.includes(s));
-
-        let topResult = null;
-        let faceBox = null;
-        let usedCollection = 'Main';
-
-        const recognize = async (apiKey: string) => {
+        // Helper for recognizing
+        const recognize = (apiKey: string) => {
             const form = new FormData();
             form.append('file', buffer, { filename: 'snapshot.jpg', contentType: 'image/jpeg' });
-            return axios.post(`${COMPARE_FACE_URL}/api/v1/recognition/recognize`, form, {
+            return axios.post(`${COMPARE_FACE_URL}/api/v1/recognition/recognize?limit=3`, form, {
                 headers: { ...form.getHeaders(), "x-api-key": apiKey },
-                timeout: 4000
+                timeout: 8000
             });
         };
 
-        // 1. Try Main
-        try {
-            const resMain = await recognize(API_KEYS.RECO);
-            topResult = resMain.data.result?.[0]?.subjects?.[0];
-            faceBox = resMain.data.result?.[0]?.box;
-        } catch (err) {
-            console.warn("[Neural Engine] Main RECO unreachable.");
+        // 3. PARALLEL NEURAL SEARCH (Speed improvement)
+        console.log(`[Neural AI] Dispatching parallel searches (Main & Visitors)...`);
+        const searchResults = await Promise.allSettled([
+            recognize(API_KEYS.RECO),
+            recognize(API_KEYS.VISITORS)
+        ]);
+
+        const resMain = searchResults[0].status === 'fulfilled' ? searchResults[0].value : null;
+        const resVisitors = searchResults[1].status === 'fulfilled' ? searchResults[1].value : null;
+
+        const topMain = resMain?.data?.result?.[0]?.subjects?.[0];
+        const topVisitors = resVisitors?.data?.result?.[0]?.subjects?.[0];
+        const faceBox = resMain?.data?.result?.[0]?.box || resVisitors?.data?.result?.[0]?.box;
+
+        const mainSim = topMain?.similarity || 0;
+        const visitorSim = topVisitors?.similarity || 0;
+
+        // 4. IDENTITY DETERMINATION (Serious Logic Fix)
+        let finalSubject = null;
+        let usedCollection = 'Main';
+        let isNewVisitor = false;
+
+        // Priority 1: High Confidence Resident Match
+        if (mainSim >= SUCCESS_THRESHOLD) {
+            finalSubject = topMain.subject;
+            usedCollection = 'Main';
+        }
+        // Priority 2: High/Mid Confidence Visitor Match (PREVENTS DUPLICATES)
+        else if (visitorSim >= VISITOR_LINK_THRESHOLD) {
+            finalSubject = topVisitors.subject;
+            usedCollection = 'Visitors';
+            console.log(`[Neural AI] Linked to existing visitor '${finalSubject}' (Match: ${(visitorSim * 100).toFixed(1)}%)`);
+        }
+        // Priority 3: Hardware trust if camera is very sure and neural doesn't strongly object
+        else {
+            const cameraNameMatch = nativeName || eventSnapshot.match(/Persona: ([^,]+)/)?.[1];
+            const cameraConfidenceMatch = eventSnapshot.match(/Confianza: (\d+)%/);
+            const nativeConfidence = cameraConfidenceMatch ? parseInt(cameraConfidenceMatch[1]) : 0;
+            const hasGoodCameraData = cameraNameMatch && !['Desconocido', 'N/A', 'Persona'].some(s => cameraNameMatch.includes(s)) && nativeConfidence >= 90;
+
+            if (hasGoodCameraData) {
+                finalSubject = cameraNameMatch;
+            } else if (visitorSim < NEW_VISITOR_THRESHOLD && mainSim < NEW_VISITOR_THRESHOLD) {
+                // High probability of being a NEW person
+                isNewVisitor = true;
+            }
         }
 
-        // 2. Try Visitors if not in Main
-        if (!topResult) {
+        const maxSimilarity = Math.max(mainSim, visitorSim);
+
+        // 5. AUTO-REGISTRATION OF GENUINE NEW VISITORS
+        let dbUser = null;
+        if (isNewVisitor && !finalSubject) {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '');
+            const timeStr = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false }).replace(/:/g, '');
+            const rand = Math.floor(100 + Math.random() * 899);
+            const unknownId = `visita_${dateStr}_${timeStr}_${rand}`;
+
+            console.log(`[Neural AI] NO identity confirmed. Registering strictly NEW visitor: ${unknownId}`);
             try {
-                const resVis = await recognize(API_KEYS.VISITORS);
-                topResult = resVis.data.result?.[0]?.subjects?.[0];
-                if (topResult) {
-                    faceBox = resVis.data.result?.[0]?.box;
+                const regResult = await registerFaceInCompereFace(unknownId, buffer!, API_KEYS.VISITORS);
+                if (regResult.success) {
+                    dbUser = await prisma.user.create({
+                        data: {
+                            name: unknownId,
+                            role: 'VISITOR',
+                            observations: `Auto-registrado (${(maxSimilarity * 100).toFixed(1)}% match)`,
+                            createdBy: 'Neural Engine'
+                        }
+                    });
+                    finalSubject = unknownId;
                     usedCollection = 'Visitors';
                 }
-            } catch (err) {
-                console.warn("[Neural Engine] Visitors RECO unreachable.");
+            } catch (regErr) {
+                console.warn("[Neural AI] registration failed", regErr);
             }
         }
 
-        // 3. Roll unknown ID if still nothing and camera is blind
-        if (!topResult && !hasCameraData) {
-            const unknownId = `VISIT_${new Date().getTime()}`;
-            try {
-                await registerFaceInCompereFace(unknownId, buffer, API_KEYS.VISITORS);
-                return {
-                    success: true,
-                    verified: false,
-                    similarity: 0,
-                    recognizedAs: unknownId,
-                    cameraResult: nativeName,
-                    collection: 'Visitors (Auto)'
-                };
-            } catch (err) {
-                return { success: true, verified: false, recognizedAs: 'Desconocido', cameraResult: nativeName };
-            }
-        }
-
-        const isVerified = hasCameraData;
-        let dbUser = null;
-        let finalSubject = topResult?.subject || (hasCameraData ? nativeName : null);
-
-        // AUTO-TRAINING LOGIC: If we have a recognized subject, ensure they have up to 3 faces for training
-        if (finalSubject) {
-            try {
-                const apiKey = usedCollection === 'Visitors' ? API_KEYS.VISITORS : API_KEYS.RECO;
-                const faceCount = await getFaceCountForSubject(finalSubject, apiKey);
-
-                if (faceCount < 3) {
-                    console.log(`[Neural Training] Subject '${finalSubject}' has ${faceCount} faces. Adding new training sample...`);
-                    await registerFaceInCompereFace(finalSubject, buffer, apiKey);
-                }
-            } catch (err) {
-                console.warn("[Neural Training] Failed to check/add training face:", err);
-            }
-        }
-
-        if (topResult && usedCollection === 'Main') {
+        // Find user in DB if identified
+        if (finalSubject && !dbUser) {
             dbUser = await prisma.user.findFirst({
-                where: { name: { equals: topResult.subject, mode: 'insensitive' } },
+                where: { name: { equals: finalSubject, mode: 'insensitive' } },
                 include: { unit: true }
             });
         }
+
+        // 6. NEURAL SYNC (Learning Cycle - Improves future matches)
+        if (finalSubject && dbUser && maxSimilarity >= 0.70) {
+            // Training task: Add this new angle to their profile if they have few photos
+            registerFaceInCompereFace(finalSubject, buffer!, dbUser.role === 'VISITOR' ? API_KEYS.VISITORS : API_KEYS.RECO)
+                .catch(() => { }); // Non-blocking async train
+        }
+
+        // 7. PERSISTENCE & RESULTS
+        const isVerified = (maxSimilarity >= SUCCESS_THRESHOLD) || (finalSubject && !isNewVisitor);
+        const alertTriggered = dbUser?.role === 'BLACKLISTED' && isVerified;
+
+        // Update the event in DB to avoid latency for the dashboard
+        if (finalSubject && eventSnapshot) {
+            try {
+                const eventToUpdate = await prisma.accessEvent.findFirst({
+                    where: { snapshotPath: eventSnapshot },
+                    orderBy: { timestamp: 'desc' }
+                });
+                if (eventToUpdate) {
+                    await prisma.accessEvent.update({
+                        where: { id: eventToUpdate.id },
+                        data: {
+                            userId: dbUser?.id || eventToUpdate.userId,
+                            details: eventToUpdate.details + ` | Neural ID: ${finalSubject} (${(maxSimilarity * 100).toFixed(1)}%)`
+                        }
+                    });
+                }
+            } catch (dbErr) { console.warn("[Neural AI] DB update delay", dbErr); }
+        }
+
+        console.log(`[Neural AI] Finished in ${Date.now() - start}ms. ID: ${finalSubject || 'Unidentified'}`);
+
+        revalidatePath("/admin/dashboard-face");
+        revalidatePath("/admin/history");
 
         return {
             success: true,
             verified: isVerified,
-            similarity: topResult?.similarity || 0,
-            recognizedAs: finalSubject || 'Sin Registro',
-            cameraResult: nativeName,
+            similarity: maxSimilarity,
+            recognizedAs: finalSubject || 'Desconocido',
             user: dbUser,
             box: faceBox,
             collection: usedCollection,
-            lowConfidence: topResult ? topResult.similarity < minSimilarity : true
+            lowConfidence: maxSimilarity < SUCCESS_THRESHOLD,
+            alertTriggered: !!alertTriggered,
+            duration: Date.now() - start
         };
 
     } catch (error: any) {
-        console.error("Error in verifyFaceAction:", error.response?.data || error.message);
-        return { success: false, error: "Service error", details: error.message };
+        console.error("Critical error in verifyFaceAction:", error.message);
+        return { success: false, error: "System failure", details: error.message };
     }
 }
 
-export async function searchByPhotoAction(photoData: Uint8Array | Buffer, useVisitors = false) {
+export async function searchByPhotoAction(photoData: Uint8Array | Buffer) {
     const photoBuffer = Buffer.from(photoData);
-    console.log(`[Neural Search] Initializing analysis for image (${photoBuffer.length} bytes) using ${useVisitors ? 'Visitors' : 'Main'} collection`);
+    const start = Date.now();
+
     try {
-        const form = new FormData();
-        form.append('file', photoBuffer, { filename: 'search.jpg', contentType: 'image/jpeg' });
+        console.log(`[Guard Search] Starting parallel biometric search...`);
 
-        const apiKey = useVisitors ? API_KEYS.VISITORS : API_KEYS.RECO;
-        console.log(`[Neural Search] Sending request to CompereFace: ${COMPARE_FACE_URL}/api/v1/recognition/recognize`);
-        const response = await axios.post(`${COMPARE_FACE_URL}/api/v1/recognition/recognize`, form, {
-            headers: {
-                ...form.getHeaders(),
-                "x-api-key": apiKey
-            },
-            timeout: 15000
-        });
+        const search = async (apiKey: string) => {
+            const form = new FormData();
+            form.append('file', photoBuffer, { filename: 'search.jpg', contentType: 'image/jpeg' });
+            return axios.post(`${COMPARE_FACE_URL}/api/v1/recognition/recognize`, form, {
+                headers: { ...form.getHeaders(), "x-api-key": apiKey },
+                timeout: 8000 // Faster timeout for guard live feedback
+            });
+        };
 
-        const results = response.data.result || [];
-        console.log(`[Neural Search] CompereFace response received. Detected faces: ${results.length}`);
+        const results = await Promise.allSettled([
+            search(API_KEYS.RECO),
+            search(API_KEYS.VISITORS)
+        ]);
 
-        // Find the best match across all detected faces if any
         let bestMatch: any = null;
-        for (const face of results) {
-            if (face.subjects && face.subjects.length > 0) {
-                const topSubject = face.subjects[0];
-                if (!bestMatch || topSubject.similarity > bestMatch.similarity) {
-                    bestMatch = topSubject;
+        let usedCollection = 'None';
+
+        results.forEach((res, idx) => {
+            if (res.status === 'fulfilled' && res.value.data.result) {
+                const faces = res.value.data.result;
+                for (const face of faces) {
+                    if (face.subjects && face.subjects.length > 0) {
+                        const top = face.subjects[0];
+                        if (!bestMatch || top.similarity > bestMatch.similarity) {
+                            bestMatch = top;
+                            usedCollection = idx === 0 ? 'Residents' : 'Visitors';
+                        }
+                    }
                 }
             }
+        });
+
+        if (!bestMatch) {
+            return { success: true, match: null, user: null, duration: Date.now() - start };
         }
 
-        if (bestMatch) {
-            console.log(`[Neural Search] Top match: ${bestMatch.subject} (${(bestMatch.similarity * 100).toFixed(1)}%)`);
-            // Find the user in our DB by name
-            const user = await prisma.user.findFirst({
-                where: { name: { equals: bestMatch.subject, mode: 'insensitive' } },
-                include: { unit: true }
-            });
+        const user = await prisma.user.findFirst({
+            where: { name: { equals: bestMatch.subject, mode: 'insensitive' } },
+            include: { unit: true }
+        });
 
-            if (user) {
-                console.log(`[Neural Search] Internal Mapping found: ${user.name} (ID: ${user.id})`);
-            } else {
-                console.log(`[Neural Search] No internal mapping for subject: ${bestMatch.subject}`);
-            }
-
-            return {
-                success: true,
-                match: bestMatch,
-                user: user
-            };
-        }
-
-        console.log(`[Neural Search] No matching subjects found in the provided image.`);
-        return { success: true, match: null };
-
+        return {
+            success: true,
+            match: bestMatch,
+            user: user,
+            collection: usedCollection,
+            duration: Date.now() - start
+        };
     } catch (error: any) {
-        console.error("Error in searchByPhotoAction:", error.response?.data || error.message);
-        return { success: false, error: "Search service error", details: error.message };
+        console.error("[Guard Search] Error:", error.response?.data || error.message);
+        return { success: false, error: error.message || "Motor biometría no disponible" };
     }
 }
 
-/**
- * Registers a new face image for a specific subject in CompereFace
- */
+
 export async function registerFaceInCompereFace(subjectName: string, photoBuffer: Buffer, apiKey?: string) {
-    console.log(`[Neural Registration] Adding face for subject: ${subjectName}`);
     try {
+        const actualKey = apiKey || API_KEYS.RECO;
+
+        // Limit check: Don't over-train if profile already robust
+        const countRes = await axios.get(`${COMPARE_FACE_URL}/api/v1/recognition/faces?subject=${encodeURIComponent(subjectName)}`, {
+            headers: { "x-api-key": actualKey }, timeout: 5000
+        }).catch(() => ({ data: { faces: new Array(100) } })); // If error, assume full
+
+        if ((countRes.data.faces || []).length >= 15) {
+            return { success: true, message: "Profile already robust" };
+        }
+
         const form = new FormData();
         form.append('file', photoBuffer, { filename: 'subject.jpg', contentType: 'image/jpeg' });
-
         const url = `${COMPARE_FACE_URL}/api/v1/recognition/faces?subject=${encodeURIComponent(subjectName)}`;
         const response = await axios.post(url, form, {
-            headers: {
-                ...form.getHeaders(),
-                "x-api-key": apiKey || API_KEYS.RECO
-            },
+            headers: { ...form.getHeaders(), "x-api-key": actualKey },
             timeout: 10000
         });
-
-        console.log(`[Neural Registration] Success:`, response.data);
         return { success: true, data: response.data };
     } catch (error: any) {
-        console.error("[Neural Registration] Error:", error.response?.data || error.message);
-        return { success: false, error: "Registration service error", details: error.response?.data || error.message };
+        return { success: false, error: "Registration service error" };
     }
 }
 
-/**
- * Gets the number of faces registered for a subject in CompereFace
- */
-export async function getFaceCountForSubject(subjectName: string, apiKey: string) {
-    try {
-        const response = await axios.get(`${COMPARE_FACE_URL}/api/v1/recognition/faces?subject=${encodeURIComponent(subjectName)}`, {
-            headers: { "x-api-key": apiKey },
-            timeout: 5000
-        });
-        return (response.data.faces || []).length;
-    } catch (err) {
-        console.warn(`[Neural Engine] Failed to get face count for '${subjectName}':`, err);
-        return 999; // Assume plenty if error to avoid redundant calls
-    }
-}
-
-/**
- * Detects faces in an image using Omniaccess Detect service
- */
 export async function detectFaceAction(photoData: Uint8Array | Buffer) {
     const photoBuffer = Buffer.from(photoData);
     try {
         const form = new FormData();
         form.append('file', photoBuffer, { filename: 'detect.jpg', contentType: 'image/jpeg' });
-
         const response = await axios.post(`${COMPARE_FACE_URL}/api/v1/detection/detect`, form, {
-            headers: {
-                ...form.getHeaders(),
-                "x-api-key": API_KEYS.DETECT
-            },
+            headers: { ...form.getHeaders(), "x-api-key": API_KEYS.DETECT },
             timeout: 10000
         });
-
-        const results = response.data.result || [];
-        return { success: true, faces: results };
+        return { success: true, faces: response.data.result || [] };
     } catch (error: any) {
-        console.error("Error in detectFaceAction:", error.response?.data || error.message);
-        return { success: false, error: "Detection service error", details: error.message };
+        return { success: false, error: "Detection service error" };
     }
 }
 
-/**
- * Verifies if two face images belong to the same person using Omniaccess Verify service
- */
 export async function verifyIdentityAction(sourcePhoto: Buffer, targetPhoto: Buffer) {
     try {
         const form = new FormData();
         form.append('source_image', sourcePhoto, { filename: 'source.jpg', contentType: 'image/jpeg' });
         form.append('target_image', targetPhoto, { filename: 'target.jpg', contentType: 'image/jpeg' });
-
         const response = await axios.post(`${COMPARE_FACE_URL}/api/v1/verification/verify`, form, {
-            headers: {
-                ...form.getHeaders(),
-                "x-api-key": API_KEYS.VERIFY
-            },
+            headers: { ...form.getHeaders(), "x-api-key": API_KEYS.VERIFY },
             timeout: 15000
         });
-
-        const result = response.data.result?.[0]; // Assuming array or single object
-        if (result) {
-            const similarity = result.similarity;
-            // Threshold logic could be applied here or in frontend (e.g. > 0.8 is match)
-            const isMatch = similarity > 0.8;
-            return { success: true, verified: isMatch, similarity: similarity };
-        }
-
-        return { success: false, error: "No result from verification service" };
-
+        const result = response.data.result?.[0];
+        return { success: true, verified: (result?.similarity || 0) > 0.8, similarity: result?.similarity || 0 };
     } catch (error: any) {
-        console.error("Error in verifyIdentityAction:", error.response?.data || error.message);
-        return { success: false, error: "Verification service error", details: error.message };
+        return { success: false, error: "Verification service error" };
+    }
+}
+
+export async function purgeSubjectFacesAction(subjectName: string, useVisitors = false) {
+    try {
+        const apiKey = useVisitors ? API_KEYS.VISITORS : API_KEYS.RECO;
+        await axios.delete(`${COMPARE_FACE_URL}/api/v1/recognition/faces?subject=${encodeURIComponent(subjectName)}`, {
+            headers: { "x-api-key": apiKey }, timeout: 10000
+        });
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: "Cleanup service error" };
     }
 }

@@ -1,24 +1,33 @@
 "use client";
 
 import React, { useState } from "react";
-import { motion } from "framer-motion";
-import { Camera, UserPlus, ShieldAlert, UserCheck, Loader2, ChevronLeft, RefreshCw, Upload } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+    Camera, UserPlus, ShieldAlert, UserCheck, Loader2,
+    ChevronLeft, RefreshCw, Upload, Database,
+    MessageSquare, Tag, Fingerprint, Star,
+    AlertTriangle, ShieldCheck, Zap
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+import { sileo as toast } from "sileo";
 import { registerFace } from "@/app/actions/users";
 import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 
 export default function UploadFacePage() {
+    const router = useRouter();
     const [name, setName] = useState("");
     const [dni, setDni] = useState("");
-    const [isBlacklist, setIsBlacklist] = useState(false);
+    const [role, setRole] = useState<'VISITOR' | 'BLACKLISTED' | 'WHITELISTED'>('VISITOR');
+    const [reason, setReason] = useState("");
     const [observations, setObservations] = useState("");
     const [photo, setPhoto] = useState<File | null>(null);
     const [preview, setPreview] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [creator, setCreator] = useState("Admin Sentinel");
 
     const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -33,7 +42,7 @@ export default function UploadFacePage() {
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!name || !photo) {
-            toast.error("Nombre y foto son obligatorios");
+            toast.error({ title: "Nombre y foto son obligatorios" });
             return;
         }
 
@@ -41,141 +50,280 @@ export default function UploadFacePage() {
         const formData = new FormData();
         formData.append("name", name);
         formData.append("dni", dni);
-        formData.append("isBlacklisted", isBlacklist.toString());
+        formData.append("isBlacklisted", (role === 'BLACKLISTED').toString());
+        formData.append("isWhitelisted", (role === 'WHITELISTED').toString());
+        formData.append("reason", reason);
         formData.append("observations", observations);
+        formData.append("creator", creator);
         formData.append("photo", photo);
 
         try {
             await registerFace(formData);
-            toast.success("Rostro registrado correctamente");
-            setName(""); setDni(""); setPhoto(null); setPreview(null); setObservations("");
+            toast.success({ title: "Rostro inscrito correctamente" });
+            setName(""); setDni(""); setPhoto(null); setPreview(null); setObservations(""); setReason("");
+            router.push('/admin/dashboard-face');
         } catch (e) {
-            toast.error("Error al registrar rostro");
+            toast.error({ title: "Fallo crítico en la inscripción" });
         } finally {
             setIsSubmitting(false);
         }
     };
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-500">
-            <header className="pb-6 border-b border-white/5">
-                <h1 className="text-3xl font-black text-white uppercase tracking-tight italic">Cargar Rostro</h1>
-                <p className="text-sm text-neutral-400 font-medium mt-1">Inscripción en el Ecosistema OmniAccess</p>
+        <div className="min-h-screen bg-black text-white p-8 space-y-8 animate-in fade-in duration-700">
+            {/* Tactical Header */}
+            <header className="flex items-center gap-6 pb-8 border-b border-white/5">
+                <Link
+                    href="/admin/dashboard-face"
+                    className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-neutral-800 transition-all group shadow-xl"
+                >
+                    <ChevronLeft className="group-hover:-translate-x-1 transition-transform" />
+                </Link>
+                <div>
+                    <div className="flex items-center gap-3">
+                        <h1 className="text-4xl font-black uppercase tracking-tight leading-none italic">Inscripción Biométrica</h1>
+                        <Badge className="bg-blue-600/20 text-blue-500 border-blue-600/30 font-black">NUEVO EXPEDIENTE</Badge>
+                    </div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-500 mt-2 flex items-center gap-2">
+                        <Database size={12} className="text-[#B20D30]" />
+                        Módulo de Registro Centralizado v2.4
+                    </p>
+                </div>
             </header>
 
-            <form onSubmit={handleRegister} className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Left: Capture */}
-                <div className="bg-neutral-900/50 border border-white/5 rounded-2xl p-6 space-y-6">
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-[10px] font-black text-neutral-500 uppercase tracking-[0.2em]">Biometric Capture</h3>
-                        <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
-                            <span className="text-[8px] font-black uppercase text-red-500 tracking-widest">Live Scanner</span>
-                        </div>
-                    </div>
+            <form onSubmit={handleRegister} className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Left: Capture HUD (Lg 5) */}
+                <div className="lg:col-span-5 space-y-6">
+                    <div className="bg-[#0A0A0A] border border-white/5 rounded-[2.5rem] p-8 space-y-8 shadow-2xl relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-[#B20D30]/5 blur-[50px] -z-10" />
 
-                    <div
-                        onClick={() => document.getElementById('face-upload')?.click()}
-                        className="w-full aspect-square rounded-2xl bg-black border-2 border-dashed border-white/10 flex flex-col items-center justify-center gap-6 cursor-pointer hover:bg-neutral-900 transition-all relative overflow-hidden group"
-                    >
-                        {preview ? (
-                            <>
-                                <Image src={preview} alt="Preview" fill className="object-cover group-hover:scale-105 transition-transform duration-700" />
-                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
-                                    <div className="flex flex-col items-center gap-2">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-[10px] font-black text-neutral-500 uppercase tracking-[0.3em] flex items-center gap-2">
+                                <Fingerprint size={14} className="text-[#B20D30]" />
+                                Captura Facial Activa
+                            </h3>
+                            <div className="flex items-center gap-2">
+                                <div className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse" />
+                                <span className="text-[8px] font-black uppercase text-red-500 tracking-widest">Neural Link</span>
+                            </div>
+                        </div>
+
+                        <div
+                            onClick={() => document.getElementById('face-upload')?.click()}
+                            className={cn(
+                                "w-full aspect-square rounded-[2rem] bg-black border-2 border-dashed transition-all relative overflow-hidden group/box cursor-pointer",
+                                preview ? (role === 'BLACKLISTED' ? "border-red-600/50" : role === 'WHITELISTED' ? "border-emerald-600/50" : "border-white/20") : "border-white/5 hover:bg-white/[0.02]"
+                            )}
+                        >
+                            {preview ? (
+                                <>
+                                    <Image src={preview} alt="Preview" fill className="object-cover group-hover/box:scale-105 transition-transform duration-[2000ms]" />
+                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/box:opacity-100 flex flex-col items-center justify-center transition-all backdrop-blur-sm gap-3">
                                         <RefreshCw className="text-white animate-spin-slow" size={32} />
-                                        <span className="text-[9px] font-black uppercase text-white tracking-widest">Cambiar Imagen</span>
+                                        <span className="text-[10px] font-black uppercase text-white tracking-widest">Reemplazar Captura</span>
+                                    </div>
+                                    {/* Scanning Animation */}
+                                    <div className="absolute inset-x-0 h-[2px] bg-red-600/50 top-0 shadow-[0_0_15px_rgba(220,38,38,0.5)] animate-scan-y pointer-events-none" />
+                                </>
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center gap-6">
+                                    <div className="w-20 h-20 rounded-3xl bg-white/5 flex items-center justify-center text-neutral-700 group-hover/box:text-white group-hover/box:scale-110 transition-all border border-white/5">
+                                        <Camera size={38} />
+                                    </div>
+                                    <div className="text-center px-8">
+                                        <p className="text-sm font-black text-white uppercase tracking-widest">Cargar Rostro</p>
+                                        <p className="text-[9px] text-neutral-600 font-bold uppercase mt-2 tracking-widest italic leading-relaxed">Arrastra una imagen de alta resolución para un match neural preciso</p>
                                     </div>
                                 </div>
-                            </>
-                        ) : (
-                            <>
-                                <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center text-neutral-700 group-hover:text-white group-hover:scale-110 transition-all">
-                                    <Camera size={32} />
-                                </div>
-                                <div className="text-center">
-                                    <p className="text-xs font-black text-white uppercase tracking-widest">Seleccionar Archivo</p>
-                                    <p className="text-[9px] text-neutral-600 font-bold uppercase mt-1 italic">Formatos: JPG, PNG, WEBP (Max 5MB)</p>
-                                </div>
-                            </>
-                        )}
+                            )}
+                        </div>
+                        <input id="face-upload" type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+
+                        <div className="bg-white/[0.02] rounded-3xl p-6 border border-white/5">
+                            <h4 className="text-[9px] font-black text-neutral-600 uppercase tracking-widest mb-3">Requisitos de Calidad</h4>
+                            <ul className="space-y-2">
+                                <QualityRow label="Iluminación Frontal" checked={!!preview} />
+                                <QualityRow label="Rostro Despejado" checked={!!preview} />
+                                <QualityRow label="Resolución Min. 480px" checked={!!preview} />
+                            </ul>
+                        </div>
                     </div>
-                    <input id="face-upload" type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
                 </div>
 
-                {/* Right: Data */}
-                <div className="bg-neutral-900/50 border border-white/5 rounded-2xl p-6 space-y-6 flex flex-col">
-                    <h3 className="text-[10px] font-black text-neutral-500 uppercase tracking-[0.2em]">Subject Metadata</h3>
+                {/* Right: Metadata Form (Lg 7) */}
+                <div className="lg:col-span-7 space-y-6">
+                    <div className="bg-[#0A0A0A] border border-white/5 rounded-[2.5rem] p-8 space-y-8 shadow-2xl h-full flex flex-col">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-[10px] font-black text-neutral-500 uppercase tracking-[0.3em] flex items-center gap-2">
+                                <Tag size={14} className="text-[#B20D30]" />
+                                Metadatos del Sujeto
+                            </h3>
+                        </div>
 
-                    <div className="space-y-4 flex-1">
-                        <div className="space-y-1.5">
-                            <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest ml-1">Identidad Completa</label>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest ml-1">Nombre Completo</label>
+                                <Input
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    placeholder="Nombre del Sujeto..."
+                                    className="h-14 bg-white/[0.02] border-white/5 text-white rounded-[1.25rem] px-6 text-sm font-black uppercase focus:border-[#B20D30]/50 transition-all shadow-inner"
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest ml-1">Identificación / DNI</label>
+                                <Input
+                                    value={dni}
+                                    onChange={(e) => setDni(e.target.value)}
+                                    placeholder="Nro de Documento..."
+                                    className="h-14 bg-white/[0.02] border-white/5 text-white rounded-[1.25rem] px-6 text-sm font-black uppercase focus:border-blue-600/50 transition-all shadow-inner"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Category Selector */}
+                        <div className="space-y-4">
+                            <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest ml-1 block">Nivel de Seguridad / Categoría</label>
+                            <div className="grid grid-cols-3 gap-3">
+                                <RoleOption
+                                    active={role === 'VISITOR'}
+                                    onClick={() => setRole('VISITOR')}
+                                    icon={<UserCheck size={18} />}
+                                    label="Estándar"
+                                    color="emerald"
+                                />
+                                <RoleOption
+                                    active={role === 'WHITELISTED'}
+                                    onClick={() => setRole('WHITELISTED')}
+                                    icon={<Star size={18} />}
+                                    label="Especial"
+                                    color="blue"
+                                />
+                                <RoleOption
+                                    active={role === 'BLACKLISTED'}
+                                    onClick={() => setRole('BLACKLISTED')}
+                                    icon={<ShieldAlert size={18} />}
+                                    label="Restringido"
+                                    color="red"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Reason Field */}
+                        <div className="space-y-2">
+                            <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest ml-1">Motivo de Registro</label>
                             <Input
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                placeholder="Nombre del Sujeto..."
-                                className="h-12 bg-black/50 border-white/10 text-white rounded-xl px-4 text-sm font-bold uppercase focus:border-[#B20D30]/50 transition-colors"
+                                value={reason}
+                                onChange={(e) => setReason(e.target.value)}
+                                placeholder="Ej: Historial delictivo, Contratista VIP, etc..."
+                                className="h-14 bg-white/[0.02] border-white/5 text-white rounded-[1.25rem] px-6 text-xs font-bold uppercase focus:border-red-600/50 transition-all shadow-inner"
                             />
                         </div>
 
-                        <div className="space-y-1.5">
-                            <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest ml-1">Documento Nacional / ID</label>
-                            <Input
-                                value={dni}
-                                onChange={(e) => setDni(e.target.value)}
-                                placeholder="DNI / Cédula..."
-                                className="h-12 bg-black/50 border-white/10 text-white rounded-xl px-4 text-sm font-bold uppercase focus:border-[#B20D30]/50 transition-colors"
-                            />
-                        </div>
-
-                        <div className="space-y-1.5">
-                            <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest ml-1">Observaciones</label>
+                        {/* Observations */}
+                        <div className="space-y-2 flex-1">
+                            <div className="flex items-center justify-between ml-1">
+                                <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">Observaciones Adicionales</label>
+                                <MessageSquare size={12} className="text-neutral-700" />
+                            </div>
                             <textarea
                                 value={observations}
                                 onChange={(e) => setObservations(e.target.value)}
-                                placeholder="Notas adicionales..."
-                                className="w-full h-24 bg-black/50 border border-white/10 text-white rounded-xl p-4 text-xs font-medium uppercase focus:border-[#B20D30]/50 focus:ring-0 outline-none transition-colors resize-none"
+                                placeholder="Detalles técnicos o de comportamiento observados durante el registro..."
+                                className="w-full bg-white/[0.02] border border-white/5 text-white rounded-[1.25rem] p-6 text-xs font-medium uppercase focus:border-[#B20D30]/50 focus:ring-0 outline-none transition-all resize-none h-40 shadow-inner"
                             />
                         </div>
 
-                        <div className="flex items-center gap-4 bg-black/50 p-4 rounded-xl border border-white/5">
-                            <div className={cn(
-                                "w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all",
-                                isBlacklist ? "bg-red-600/20 text-red-500" : "bg-emerald-600/20 text-emerald-500"
-                            )}>
-                                {isBlacklist ? <ShieldAlert size={18} /> : <UserCheck size={18} />}
+                        {/* Creator Footer Info */}
+                        <div className="flex items-center justify-between p-6 bg-white/[0.03] rounded-[1.5rem] border border-white/5">
+                            <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neutral-700 to-black flex items-center justify-center text-[10px] font-black border border-white/10">A</div>
+                                <div>
+                                    <p className="text-[8px] font-black text-neutral-500 uppercase tracking-widest">Operador Responsable</p>
+                                    <p className="text-[11px] font-black text-white hover:text-[#B20D30] cursor-pointer transition-colors uppercase">{creator}</p>
+                                </div>
                             </div>
-                            <div className="flex-1">
-                                <p className="text-xs font-black uppercase text-white tracking-widest">{isBlacklist ? "Lista Negra" : "Autorizado"}</p>
+                            <div className="text-right">
+                                <p className="text-[8px] font-black text-neutral-500 uppercase tracking-widest">Hash de Registro</p>
+                                <p className="text-[9px] font-mono text-neutral-700 uppercase">SYS-FAC-{(Math.random() * 10000).toFixed(0)}-AX</p>
                             </div>
-                            <button
-                                type="button"
-                                onClick={() => setIsBlacklist(!isBlacklist)}
-                                className={cn(
-                                    "w-12 h-6 rounded-full relative transition-colors",
-                                    isBlacklist ? "bg-red-600" : "bg-emerald-600"
-                                )}
-                            >
-                                <div className={cn(
-                                    "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
-                                    isBlacklist ? "right-1" : "left-1"
-                                )} />
-                            </button>
                         </div>
-                    </div>
 
-                    <Button
-                        type="submit"
-                        disabled={isSubmitting}
-                        className={cn(
-                            "w-full h-12 rounded-xl font-black uppercase tracking-[0.2em] text-[10px] transition-all flex gap-2 shadow-lg",
-                            isBlacklist ? "bg-red-600 hover:bg-red-700 shadow-red-900/20" : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-900/20"
-                        )}
-                    >
-                        {isSubmitting ? <Loader2 className="animate-spin" size={16} /> : <><Upload size={16} /> Ejecutar Inscripción</>}
-                    </Button>
+                        <Button
+                            type="submit"
+                            disabled={isSubmitting}
+                            className={cn(
+                                "w-full h-16 rounded-[1.5rem] font-black uppercase tracking-[0.3em] text-[11px] transition-all flex gap-4 shadow-2xl active:scale-95",
+                                isSubmitting ? "bg-neutral-800" : (role === 'BLACKLISTED' ? "bg-red-600 hover:bg-red-700" : role === 'WHITELISTED' ? "bg-blue-600 hover:bg-blue-700" : "bg-emerald-600 hover:bg-emerald-700")
+                            )}
+                        >
+                            {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : (
+                                <>
+                                    <Upload size={20} />
+                                    Confirmar y Serializar Rostro
+                                </>
+                            )}
+                        </Button>
+                    </div>
                 </div>
             </form>
+
+            <style jsx global>{`
+                @keyframes scan-y {
+                    0% { top: 0; opacity: 0.2; }
+                    50% { top: 100%; opacity: 0.8; }
+                    100% { top: 0; opacity: 0.2; }
+                }
+                .animate-scan-y {
+                    animation: scan-y 4s ease-in-out infinite;
+                }
+            `}</style>
         </div>
+    );
+}
+
+function RoleOption({ active, onClick, icon, label, color }: { active: boolean, onClick: () => void, icon: any, label: string, color: string }) {
+    const colors: any = {
+        red: active ? "border-red-600 bg-red-600/20 text-red-500" : "border-white/5 bg-white/[0.02] text-neutral-600 hover:border-white/10 hover:text-white",
+        blue: active ? "border-blue-600 bg-blue-600/20 text-blue-500" : "border-white/5 bg-white/[0.02] text-neutral-600 hover:border-white/10 hover:text-white",
+        emerald: active ? "border-emerald-600 bg-emerald-600/20 text-emerald-500" : "border-white/5 bg-white/[0.02] text-neutral-600 hover:border-white/10 hover:text-white"
+    };
+
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className={cn(
+                "flex-1 p-5 rounded-3xl border transition-all flex flex-col items-center gap-3",
+                colors[color]
+            )}
+        >
+            {icon}
+            <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
+        </button>
+    );
+}
+
+function QualityRow({ label, checked }: { label: string, checked: boolean }) {
+    return (
+        <li className="flex items-center justify-between">
+            <span className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest">{label}</span>
+            {checked ? (
+                <div className="w-4 h-4 rounded-full bg-emerald-600/20 flex items-center justify-center text-emerald-500">
+                    <ShieldCheck size={10} />
+                </div>
+            ) : (
+                <div className="w-1.5 h-1.5 rounded-full bg-neutral-800" />
+            )}
+        </li>
+    );
+}
+
+function Badge({ children, className }: { children: React.ReactNode, className?: string }) {
+    return (
+        <span className={cn("px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border", className)}>
+            {children}
+        </span>
     );
 }
