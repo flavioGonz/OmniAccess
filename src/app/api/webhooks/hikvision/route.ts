@@ -188,8 +188,8 @@ export async function POST(req: NextRequest) {
         debounceCache.set(debounceKey, now);
 
         // Save Images
-        let relativeImagePath = "";
-        let relativeSnapshotPath = "";
+        let relativeImagePath: string | null = null;
+        let relativeSnapshotPath: string | null = null;
 
         const folder = idType === 'PLATE' ? 'lpr' : 'face';
         const devName = sanitizeName(device?.name);
@@ -382,7 +382,7 @@ export async function POST(req: NextRequest) {
             console.log(`${logPrefix} Dispatched Instant Neural Analysis...`);
             try {
                 const faceBuffer = Buffer.from(await faceImage.arrayBuffer());
-                const neuralResult = await verifyFaceAction(finalSnapshot, undefined, personName, faceBuffer);
+                const neuralResult = await verifyFaceAction(finalSnapshot || "", undefined, personName, faceBuffer);
 
                 if (neuralResult.success && neuralResult.recognizedAs !== 'Desconocido') {
                     // Refetch the updated event with new userId and details (updated inside verifyFaceAction)

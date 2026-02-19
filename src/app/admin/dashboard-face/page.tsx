@@ -761,14 +761,9 @@ function FaceDashboardContent() {
             </AnimatePresence>
 
             <style jsx global>{`
-                @font-face {
-                    font-family: 'Outfit';
-                    src: url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap');
-                }
                 body {
                     background: #000;
                     overflow: hidden;
-                    font-family: 'Outfit', sans-serif;
                 }
                 * {
                     border-radius: 0.5rem !important;

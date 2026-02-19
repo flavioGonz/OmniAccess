@@ -8,6 +8,7 @@ import {
     DialogTitle,
     DialogTrigger,
     DialogFooter,
+    DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Trash2, ShieldAlert, AlertTriangle } from "lucide-react";
@@ -67,10 +68,10 @@ export function DeleteConfirmDialog({ id, title, description, onDelete, onSucces
                                 {title}
                             </DialogTitle>
                         </DialogHeader>
-                        <p className="text-sm font-medium text-neutral-400 leading-relaxed">
+                        <DialogDescription className="text-sm font-medium text-neutral-400 leading-relaxed">
                             Esta acción es <span className="text-red-500 font-bold">irreversible</span>.
                             El registro se eliminará permanentemente del sistema.
-                        </p>
+                        </DialogDescription>
                     </div>
 
                     {/* Warning Box */}

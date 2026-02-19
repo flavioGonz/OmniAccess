@@ -553,7 +553,12 @@ export function DeviceMemoryDialog({ device, open, onOpenChange }: DeviceMemoryD
     // --- RENDERIZADO PRINCIPAL ---
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-[98vw] lg:max-w-[1400px] 2xl:max-w-[1700px] bg-[#050505] border-white/5 p-0 overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.8)] transition-all duration-500 rounded-[2.5rem]">
+            <DialogContent
+                className="max-w-[98vw] lg:max-w-[1400px] 2xl:max-w-[1700px] bg-[#050505] border-white/5 p-0 overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.8)] transition-all duration-500 rounded-[2.5rem]"
+                aria-describedby="device-memory-description"
+            >
+                <DialogTitle className="sr-only">Gestión de Memoria y Sincronización - {device.name}</DialogTitle>
+                <p id="device-memory-description" className="sr-only">Panel interactivo para visualizar y gestionar usuarios, rostros y registros de llamadas en el dispositivo.</p>
                 {renderConfirmOverlay()}
                 {renderImportOverlay()}
 

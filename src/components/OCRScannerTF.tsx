@@ -12,9 +12,10 @@ interface OCRScannerTFProps {
     onDetected: (plate: string | null, imageBlob: Blob) => void;
     cameraFacingMode?: "environment" | "user";
     toggleCameraFacingMode?: () => void;
+    initialPhotoMode?: boolean;
 }
 
-export default function OCRScannerTF({ onClose, onDetected, cameraFacingMode, toggleCameraFacingMode }: OCRScannerTFProps) {
+export default function OCRScannerTF({ onClose, onDetected, cameraFacingMode, toggleCameraFacingMode, initialPhotoMode = false }: OCRScannerTFProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
@@ -34,7 +35,7 @@ export default function OCRScannerTF({ onClose, onDetected, cameraFacingMode, to
     const facingMode = cameraFacingMode || internalFacingMode;
     const toggleFacingMode = toggleCameraFacingMode || (() => setInternalFacingMode(prev => prev === "environment" ? "user" : "environment"));
 
-    const [isPhotoMode, setIsPhotoMode] = useState(false);
+    const [isPhotoMode, setIsPhotoMode] = useState(initialPhotoMode);
 
     // Initialize TensorFlow.js and Tesseract
     useEffect(() => {

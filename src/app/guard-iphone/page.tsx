@@ -39,11 +39,22 @@ export default async function GuardIphonePage() {
         }
     });
 
+    const initialFaceEntries = await prisma.accessEvent.findMany({
+        where: { accessType: "FACE" },
+        take: 50,
+        orderBy: { timestamp: "desc" },
+        include: {
+            user: true,
+            device: true
+        }
+    });
+
     return (
         <>
             <PushNotificationManager />
             <GuardIphoneConsole
                 initialEntries={initialEntries}
+                initialFaceEntries={initialFaceEntries}
                 logo={logoSetting?.value || globalLogoSetting?.value || "/logo-transparent.png"}
                 headerColor={headerColorSetting?.value || "#000000"}
                 initialIcons={iconsSetting?.value ? JSON.parse(iconsSetting.value) : {}}

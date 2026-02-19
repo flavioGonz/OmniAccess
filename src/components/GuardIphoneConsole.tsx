@@ -11,7 +11,7 @@ import {
     Building2, FileText, UserCheck, Briefcase, Plus,
     Flame, Home, Clock, ImageIcon, Loader2,
     Car, Bike, Smartphone, ChevronRight, Square,
-    ShieldAlert, UserX, CarFront, Filter, RefreshCw, AlertTriangle
+    ShieldAlert, UserX, CarFront, Filter, RefreshCw, AlertTriangle, Scan
 } from "lucide-react";
 import { io } from "socket.io-client";
 import { getSocketUrl } from "@/lib/socket-config";
@@ -19,6 +19,7 @@ import { sileo as toast } from "sileo";
 import { createBitacoraEntry } from "@/app/actions/bitacora";
 import { getAccessEvents as getLprHistory, getPlateAnalysis } from "@/app/actions/history";
 import { searchUsers } from "@/app/actions/search";
+import { searchByPhotoAction } from "@/app/actions/face-verify";
 import Image from "next/image";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,7 +29,7 @@ import dynamic from "next/dynamic";
 const LiveGuardMap = dynamic(() => import("@/components/LiveGuardMap"), { ssr: false });
 const OCRScanner = dynamic(() => import("@/components/OCRScannerTF"), { ssr: false });
 
-type TabType = "control" | "history" | "map" | "lpr" | "alerts";
+type TabType = "control" | "history" | "map" | "lpr" | "alerts" | "faces";
 
 interface Unit {
     id: string;
@@ -38,6 +39,7 @@ interface Unit {
 
 interface GuardIphoneConsoleProps {
     initialEntries?: any[];
+    initialFaceEntries?: any[];
     logo?: string;
     headerColor?: string;
     initialIcons?: Record<string, string>;
@@ -47,6 +49,7 @@ interface GuardIphoneConsoleProps {
 
 export default function GuardIphoneConsole({
     initialEntries = [],
+    initialFaceEntries = [],
     logo = "/logo-transparent.png",
     headerColor = "#000000",
     initialIcons = {},
@@ -67,6 +70,12 @@ export default function GuardIphoneConsole({
     const [destination, setDestination] = useState("");
     const [notes, setNotes] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Face States
+    const [faceEntries, setFaceEntries] = useState<any[]>(initialFaceEntries);
+    const [isSearchingFace, setIsSearchingFace] = useState(false);
+    const [faceMatchResult, setFaceMatchResult] = useState<any>(null);
+    const [faceSearchMode, setFaceSearchMode] = useState(false);
 
     // Login State
     const [loginUser, setLoginUser] = useState("");
@@ -380,7 +389,34 @@ export default function GuardIphoneConsole({
         }
     };
 
+    const handleFaceSearch = async (imageBlob: Blob) => {
+        setIsSearchingFace(true);
+        playTactileSound();
+        try {
+            const arrayBuffer = await imageBlob.arrayBuffer();
+            const result = await searchByPhotoAction(new Uint8Array(arrayBuffer));
+            if (result.success && result.user) {
+                setFaceMatchResult(result);
+                toast.success({ title: `Identificado: ${result.user.name}` });
+            } else {
+                setFaceMatchResult({ success: true, match: null, user: null });
+                toast.info({ title: "Persona no identificada en la base de datos" });
+            }
+        } catch (error) {
+            console.error("Face Search error:", error);
+            toast.error({ title: "Error en la búsqueda biométrica" });
+        } finally {
+            setIsSearchingFace(false);
+        }
+    };
+
     const handleOCRDetected = (detectedPlate: string | null, imageBlob: Blob) => {
+        if (faceSearchMode) {
+            handleFaceSearch(imageBlob);
+            setFaceSearchMode(false);
+            return;
+        }
+
         if (detectedPlate !== null) setPlate(detectedPlate);
 
         // Convert blob to data URL for preview and existing logic
@@ -527,14 +563,20 @@ export default function GuardIphoneConsole({
         }
     };
 
-    // Correcting LPR Fetching
+    // Correcting LPR and Faces Fetching
     useEffect(() => {
         if (activeTab === "lpr") {
             const fetchLpr = async () => {
-                const { events } = await getLprHistory({ take: 50, type: "PLATE" });
+                const { events } = await getLprHistory({ take: 100, type: "PLATE" });
                 if (events) setLprEntries(events);
             };
             fetchLpr();
+        } else if (activeTab === "faces") {
+            const fetchFaces = async () => {
+                const { events } = await getLprHistory({ take: 100, type: "FACE" });
+                if (events) setFaceEntries(events);
+            };
+            fetchFaces();
         }
     }, [activeTab]);
 
@@ -597,38 +639,40 @@ export default function GuardIphoneConsole({
 
     return (
         <div className="fixed inset-0 bg-slate-50 text-slate-900 flex flex-col overflow-hidden font-sans">
-            {/* Header */}
-            <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 z-50">
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-[#B20D30] flex items-center justify-center text-white">
-                        <Shield size={16} />
-                    </div>
-                    <div>
-                        <h1 className="text-sm font-black uppercase tracking-tight">Omniaccess Guard</h1>
-                        <div className="flex items-center gap-1">
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            <span className="text-[10px] text-slate-500 font-bold uppercase">Online</span>
+            {/* Header - Hidden in Faces tab for full screen effect */}
+            {activeTab !== "faces" && (
+                <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0 z-50">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-[#B20D30] flex items-center justify-center text-white">
+                            <Shield size={16} />
+                        </div>
+                        <div>
+                            <h1 className="text-sm font-black uppercase tracking-tight">Omniaccess Guard</h1>
+                            <div className="flex items-center gap-1">
+                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                <span className="text-[10px] text-slate-500 font-bold uppercase">Online</span>
+                            </div>
                         </div>
                     </div>
-                </div>
-                <div className="flex items-center gap-2">
-                    {isAlertMode && (
-                        <div className="px-3 py-1 bg-red-600 text-white rounded-full text-[10px] font-black animate-pulse flex items-center gap-1.5">
-                            <Siren size={12} /> ALERTA
-                        </div>
-                    )}
-                    <button
-                        onClick={() => setShowSettingsModal(true)}
-                        className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 overflow-hidden border border-slate-200"
-                    >
-                        {guardPhoto ? (
-                            <Image src={guardPhoto} alt="Guard" width={40} height={40} className="object-cover" />
-                        ) : (
-                            <UserIcon size={20} />
+                    <div className="flex items-center gap-2">
+                        {isAlertMode && (
+                            <div className="px-3 py-1 bg-red-600 text-white rounded-full text-[10px] font-black animate-pulse flex items-center gap-1.5">
+                                <Siren size={12} /> ALERTA
+                            </div>
                         )}
-                    </button>
-                </div>
-            </header>
+                        <button
+                            onClick={() => setShowSettingsModal(true)}
+                            className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 overflow-hidden border border-slate-200"
+                        >
+                            {guardPhoto ? (
+                                <Image src={guardPhoto} alt="Guard" width={40} height={40} className="object-cover" />
+                            ) : (
+                                <UserIcon size={20} />
+                            )}
+                        </button>
+                    </div>
+                </header>
+            )}
 
             {/* Main Content */}
             <main className="flex-1 overflow-hidden relative">
@@ -1098,46 +1142,219 @@ export default function GuardIphoneConsole({
                             </div>
                         </motion.div>
                     )}
+                    {activeTab === "faces" && (
+                        <motion.div
+                            key="faces"
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: 20 }}
+                            className="h-full flex flex-col pt-6 pb-32"
+                        >
+                            <div className="px-5 space-y-6">
+                                {/* Search Button */}
+                                <button
+                                    onClick={() => { setFaceSearchMode(true); setIsOCRActive(true); playTactileSound(); }}
+                                    className="w-full h-24 bg-[#B20D30] text-white rounded-[2.5rem] flex items-center justify-between px-8 shadow-2xl shadow-red-900/20 active:scale-95 transition-all group"
+                                >
+                                    <div className="text-left">
+                                        <h2 className="text-xl font-black uppercase tracking-tighter">Buscador Biométrico</h2>
+                                        <p className="text-[10px] font-bold text-white/60 uppercase tracking-widest">Identificar Persona con Cámara</p>
+                                    </div>
+                                    <div className="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center group-hover:scale-110 transition-transform">
+                                        <Scan className="w-8 h-8" />
+                                    </div>
+                                </button>
+
+                                <div className="space-y-4">
+                                    <h3 className="text-xs font-black uppercase text-slate-400 tracking-[0.2em] ml-2 flex items-center gap-2">
+                                        <Clock size={14} /> Capturas Recientes
+                                    </h3>
+
+                                    {/* Gallery Grid */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {faceEntries.length > 0 ? faceEntries.map((event) => (
+                                            <button
+                                                key={event.id}
+                                                onClick={() => setSelectedEntry(event)}
+                                                className="aspect-square bg-white rounded-[2rem] border border-slate-100 overflow-hidden relative group active:scale-95 transition-all shadow-sm"
+                                            >
+                                                <Image
+                                                    src={event.snapshotPath || "/placeholder.jpg"}
+                                                    alt="Face"
+                                                    fill
+                                                    className="object-cover"
+                                                />
+                                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                                                <div className="absolute bottom-4 left-4 right-4 text-left leading-tight">
+                                                    <p className="text-[10px] font-black text-white uppercase truncate mb-0.5">
+                                                        {event.user?.name || event.details?.match(/Persona: ([^,]+)/)?.[1] || "DESCONOCIDO"}
+                                                    </p>
+                                                    <div className="flex items-center justify-between">
+                                                        <p className="text-[8px] font-bold text-white/60 uppercase">
+                                                            {new Date(event.timestamp).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' })}
+                                                        </p>
+                                                        <p className="text-[8px] font-bold text-white/40 uppercase truncate max-w-[50%]">
+                                                            {event.device?.name || "Cámara"}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        )) : (
+                                            <div className="col-span-2 py-20 flex flex-col items-center justify-center text-slate-300">
+                                                <ImageIcon size={48} strokeWidth={1} />
+                                                <p className="text-[10px] font-black uppercase tracking-widest mt-4">Sin capturas faciales hoy</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {/* Face Search Result Modal */}
+                    <AnimatePresence>
+                        {faceMatchResult && (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="fixed inset-0 z-[1000] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4"
+                                onClick={() => setFaceMatchResult(null)}
+                            >
+                                <motion.div
+                                    initial={{ scale: 0.9, y: 20 }}
+                                    animate={{ scale: 1, y: 0 }}
+                                    exit={{ scale: 0.9, y: 20 }}
+                                    className="w-full max-w-md bg-white rounded-[3rem] p-8 space-y-8 shadow-2xl relative overflow-hidden"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-[#B20D30]/5 to-transparent pointer-events-none" />
+
+                                    <div className="flex flex-col items-center text-center space-y-4">
+                                        <div className="w-32 h-32 rounded-[40px] border-4 border-white shadow-2xl overflow-hidden relative">
+                                            {faceMatchResult.user?.cara ? (
+                                                <Image src={faceMatchResult.user.cara.startsWith('/') ? faceMatchResult.user.cara : `/api/files/${faceMatchResult.user.cara}`} alt="Match" fill className="object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-300">
+                                                    <UserIcon size={48} />
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="space-y-1">
+                                            {faceMatchResult.user ? (
+                                                <>
+                                                    <h3 className="text-3xl font-black tracking-tighter text-slate-900 leading-none uppercase">{faceMatchResult.user.name}</h3>
+                                                    <p className="text-[10px] font-bold text-[#B20D30] uppercase tracking-[0.2em]">Identidad Confirmada ({(faceMatchResult.match?.similarity * 100).toFixed(1)}%)</p>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <h3 className="text-3xl font-black tracking-tighter text-slate-400 leading-none">NO IDENTIFICADO</h3>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sin coincidencias en la base de datos</p>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {faceMatchResult.user && (
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100">
+                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Unidad</p>
+                                                <p className="text-xs font-black text-slate-900 uppercase">{faceMatchResult.user.unit?.name || "---"}</p>
+                                            </div>
+                                            <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100">
+                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Categoría</p>
+                                                <p className="text-xs font-black text-slate-900 uppercase">{faceMatchResult.user.role}</p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <button
+                                        onClick={() => setFaceMatchResult(null)}
+                                        className="w-full h-16 bg-slate-100 text-slate-900 rounded-[2rem] font-black uppercase tracking-widest text-xs active:scale-95 transition-all"
+                                    >
+                                        Cerrar Buscador
+                                    </button>
+                                </motion.div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </AnimatePresence>
             </main>
 
             {/* Bottom Navigation */}
-            <footer className="h-16 md:h-20 bg-white border-t border-slate-200 px-2 md:px-4 flex items-center justify-around shrink-0 z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.03)]">
-                <BottomNavItem
-                    icon={<UserIcon size={18} className="md:w-5 md:h-5" />}
-                    active={activeTab === "control"}
-                    onClick={() => setActiveTab("control")}
-                    label="Registrar"
-                />
-                <BottomNavItem
-                    icon={<HistoryIcon size={18} className="md:w-5 md:h-5" />}
-                    active={activeTab === "history"}
-                    onClick={() => setActiveTab("history")}
-                    label="Bitácora"
-                />
-                <div className="relative -mt-8 md:-mt-10">
-                    <button
-                        onClick={() => { setActiveTab("alerts"); playTactileSound(); }}
-                        className={cn(
-                            "w-14 h-14 md:w-16 md:h-16 rounded-full shadow-2xl flex items-center justify-center transition-all active:scale-90",
-                            activeTab === "alerts" ? "bg-red-600 text-white" : "bg-white text-red-600 border-4 border-slate-50"
-                        )}
-                    >
-                        <Siren size={24} className="md:w-7 md:h-7" />
-                    </button>
+            <footer className="h-20 md:h-24 bg-white border-t border-slate-200 px-1 shrink-0 z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.03)] pb-safe">
+                <div className="grid grid-cols-7 h-full items-center">
+                    <BottomNavItem
+                        icon={<UserIcon size={18} />}
+                        active={activeTab === "control"}
+                        onClick={() => setActiveTab("control")}
+                        label="Registrar"
+                    />
+                    <BottomNavItem
+                        icon={<HistoryIcon size={18} />}
+                        active={activeTab === "history"}
+                        onClick={() => setActiveTab("history")}
+                        label="Bitácora"
+                    />
+                    <BottomNavItem
+                        icon={<UserCheck size={18} />}
+                        active={activeTab === "faces"}
+                        onClick={() => setActiveTab("faces")}
+                        label="Rostros"
+                    />
+
+                    {/* PERFECTLY Centered Panic Button */}
+                    <div className="flex justify-center -mt-8">
+                        <button
+                            onMouseDown={startPanicHold}
+                            onMouseUp={cancelPanicHold}
+                            onMouseLeave={cancelPanicHold}
+                            onTouchStart={startPanicHold}
+                            onTouchEnd={cancelPanicHold}
+                            onClick={() => { if (isAlertMode) toggleAlertMode(false); playTactileSound(); }}
+                            className={cn(
+                                "w-16 h-16 rounded-full shadow-2xl flex items-center justify-center transition-all active:scale-95 border-4 border-white overflow-hidden relative group",
+                                isAlertMode ? "bg-red-600 text-white animate-pulse" : "bg-white text-red-600 shadow-red-100"
+                            )}
+                        >
+                            {/* Hold Progress Ring */}
+                            {!isAlertMode && panicHoldProgress > 0 && (
+                                <svg className="absolute inset-0 w-full h-full -rotate-90">
+                                    <circle
+                                        cx="32" cy="32" r="28"
+                                        stroke="currentColor"
+                                        strokeWidth="4"
+                                        fill="transparent"
+                                        strokeDasharray={175.9}
+                                        strokeDashoffset={175.9 - (175.9 * panicHoldProgress) / 100}
+                                        className="text-red-100"
+                                    />
+                                </svg>
+                            )}
+                            <Siren size={28} className={cn("relative z-10", isAlertMode && "scale-110")} />
+                        </button>
+                    </div>
+
+                    <BottomNavItem
+                        icon={<Car size={18} />}
+                        active={activeTab === "lpr"}
+                        onClick={() => setActiveTab("lpr")}
+                        label="LPR"
+                    />
+                    <BottomNavItem
+                        icon={<MapIcon size={18} />}
+                        active={activeTab === "map"}
+                        onClick={() => setActiveTab("map")}
+                        label="Mapa"
+                    />
+                    <BottomNavItem
+                        icon={<Settings size={18} />}
+                        active={showSettingsModal}
+                        onClick={() => { setShowSettingsModal(true); playTactileSound(); }}
+                        label="Perfil"
+                    />
                 </div>
-                <BottomNavItem
-                    icon={<Car size={18} className="md:w-5 md:h-5" />}
-                    active={activeTab === "lpr"}
-                    onClick={() => setActiveTab("lpr")}
-                    label="LPR"
-                />
-                <BottomNavItem
-                    icon={<MapIcon size={18} className="md:w-5 md:h-5" />}
-                    active={activeTab === "map"}
-                    onClick={() => setActiveTab("map")}
-                    label="Mapa"
-                />
             </footer>
 
             {/* Identity Overlay */}
@@ -1694,7 +1911,8 @@ export default function GuardIphoneConsole({
                 {isOCRActive && (
                     <OCRScanner
                         onDetected={handleOCRDetected}
-                        onClose={() => setIsOCRActive(false)}
+                        onClose={() => { setIsOCRActive(false); setFaceSearchMode(false); }}
+                        initialPhotoMode={faceSearchMode}
                     />
                 )}
             </AnimatePresence>

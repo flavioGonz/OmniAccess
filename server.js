@@ -947,8 +947,8 @@ const handleWebhook = async (req, res, logPrefix) => {
             }
 
             // --- Process Images (Full vs Face) ---
-            let fullImagePath = "";
-            let faceImagePath = "";
+            let fullImagePath = null;
+            let faceImagePath = null;
             const eventId = generateId();
 
             if (images.length > 0) {
@@ -1340,7 +1340,7 @@ const handleWebhook = async (req, res, logPrefix) => {
         }
 
         // Save Image to S3 (MinIO)
-        let relativeImagePath = "";
+        let relativeImagePath = null;
         const eventId = generateId();
 
         // Sort images by size to pick the largest (Full Scene) instead of the crop

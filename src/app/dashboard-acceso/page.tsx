@@ -585,7 +585,7 @@ export default function AccesoDashboard() {
 
     const entryEvents = filteredEvents.filter(e => e.direction === 'ENTRY');
     const exitEvents = filteredEvents.filter(e => e.direction === 'EXIT');
-    const captureEvents = filteredEvents.filter(e => e.imagePath || e.snapshotPath || (e.accessType !== 'PLATE' && e.user?.cara));
+    const captureEvents = filteredEvents.filter(e => (e.accessType as any) === 'PLATE' || e.imagePath || e.snapshotPath || (e.accessType !== 'PLATE' && e.user?.cara));
 
     return (
         <div className="h-full p-6 overflow-hidden animate-in fade-in duration-700 flex flex-col gap-6">
