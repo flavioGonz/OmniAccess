@@ -402,9 +402,9 @@ function FaceDashboardContent() {
                 result = await handleVerification(event);
             }
 
-            // Auto-popup logic: Activate ONLY on Blacklisted events if AUTO is enabled
-            const isAlert = event.user?.role === 'BLACKLISTED' || result?.alertTriggered;
-            if (isAutoPopupEnabled && isAlert) {
+            // Auto-popup logic: Activate for ANY recognized/identified person
+            const isIdentified = result?.recognizedAs && result.recognizedAs !== 'Desconocido';
+            if (isAutoPopupEnabled && isIdentified) {
                 setSelectedViewEvent(event);
             }
         };
@@ -827,8 +827,10 @@ function FeedCard({ event, verification, currentTime, onClick }: FeedCardProps) 
         ? verification.recognizedAs
         : (personaName && !['Desconocido', 'N/A', 'Persona'].some(s => personaName.includes(s)) ? personaName : "Sujeto Desconocido");
 
+    const isIdentified = (verification?.recognizedAs && verification.recognizedAs !== 'Desconocido') || (personaName && !['Desconocido', 'N/A', 'Persona'].some(s => personaName.includes(s)));
     const isWhiteList = event.user?.role === 'WHITELISTED';
     const isBlacklisted = event.user?.role === 'BLACKLISTED' || verification?.alertTriggered;
+    const isAlert = isBlacklisted || isIdentified; // Everyone recognized is an "Alert" to verify
     const isConflict = verification?.isConflict;
     const isSuspicious = verification?.isSuspicious;
 
@@ -864,9 +866,9 @@ function FeedCard({ event, verification, currentTime, onClick }: FeedCardProps) 
                     </span>
                 </div>
 
-                {/* Blacklist Alert Overlay */}
+                {/* Red Alert Overlay for ANY Identification */}
                 <AnimatePresence>
-                    {isBlacklisted && (
+                    {isAlert && (
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: [0.2, 0.5, 0.2] }}

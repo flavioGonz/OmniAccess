@@ -104,19 +104,19 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
     const isTempVisitor = event.user?.role === 'VISITOR' || event.user?.role === 'TEMPORARY_VISITOR';
     const isLoading = verifState?.loading;
 
-    // Alerta total para Blacklisted
-    const isAlert = isBlacklisted;
-    const isSuspicious = verifState?.isSuspicious;
-    const isConflict = verifState?.isConflict;
-    const isSuccess = !isBlacklisted && !isWhiteList && !isConflict && !isSuspicious;
-    const isSpecial = isWhiteList;
-
     // Camera reported similarity
     const camMatchMatch = event.details?.match(/CamMatch: ([\d.]+)%/);
     const cameraMatchValue = camMatchMatch ? parseFloat(camMatchMatch[1]) : 0;
     const cameraMatch = camMatchMatch ? camMatchMatch[1] : null;
     const cameraParsedName = event.details?.match(/Persona: ([^,]+)/)?.[1];
     const cameraName = event.user?.name || (cameraParsedName !== 'N/A' ? cameraParsedName : null);
+
+    // Alerta total para Blacklisted CONFIRMADO POR HARDWARE
+    const isAlert = isBlacklisted && cameraMatchValue > 0;
+    const isSuspicious = verifState?.isSuspicious || (isBlacklisted && cameraMatchValue === 0);
+    const isConflict = verifState?.isConflict;
+    const isSuccess = !isBlacklisted && !isWhiteList && !isConflict && !isSuspicious;
+    const isSpecial = isWhiteList;
 
     const neuralName = verifState?.recognizedAs;
     const neuralSimilarity = verifState?.similarity ? (verifState.similarity * 100) : 0;
@@ -128,7 +128,13 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
 
     const displayUser = verifState?.user || event.user;
     const rawName = neuralName || cameraName || "Sujeto Desconocido";
+    const isIdentified = rawName !== "Sujeto Desconocido";
     const displayName = displayUser?.name || formatSubjectName(rawName);
+
+    const titleColor = isAlert ? "text-red-600 drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]" :
+        (isBlacklisted && cameraMatchValue === 0) ? "text-amber-500 drop-shadow-[0_0_10px_rgba(245,158,11,0.3)]" :
+            isSpecial ? "text-[#2ecc71]" :
+                "text-white";
 
     const handleResolve = async () => {
         if (isAlert && !comment) {
@@ -262,7 +268,7 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                         transition={{ duration: 0.3 }}
                         className={cn(
                             "relative w-full max-w-[1200px] aspect-video bg-[#0a0a0a]/95 backdrop-blur-2xl rounded-2xl overflow-hidden border",
-                            isAlert ? "border-red-500/50 shadow-[0_0_50px_rgba(239,68,68,0.2)]" : "border-white/10"
+                            (isAlert || isBlacklisted || isSuspicious) ? "border-red-500/50 shadow-[0_0_50px_rgba(239,68,68,0.2)]" : "border-white/10"
                         )}
                     >
                         {isAlert && (
@@ -440,7 +446,7 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                             </div>
                                             <h1 className={cn(
                                                 "text-4xl font-black uppercase tracking-tighter leading-none break-words max-w-sm",
-                                                isSpecial ? "text-[#2ecc71]" : isSuccess ? "text-white" : "text-red-600 drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]"
+                                                titleColor
                                             )}>
                                                 {displayName}
                                             </h1>
@@ -457,12 +463,13 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                                                             "text-neutral-400"
                                                     )}>
                                                         {isConflict ? "CONFLICTO DE IDENTIDAD - ERROR DE HARDWARE" :
-                                                            isAlert ? "SOSPECHOSO - LISTA NEGRA" :
-                                                                isSuspicious ? "SOSPECHOSO - VERIFICACIÓN REQUERIDA" :
-                                                                    isSpecial ? "Personal Autorizado (Lista Blanca)" :
-                                                                        isNeuralOnly ? "Identificación Neural" :
-                                                                            isTempVisitor ? "Visitante Temporal" :
-                                                                                "Identidad Confirmada"}
+                                                            isAlert ? "SOSPECHOSO - LISTA NEGRA (CONFIRMADO)" :
+                                                                (isBlacklisted && cameraMatchValue === 0) ? "POSIBLE COINCIDENCIA LISTA NEGRA (SOLO NEURAL)" :
+                                                                    isSuspicious ? "SOSPECHOSO - VERIFICACIÓN REQUERIDA" :
+                                                                        isSpecial ? "Personal Autorizado (Lista Blanca)" :
+                                                                            isNeuralOnly ? "Identificación Neural" :
+                                                                                isTempVisitor ? "Visitante Temporal" :
+                                                                                    "Identidad Confirmada"}
                                                     </p>
                                                 </div>
                                                 <div className="h-4 w-px bg-white/10" />
