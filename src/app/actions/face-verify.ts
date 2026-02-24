@@ -16,10 +16,6 @@ const API_KEYS = {
     VISITORS: "d7bdb468-26af-4306-b35d-499e5373ac4a"
 };
 
-/**
- * Main Face Verification Protocol (Neural AI v3 - SERIOUS LOGIC)
- * Now supports direct buffer for 0-latency server-side processing.
- */
 export async function verifyFaceAction(
     eventSnapshot: string,
     userId?: string,
@@ -31,153 +27,52 @@ export async function verifyFaceAction(
     }
 
     const start = Date.now();
-    console.log(`[Neural AI] Starting analysis for: ${nativeName || eventSnapshot}`);
+    console.log(`[Camera Native Logic] Processing: ${nativeName || eventSnapshot}`);
 
     try {
-        // 1. DATA PREPARATION
-        let buffer = providedBuffer;
-        if (!buffer) {
-            const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:10001").replace(/\/$/, "");
-            const imagePath = eventSnapshot.startsWith('http') ? eventSnapshot : getImagePath(eventSnapshot);
-            const imgUrl = imagePath?.startsWith('http') ? imagePath : `${appUrl}${imagePath}`;
-            const imageResponse = await axios.get(imgUrl, { responseType: 'arraybuffer', timeout: 5000 });
-            buffer = Buffer.from(imageResponse.data);
-        }
-
-        // 2. CONFIGURATION & THRESHOLDS
-        const thresholdSetting = await getSetting("COMPAREFACE_MIN_SIM");
-        const SUCCESS_THRESHOLD = parseFloat(thresholdSetting?.value || "0.90");
-        const VISITOR_LINK_THRESHOLD = 0.65; // Don't duplicate if match > 65% in visitors
-        const NEW_VISITOR_THRESHOLD = 0.40;  // Only register as "New" if match < 40%
-
-        // Helper for recognizing
-        const recognize = (apiKey: string) => {
-            const form = new FormData();
-            form.append('file', buffer, { filename: 'snapshot.jpg', contentType: 'image/jpeg' });
-            return axios.post(`${COMPARE_FACE_URL}/api/v1/recognition/recognize?limit=3`, form, {
-                headers: { ...form.getHeaders(), "x-api-key": apiKey },
-                timeout: 8000
-            });
-        };
-
-        // 3. PARALLEL NEURAL SEARCH (Speed improvement)
-        console.log(`[Neural AI] Dispatching parallel searches (Main & Visitors)...`);
-        const searchResults = await Promise.allSettled([
-            recognize(API_KEYS.RECO),
-            recognize(API_KEYS.VISITORS)
-        ]);
-
-        const resMain = searchResults[0].status === 'fulfilled' ? searchResults[0].value : null;
-        const resVisitors = searchResults[1].status === 'fulfilled' ? searchResults[1].value : null;
-
-        const topMain = resMain?.data?.result?.[0]?.subjects?.[0];
-        const topVisitors = resVisitors?.data?.result?.[0]?.subjects?.[0];
-        const faceBox = resMain?.data?.result?.[0]?.box || resVisitors?.data?.result?.[0]?.box;
-
-        const mainSim = topMain?.similarity || 0;
-        const visitorSim = topVisitors?.similarity || 0;
-
-        // 4. IDENTITY DETERMINATION (Serious Logic Fix)
         let finalSubject = null;
-        let usedCollection = 'Main';
-        let isNewVisitor = false;
-
-        // Priority 1: High Confidence Resident Match
-        if (mainSim >= SUCCESS_THRESHOLD) {
-            finalSubject = topMain.subject;
-            usedCollection = 'Main';
-        }
-        // Priority 2: High/Mid Confidence Visitor Match (PREVENTS DUPLICATES)
-        else if (visitorSim >= VISITOR_LINK_THRESHOLD) {
-            finalSubject = topVisitors.subject;
-            usedCollection = 'Visitors';
-            console.log(`[Neural AI] Linked to existing visitor '${finalSubject}' (Match: ${(visitorSim * 100).toFixed(1)}%)`);
-        }
-        // Priority 3: Hardware trust if camera is very sure and neural doesn't strongly object
-        else {
-            const cameraNameMatch = nativeName || eventSnapshot.match(/Persona: ([^,]+)/)?.[1];
-            const cameraConfidenceMatch = eventSnapshot.match(/Confianza: (\d+)%/);
-            const nativeConfidence = cameraConfidenceMatch ? parseInt(cameraConfidenceMatch[1]) : 0;
-            const hasGoodCameraData = cameraNameMatch && !['Desconocido', 'N/A', 'Persona'].some(s => cameraNameMatch.includes(s)) && nativeConfidence >= 90;
-
-            if (hasGoodCameraData) {
-                finalSubject = cameraNameMatch;
-            } else if (visitorSim < NEW_VISITOR_THRESHOLD && mainSim < NEW_VISITOR_THRESHOLD) {
-                // High probability of being a NEW person
-                isNewVisitor = true;
-            }
-        }
-
-        const maxSimilarity = Math.max(mainSim, visitorSim);
-
-        // 5. AUTO-REGISTRATION OF GENUINE NEW VISITORS
         let dbUser = null;
-        if (isNewVisitor && !finalSubject) {
-            const now = new Date();
-            const dateStr = now.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '');
-            const timeStr = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false }).replace(/:/g, '');
-            const rand = Math.floor(100 + Math.random() * 899);
-            const unknownId = `visita_${dateStr}_${timeStr}_${rand}`;
 
-            console.log(`[Neural AI] NO identity confirmed. Registering strictly NEW visitor: ${unknownId}`);
-            try {
-                const regResult = await registerFaceInCompereFace(unknownId, buffer!, API_KEYS.VISITORS);
-                if (regResult.success) {
-                    dbUser = await prisma.user.create({
-                        data: {
-                            name: unknownId,
-                            role: 'VISITOR',
-                            observations: `Auto-registrado (${(maxSimilarity * 100).toFixed(1)}% match)`,
-                            createdBy: 'Neural Engine'
-                        }
-                    });
-                    finalSubject = unknownId;
-                    usedCollection = 'Visitors';
-                }
-            } catch (regErr) {
-                console.warn("[Neural AI] registration failed", regErr);
-            }
-        }
+        // TRUST CAMERA HARDWARE EXACT MATCH ONLY
+        const cameraNameMatch = nativeName || eventSnapshot.match(/Persona:\s*([^,|]+)/)?.[1]?.trim();
+        const cameraConfidenceMatch = eventSnapshot.match(/Confianza:\s*(\d+)%/);
+        const nativeConfidence = cameraConfidenceMatch ? parseInt(cameraConfidenceMatch[1]) : 0;
 
-        // Find user in DB if identified
-        if (finalSubject && !dbUser) {
+        // Ensure it has a valid name and is NOT generically unknown
+        const hasGoodCameraData = cameraNameMatch && !['Desconocido', 'N/A', 'Persona'].some(s => cameraNameMatch.includes(s));
+
+        if (hasGoodCameraData) {
+            finalSubject = cameraNameMatch;
+
+            // Look up the identified person in our DB to fetch their Unit, blacklist role, etc.
             dbUser = await prisma.user.findFirst({
                 where: { name: { equals: finalSubject, mode: 'insensitive' } },
                 include: { unit: true }
             });
         }
 
-        // 6. NEURAL SYNC (Learning Cycle - Improves future matches)
-        if (finalSubject && dbUser && maxSimilarity >= 0.70) {
-            // Training task: Add this new angle to their profile if they have few photos
-            registerFaceInCompereFace(finalSubject, buffer!, dbUser.role === 'VISITOR' ? API_KEYS.VISITORS : API_KEYS.RECO)
-                .catch(() => { }); // Non-blocking async train
-        }
-
-        // 7. PERSISTENCE & RESULTS
-        const isVerified = (maxSimilarity >= SUCCESS_THRESHOLD) || (finalSubject && !isNewVisitor);
+        const isVerified = !!(finalSubject);
         const alertTriggered = dbUser?.role === 'BLACKLISTED' && isVerified;
 
-        // Update the event in DB to avoid latency for the dashboard
-        if (finalSubject && eventSnapshot) {
+        // Update the event with the DB User ID if we found a match locally
+        if (finalSubject && dbUser && eventSnapshot) {
             try {
                 const eventToUpdate = await prisma.accessEvent.findFirst({
                     where: { snapshotPath: eventSnapshot },
                     orderBy: { timestamp: 'desc' }
                 });
-                if (eventToUpdate) {
+                if (eventToUpdate && !eventToUpdate.userId) {
                     await prisma.accessEvent.update({
                         where: { id: eventToUpdate.id },
                         data: {
-                            userId: dbUser?.id || eventToUpdate.userId,
-                            details: eventToUpdate.details + ` | Neural ID: ${finalSubject} (${(maxSimilarity * 100).toFixed(1)}%)`
+                            userId: dbUser.id
                         }
                     });
                 }
-            } catch (dbErr) { console.warn("[Neural AI] DB update delay", dbErr); }
+            } catch (dbErr) { console.warn("DB update delay", dbErr); }
         }
 
-        console.log(`[Neural AI] Finished in ${Date.now() - start}ms. ID: ${finalSubject || 'Unidentified'}`);
+        console.log(`[Camera Native Logic] Finished in ${Date.now() - start}ms. ID: ${finalSubject || 'Unidentified'}`);
 
         revalidatePath("/admin/dashboard-face");
         revalidatePath("/admin/history");
@@ -185,18 +80,18 @@ export async function verifyFaceAction(
         return {
             success: true,
             verified: isVerified,
-            similarity: maxSimilarity,
+            similarity: nativeConfidence / 100, // Use the camera's confidence metric
             recognizedAs: finalSubject || 'Desconocido',
             user: dbUser,
-            box: faceBox,
-            collection: usedCollection,
-            lowConfidence: maxSimilarity < SUCCESS_THRESHOLD,
+            box: null, // No box mapping without deep neural logic
+            collection: 'Camera',
+            lowConfidence: nativeConfidence < 85,
             alertTriggered: !!alertTriggered,
             duration: Date.now() - start
         };
 
     } catch (error: any) {
-        console.error("Critical error in verifyFaceAction:", error.message);
+        console.error("Critical error in native verifyFaceAction:", error.message);
         return { success: false, error: "System failure", details: error.message };
     }
 }

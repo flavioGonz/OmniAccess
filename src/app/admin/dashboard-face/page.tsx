@@ -80,6 +80,8 @@ function FaceDashboardContent() {
     const [showModeConfirm, setShowModeConfirm] = useState(false);
     const [pendingMode, setPendingMode] = useState<"BLACKLIST" | "WHITELIST" | null>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    const entryFeedRef = useRef<HTMLDivElement>(null);
+    const exitFeedRef = useRef<HTMLDivElement>(null);
 
     // Floor Plan State
     const [floorPlans, setFloorPlans] = useState<any[]>([]);
@@ -230,7 +232,57 @@ function FaceDashboardContent() {
 
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-        return () => clearInterval(timer);
+
+        const setupDrag = (ref: React.RefObject<HTMLDivElement | null>) => {
+            const ele = ref.current;
+            if (!ele) return;
+            let isDown = false;
+            let startX: number;
+            let scrollLeft: number;
+
+            const onMouseDown = (e: MouseEvent) => {
+                isDown = true;
+                ele.classList.add('cursor-grabbing');
+                startX = e.pageX - ele.offsetLeft;
+                scrollLeft = ele.scrollLeft;
+            };
+            const onMouseLeave = () => {
+                isDown = false;
+                ele.classList.remove('cursor-grabbing');
+            };
+            const onMouseUp = () => {
+                isDown = false;
+                ele.classList.remove('cursor-grabbing');
+            };
+            const onMouseMove = (e: MouseEvent) => {
+                if (!isDown) return;
+                e.preventDefault();
+                const x = e.pageX - ele.offsetLeft;
+                const walk = (x - startX) * 2;
+                ele.scrollLeft = scrollLeft - walk;
+            };
+
+            ele.addEventListener('mousedown', onMouseDown);
+            ele.addEventListener('mouseleave', onMouseLeave);
+            ele.addEventListener('mouseup', onMouseUp);
+            ele.addEventListener('mousemove', onMouseMove);
+
+            return () => {
+                ele.removeEventListener('mousedown', onMouseDown);
+                ele.removeEventListener('mouseleave', onMouseLeave);
+                ele.removeEventListener('mouseup', onMouseUp);
+                ele.removeEventListener('mousemove', onMouseMove);
+            };
+        };
+
+        const cleanupEntry = setupDrag(entryFeedRef);
+        const cleanupExit = setupDrag(exitFeedRef);
+
+        return () => {
+            clearInterval(timer);
+            cleanupEntry?.();
+            cleanupExit?.();
+        };
     }, []);
 
     const handleVerification = async (event: FullAccessEvent) => {
@@ -260,13 +312,6 @@ function FaceDashboardContent() {
                 setNeuralIndex(0);
             }
 
-            // If blacklisted and confidence >= 90% (camera) or neural match, add to map alerts
-            if (event.user?.role === 'BLACKLISTED' || result?.alertTriggered) {
-                setBlacklistEvents(prev => {
-                    const filtered = prev.filter(e => e.id !== event.id);
-                    return [event, ...filtered];
-                });
-            }
             if (result?.verified) {
                 toast.success({
                     title: `STATUS: IDENTIDAD VERIFICADA`,
@@ -298,11 +343,14 @@ function FaceDashboardContent() {
                 setEvents(fetchedEvents);
 
                 // Initialize blacklist events for the map from recent history
-                const activeBlacklist = fetchedEvents.filter(e =>
-                    e.user?.role === 'BLACKLISTED' &&
-                    // Optional: only show alerts from the last 2 hours 
-                    (new Date().getTime() - new Date(e.timestamp).getTime()) < (2 * 60 * 60 * 1000)
-                );
+                const activeBlacklist = fetchedEvents.filter(e => {
+                    const cameraPersonMatch = e.details?.match(/Persona:\s*([^,|]+)/)?.[1]?.trim();
+                    const isCameraRecognized = cameraPersonMatch && !['Desconocido', 'N/A', 'Persona'].some(s => cameraPersonMatch.includes(s));
+
+                    return isCameraRecognized && e.user?.role === 'BLACKLISTED' &&
+                        // Optional: only show alerts from the last 2 hours 
+                        (new Date().getTime() - new Date(e.timestamp).getTime()) < (2 * 60 * 60 * 1000);
+                });
                 setBlacklistEvents(activeBlacklist);
 
                 const todayStats = await getEventsCountToday('FACE');
@@ -375,6 +423,10 @@ function FaceDashboardContent() {
             if (event.direction === 'EXIT') setExitIndex(0);
             else setEntryIndex(0);
 
+            // COMPROBAR SI LA CÁMARA RECONOCIÓ INTERNAMENTE:
+            const cameraPersonName = event.details?.match(/Persona:\s*([^,|]+)/)?.[1]?.trim();
+            const isCameraRecognized = cameraPersonName && !['Desconocido', 'N/A', 'Persona'].some(s => cameraPersonName.includes(s));
+
             // OPTIMIZATION: Check if server already identified the subject (Instant UI)
             const neuralMatch = event.details?.match(/Neural ID: (.+?) \((\d+\.?\d*)%\)/);
             let result: any = null;
@@ -402,10 +454,20 @@ function FaceDashboardContent() {
                 result = await handleVerification(event);
             }
 
-            // Auto-popup logic: Activate for ANY recognized/identified person
-            const isIdentified = result?.recognizedAs && result.recognizedAs !== 'Desconocido';
-            if (isAutoPopupEnabled && isIdentified) {
-                setSelectedViewEvent(event);
+            // AUTO-POPUP Y MAP ALERTS
+            // SOLO si la cámara reconoció a la persona internamente, disparamos las alertas/popups
+            if (isCameraRecognized) {
+                // Si la persona de la alerta/reconocimiento está en Lista Negra (ALERTA ROJA MAPA)
+                if (event.user?.role === 'BLACKLISTED' || result?.user?.role === 'BLACKLISTED') {
+                    setBlacklistEvents(prev => {
+                        const filtered = prev.filter(e => e.id !== event.id);
+                        return [event, ...filtered];
+                    });
+                }
+
+                if (isAutoPopupEnabled) {
+                    setSelectedViewEvent(event);
+                }
             }
         };
 
@@ -442,11 +504,14 @@ function FaceDashboardContent() {
                     <div className="w-full p-6 pb-0 pointer-events-auto">
                         <div className="h-[160px] w-full bg-transparent overflow-hidden relative">
                             <div className="absolute top-3 left-6 flex items-center gap-2 z-10">
-                                <Activity size={12} className="text-[#B20D30] animate-pulse" />
-                                <span className="text-[11px] font-black uppercase tracking-[0.3em] text-white/60">Monitor En Vivo (ENTRADA)</span>
+                                <Activity size={12} className="text-white/20 animate-pulse" />
+                                <span className="text-[11px] font-black uppercase tracking-[0.3em] text-white/40">Monitor En Vivo (ENTRADA)</span>
                             </div>
 
-                            <div className="flex items-center gap-4 px-6 pt-12 pb-4 h-full overflow-x-auto custom-scrollbar pointer-events-auto">
+                            <div
+                                ref={entryFeedRef}
+                                className="flex items-center gap-4 px-6 pt-12 pb-4 h-full overflow-x-auto custom-scrollbar pointer-events-auto cursor-grab select-none"
+                            >
                                 {events.filter(e => e.snapshotPath && (e.direction === 'ENTRY' || !e.direction)).slice(0, 15).map(event => (
                                     <FeedCard
                                         key={event.id}
@@ -663,11 +728,14 @@ function FaceDashboardContent() {
                     <div className="w-full p-6 pt-0 pointer-events-auto">
                         <div className="h-[160px] w-full bg-transparent overflow-hidden relative">
                             <div className="absolute top-3 left-6 flex items-center gap-2 z-10">
-                                <Activity size={12} className="text-[#B20D30] animate-pulse" />
-                                <span className="text-[11px] font-black uppercase tracking-[0.3em] text-white/60">Monitor En Vivo (SALIDA)</span>
+                                <Activity size={12} className="text-white/20 animate-pulse" />
+                                <span className="text-[11px] font-black uppercase tracking-[0.3em] text-white/40">Monitor En Vivo (SALIDA)</span>
                             </div>
 
-                            <div className="flex items-center gap-4 px-6 pt-12 pb-4 h-full overflow-x-auto custom-scrollbar pointer-events-auto">
+                            <div
+                                ref={exitFeedRef}
+                                className="flex items-center gap-4 px-6 pt-12 pb-4 h-full overflow-x-auto custom-scrollbar pointer-events-auto cursor-grab select-none"
+                            >
                                 {events.filter(e => e.snapshotPath && e.direction === 'EXIT').slice(0, 15).map(event => (
                                     <FeedCard
                                         key={event.id}
@@ -771,10 +839,10 @@ function FaceDashboardContent() {
                 header, nav, button, .rounded-2xl {
                     border-radius: 1rem !important;
                 }
-                .custom-scrollbar::-webkit-scrollbar { height: 4px; width: 4px; display: block; }
-                .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); border-radius: 10px; }
-                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(178,13,48,0.3); border-radius: 10px; }
-                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(178,13,48,0.6); }
+                .custom-scrollbar::-webkit-scrollbar { height: 2px; width: 4px; display: block; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.05); border-radius: 10px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.1); }
             `}</style>
         </div>
     );
