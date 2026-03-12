@@ -181,16 +181,16 @@ export default function ChangelogPage() {
             </header>
 
             <div className="space-y-12 relative before:absolute before:left-[17px] before:top-2 before:bottom-2 before:w-px before:bg-neutral-800">
-                {/* NEW RELEASE v2.1.0 */}
+                {/* NEW RELEASE v2.1.1 */}
                 <div className="relative pl-12 group">
                     <div className="absolute left-0 top-1.5 w-[35px] h-[35px] rounded-full bg-neutral-900 border-2 border-neutral-800 flex items-center justify-center z-10 group-hover:border-blue-500/50 transition-colors">
                         <Rocket size={16} className="text-blue-400" />
                     </div>
                     <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
-                        <h2 className="text-2xl font-black text-white">v2.1.0</h2>
+                        <h2 className="text-2xl font-black text-white">v2.1.1</h2>
                         <div className="flex items-center gap-2">
                             <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest h-5 px-2 flex items-center rounded-full bg-neutral-800 border border-neutral-700">
-                                2026-02-24
+                                2026-03-12
                             </span>
                             <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest h-5 px-2 flex items-center rounded-full bg-blue-500/10 border border-blue-500/20">
                                 LATEST
@@ -198,38 +198,57 @@ export default function ChangelogPage() {
                         </div>
                     </div>
                     <div className="bg-neutral-900/50 border border-neutral-800 rounded-3xl p-6 shadow-2xl backdrop-blur-xl mb-6">
-                        <h3 className="text-xl font-bold text-neutral-200 mb-2">Native Face Engine & Data Optimization</h3>
-                        <p className="text-neutral-500 text-sm mb-6">Optimización severa del motor de reconocimiento facial, pasando a priorizar hardware nativo y eliminando el almacenamiento innecesario (data bloat) de visitantes temporales.</p>
+                        <h3 className="text-xl font-bold text-neutral-200 mb-2">Avicam Driver & Real-time Persistence</h3>
+                        <p className="text-neutral-500 text-sm mb-6">Integración oficial de terminales Avicam, corrección de sincronización horaria y mejoras en persistencia del dashboard.</p>
                         <div className="grid gap-4">
                             <div className="flex items-start gap-4 p-3 rounded-xl bg-neutral-950/50 border border-neutral-800/50 hover:bg-neutral-900 transition-colors group/item">
-                                <div className="mt-0.5 p-1.5 rounded-lg shrink-0 bg-blue-400/10"><Zap size={14} className="text-blue-400" /></div>
+                                <div className="mt-0.5 p-1.5 rounded-lg shrink-0 bg-emerald-500/10"><PlusCircle size={14} className="text-emerald-400" /></div>
                                 <div className="flex-1">
-                                    <p className="text-sm font-medium text-neutral-300 leading-relaxed">Hardware Acceleration: El dashboard de reconocimiento facial ahora delega la validación primaria a la cámara física para 0ms de latencia, desactivando los escaneos neuronales pesados vía red.</p>
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-blue-400">performance</span>
+                                    <p className="text-sm font-medium text-neutral-300 leading-relaxed">Avicam Integration: Driver nativo para terminales faciales con soporte de eventos Push y fotos en alta resolución.</p>
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-emerald-400">feature</span>
                                 </div>
                             </div>
                             <div className="flex items-start gap-4 p-3 rounded-xl bg-neutral-950/50 border border-neutral-800/50 hover:bg-neutral-900 transition-colors group/item">
-                                <div className="mt-0.5 p-1.5 rounded-lg shrink-0 bg-red-400/10"><Bug size={14} className="text-red-400" /></div>
+                                <div className="mt-0.5 p-1.5 rounded-lg shrink-0 bg-blue-400/10"><Zap size={14} className="text-blue-400" /></div>
                                 <div className="flex-1">
-                                    <p className="text-sm font-medium text-neutral-300 leading-relaxed">System Stability: Se re-direccionó el script de purga de visitantes para consultar la DB local evitando errores 504 Gateway Timeout del motor de I.A.</p>
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-red-400">fix</span>
+                                    <p className="text-sm font-medium text-neutral-300 leading-relaxed">Timezone Sync: Corrección automática de timestamps para dispositivos en UTC-3 (Montevideo), garantizando orden cronológico exacto.</p>
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-blue-400">improvement</span>
                                 </div>
                             </div>
                             <div className="flex items-start gap-4 p-3 rounded-xl bg-neutral-950/50 border border-neutral-800/50 hover:bg-neutral-900 transition-colors group/item">
                                 <div className="mt-0.5 p-1.5 rounded-lg shrink-0 bg-amber-500/10"><TrendingUp size={14} className="text-amber-400" /></div>
                                 <div className="flex-1">
-                                    <p className="text-sm font-medium text-neutral-300 leading-relaxed">Data Purity: Eliminado el auto-registro continuo de cada persona no reconocida que pasara frente a cámara, evitando inflar la base de datos con perfiles "visit_X".</p>
+                                    <p className="text-sm font-medium text-neutral-300 leading-relaxed">Dashboard Retention: Ventana de visión extendida a 24 horas continuas, eliminando el corte abrupto de medianoche.</p>
                                     <span className="text-[9px] font-black uppercase tracking-widest text-amber-400">improvement</span>
                                 </div>
                             </div>
                             <div className="flex items-start gap-4 p-3 rounded-xl bg-neutral-950/50 border border-neutral-800/50 hover:bg-neutral-900 transition-colors group/item">
-                                <div className="mt-0.5 p-1.5 rounded-lg shrink-0 bg-emerald-500/10"><PlusCircle size={14} className="text-emerald-400" /></div>
+                                <div className="mt-0.5 p-1.5 rounded-lg shrink-0 bg-red-400/10"><Bug size={14} className="text-red-400" /></div>
                                 <div className="flex-1">
-                                    <p className="text-sm font-medium text-neutral-300 leading-relaxed">Smart Map Alerts: Las burbujas flotantes de advertencia roja en el mapa y los modals en pantalla solo saltan si existe una confirmación nativa de hardware.</p>
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-emerald-400">feature</span>
+                                    <p className="text-sm font-medium text-neutral-300 leading-relaxed">S3 Fix: Limpieza estricta de payloads Base64 para asegurar compatibilidad con el almacenamiento en la nube.</p>
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-red-400">fix</span>
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                {/* RELEASE v2.1.0 */}
+                <div className="relative pl-12 group">
+                    <div className="absolute left-0 top-1.5 w-[35px] h-[35px] rounded-full bg-neutral-900 border-2 border-neutral-800 flex items-center justify-center z-10 group-hover:border-blue-500/50 transition-colors">
+                        <Rocket size={16} className="text-neutral-600" />
+                    </div>
+                    <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
+                        <h2 className="text-2xl font-black text-neutral-400">v2.1.0</h2>
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest h-5 px-2 flex items-center rounded-full bg-neutral-800 border border-neutral-700">
+                                2026-02-24
+                            </span>
+                        </div>
+                    </div>
+                    <div className="bg-neutral-900/30 border border-neutral-800/50 rounded-3xl p-6 mb-6 opacity-60">
+                        <h3 className="text-lg font-bold text-neutral-400 mb-2">Native Face Engine & Data Optimization</h3>
+                        <p className="text-neutral-500 text-xs">Optimización del reconocimiento facial delegando validación a hardware nativo.</p>
                     </div>
                 </div>
 

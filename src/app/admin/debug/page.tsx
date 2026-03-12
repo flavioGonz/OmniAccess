@@ -3,14 +3,14 @@
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Activity, Trash2, Camera, Smartphone, Circle, CheckCircle2, Car, CreditCard, AlertTriangle } from "lucide-react";
+import { Activity, Trash2, Camera, Smartphone, Circle, CheckCircle2, Car, CreditCard, AlertTriangle, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { io } from "socket.io-client";
 
 type WebhookLog = {
     id: string;
     timestamp: Date;
-    source: 'hikvision' | 'akuvox' | 'raw';
+    source: 'hikvision' | 'akuvox' | 'avicam' | 'raw';
     method: string;
     url: string;
     params: Record<string, any>;
@@ -25,7 +25,7 @@ import { getSocketUrl } from "@/lib/socket-config";
 
 export default function WebhookDebugPage() {
     const [logs, setLogs] = useState<WebhookLog[]>([]);
-    const [filter, setFilter] = useState<'all' | 'hikvision' | 'akuvox' | 'face' | 'plate' | 'tag'>('all');
+    const [filter, setFilter] = useState<'all' | 'hikvision' | 'akuvox' | 'avicam' | 'face' | 'plate' | 'tag'>('all');
     const [isConnected, setIsConnected] = useState(false);
     const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
 
@@ -109,8 +109,10 @@ export default function WebhookDebugPage() {
         let matchesType = true;
         if (filter === 'hikvision') matchesType = log.source === 'hikvision';
         else if (filter === 'akuvox') matchesType = log.source === 'akuvox';
+        else if (filter === 'avicam') matchesType = log.source === 'avicam';
         else if (filter === 'face') {
-            matchesType = log.url.toLowerCase().includes('face') ||
+            matchesType = log.source === 'avicam' || 
+                log.url.toLowerCase().includes('face') ||
                 log.params?.event?.includes('face') ||
                 log.credentialValue?.toLowerCase().includes('face') ||
                 (log.source === 'akuvox' && log.params?.user);
@@ -143,39 +145,43 @@ export default function WebhookDebugPage() {
 
     const hikvisionCount = logs.filter(l => l.source === 'hikvision').length;
     const akuvoxCount = logs.filter(l => l.source === 'akuvox').length;
+    const avicamCount = logs.filter(l => l.source === 'avicam').length;
 
     return (
         <div className="p-6 space-y-6 animate-in fade-in duration-500">
             {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-neutral-900 p-6 rounded-xl border border-neutral-800">
-                <div className="flex items-center gap-4">
-                    <div className="p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-neutral-900 p-6 rounded-xl border border-neutral-800 shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
+                    <Activity size={120} />
+                </div>
+                <div className="flex items-center gap-4 relative z-10">
+                    <div className="p-3 bg-blue-500/10 rounded-2xl border border-blue-500/20 shadow-[0_0_20px_rgba(59,130,246,0.2)]">
                         <Activity size={24} className="text-blue-400" />
                     </div>
                     <div>
                         <h1 className="text-2xl font-black text-white tracking-tight uppercase">
-                            Monitor de Webhooks
+                            Monitor de Webhooks <span className="text-blue-500">v3.0</span>
                         </h1>
-                        <p className="text-sm text-neutral-500 font-medium mt-1">
-                            Eventos en tiempo real desde dispositivos
+                        <p className="text-[10px] text-neutral-500 font-black uppercase tracking-[0.2em] mt-1">
+                            Ingeniería inversa y depuración de protocolos
                         </p>
                     </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 relative z-10">
                     <div className={cn(
-                        "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider border",
+                        "flex items-center gap-2 px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all duration-500",
                         isConnected
-                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]"
                             : "bg-red-500/10 text-red-400 border-red-500/20"
                     )}>
-                        <Circle className={cn("w-2 h-2 fill-current", isConnected && "animate-pulse")} />
-                        {isConnected ? 'Conectado' : 'Desconectado'}
+                        <Circle className={cn("w-1.5 h-1.5 fill-current", isConnected && "animate-pulse")} />
+                        {isConnected ? 'Socket Online' : 'Offline'}
                     </div>
                     <Button
                         variant="outline"
                         onClick={clearLogs}
                         size="sm"
-                        className="border-neutral-800 hover:bg-neutral-800"
+                        className="border-neutral-800 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all font-black text-[10px] uppercase h-9 rounded-xl"
                     >
                         <Trash2 size={14} className="mr-2" />
                         Limpiar
@@ -184,62 +190,95 @@ export default function WebhookDebugPage() {
             </div>
 
             {/* Quick Filters */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
                 <Button
                     variant={filter === 'all' ? 'default' : 'outline'}
                     onClick={() => setFilter('all')}
-                    className="h-20 flex-col gap-1 border-2"
+                    className={cn(
+                        "h-24 flex-col gap-1 border-2 rounded-2xl transition-all duration-500",
+                        filter === 'all' ? "bg-blue-600 border-blue-400 shadow-lg shadow-blue-500/20" : "bg-neutral-900/50 border-neutral-800"
+                    )}
                 >
-                    <Activity size={18} />
-                    <span className="text-[10px] font-black uppercase">Todos</span>
-                    <span className="text-lg font-black">{logs.length}</span>
+                    <Activity size={20} />
+                    <span className="text-[9px] font-black uppercase tracking-widest">Todos</span>
+                    <span className="text-xl font-black">{logs.length}</span>
                 </Button>
 
                 <Button
                     variant={filter === 'hikvision' ? 'default' : 'outline'}
                     onClick={() => setFilter('hikvision')}
-                    className="h-20 flex-col gap-1 border-2 border-purple-500/30"
+                    className={cn(
+                        "h-24 flex-col gap-1 border-2 rounded-2xl transition-all duration-500",
+                        filter === 'hikvision' ? "bg-purple-600 border-purple-400" : "bg-neutral-900/50 border-neutral-800 hover:border-purple-500/30"
+                    )}
                 >
-                    <Camera size={18} className="text-purple-400" />
-                    <span className="text-[10px] font-black uppercase">LPR Hik</span>
-                    <span className="text-lg font-black text-purple-400">{hikvisionCount}</span>
+                    <Camera size={20} className={filter === 'hikvision' ? "text-white" : "text-purple-400"} />
+                    <span className="text-[9px] font-black uppercase tracking-widest">Hikvision</span>
+                    <span className="text-xl font-black">{hikvisionCount}</span>
                 </Button>
 
                 <Button
                     variant={filter === 'akuvox' ? 'default' : 'outline'}
                     onClick={() => setFilter('akuvox')}
-                    className="h-20 flex-col gap-1 border-2 border-blue-500/30"
+                    className={cn(
+                        "h-24 flex-col gap-1 border-2 rounded-2xl transition-all duration-500",
+                        filter === 'akuvox' ? "bg-sky-600 border-sky-400" : "bg-neutral-900/50 border-neutral-800 hover:border-sky-500/30"
+                    )}
                 >
-                    <Smartphone size={18} className="text-blue-400" />
-                    <span className="text-[10px] font-black uppercase">Akuvox</span>
-                    <span className="text-lg font-black text-blue-400">{akuvoxCount}</span>
+                    <Smartphone size={20} className={filter === 'akuvox' ? "text-white" : "text-sky-400"} />
+                    <span className="text-[9px] font-black uppercase tracking-widest">Akuvox</span>
+                    <span className="text-xl font-black">{akuvoxCount}</span>
+                </Button>
+
+                <Button
+                    variant={filter === 'avicam' ? 'default' : 'outline'}
+                    onClick={() => setFilter('avicam')}
+                    className={cn(
+                        "h-24 flex-col gap-1 border-2 rounded-2xl transition-all duration-500",
+                        filter === 'avicam' ? "bg-rose-600 border-rose-400 shadow-lg shadow-rose-500/20" : "bg-neutral-900/50 border-neutral-800 hover:border-rose-500/30"
+                    )}
+                >
+                    <div className="w-6 h-6 rounded-md bg-rose-500/20 flex items-center justify-center mb-1">
+                         <Zap size={16} className="text-rose-400" />
+                    </div>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-rose-400">Avicam</span>
+                    <span className="text-xl font-black text-rose-400">{avicamCount}</span>
                 </Button>
 
                 <Button
                     variant={filter === 'face' ? 'default' : 'outline'}
                     onClick={() => setFilter('face')}
-                    className="h-20 flex-col gap-1 border-2 border-emerald-500/30"
+                    className={cn(
+                        "h-24 flex-col gap-1 border-2 rounded-2xl transition-all duration-500",
+                        filter === 'face' ? "bg-emerald-600 border-emerald-400" : "bg-neutral-900/50 border-neutral-800 hover:border-emerald-500/30"
+                    )}
                 >
-                    <CheckCircle2 size={18} className="text-emerald-400" />
-                    <span className="text-[10px] font-black uppercase">Facial</span>
+                    <CheckCircle2 size={20} className={filter === 'face' ? "text-white" : "text-emerald-400"} />
+                    <span className="text-[9px] font-black uppercase tracking-widest">Faces</span>
                 </Button>
 
                 <Button
                     variant={filter === 'plate' ? 'default' : 'outline'}
                     onClick={() => setFilter('plate')}
-                    className="h-20 flex-col gap-1 border-2 border-orange-500/30"
+                    className={cn(
+                        "h-24 flex-col gap-1 border-2 rounded-2xl transition-all duration-500",
+                        filter === 'plate' ? "bg-orange-600 border-orange-400" : "bg-neutral-900/50 border-neutral-800 hover:border-orange-500/30"
+                    )}
                 >
-                    <Car size={18} className="text-orange-400" />
-                    <span className="text-[10px] font-black uppercase">Matrículas</span>
+                    <Car size={20} className={filter === 'plate' ? "text-white" : "text-orange-400"} />
+                    <span className="text-[9px] font-black uppercase tracking-widest">LPR</span>
                 </Button>
 
                 <Button
                     variant={filter === 'tag' ? 'default' : 'outline'}
                     onClick={() => setFilter('tag')}
-                    className="h-20 flex-col gap-1 border-2 border-cyan-500/30"
+                    className={cn(
+                        "h-24 flex-col gap-1 border-2 rounded-2xl transition-all duration-500",
+                        filter === 'tag' ? "bg-cyan-600 border-cyan-400" : "bg-neutral-900/50 border-neutral-800 hover:border-cyan-500/30"
+                    )}
                 >
-                    <CreditCard size={18} className="text-cyan-400" />
-                    <span className="text-[10px] font-black uppercase">TAG / RFID</span>
+                    <CreditCard size={20} className={filter === 'tag' ? "text-white" : "text-cyan-400"} />
+                    <span className="text-[9px] font-black uppercase tracking-widest">RFID</span>
                 </Button>
             </div>
 
@@ -324,7 +363,8 @@ export default function WebhookDebugPage() {
                                                     className={cn(
                                                         "text-[9px] font-black px-1.5 py-0",
                                                         log.source === 'hikvision' && "bg-purple-500/10 text-purple-400 border-purple-500/20",
-                                                        log.source === 'akuvox' && "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                                                        log.source === 'akuvox' && "bg-blue-500/10 text-blue-400 border-blue-500/20",
+                                                        log.source === 'avicam' && "bg-rose-500/10 text-rose-400 border-rose-500/20"
                                                     )}
                                                 >
                                                     {log.source.toUpperCase()}
@@ -394,7 +434,8 @@ export default function WebhookDebugPage() {
                                         <div className="flex items-center gap-2">
                                             <div className={cn(
                                                 "w-1.5 h-1.5 rounded-full",
-                                                log.source === 'hikvision' ? "bg-purple-500" : "bg-blue-500"
+                                                log.source === 'hikvision' ? "bg-purple-500" : 
+                                                log.source === 'avicam' ? "bg-rose-500" : "bg-blue-500"
                                             )} />
                                             <span className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">
                                                 {log.source} • {log.timestamp.toLocaleTimeString()}

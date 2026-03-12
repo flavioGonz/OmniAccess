@@ -77,7 +77,7 @@ const BRANDS = [
     { value: "INTELBRAS", label: "Intelbras", color: "#009639", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/f/ff/Intelbras_logo.svg" },
     { value: "DAHUA", label: "Dahua", color: "#ED1C24", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/b/b3/Dahua_Technology_logo.svg" },
     { value: "ZKTECO", label: "ZKTeco", color: "#0191D2", logoUrl: "https://www.zkteco.com/upload/201908/5d4d3c3f3f0f7.png" },
-    { value: "AVICAM", label: "Avicam", color: "#E11D48", logoUrl: "https://avicam.com.br/wp-content/uploads/2019/11/logo_avicam.png" },
+    { value: "AVICAM", label: "Avicam", color: "#E11D48", logoUrl: "https://avicam.com.br/wp-content/uploads/2023/09/4b0ccfdb5b60-Logo_AVICAM_Curvas-1-300x212.png" },
     { value: "MILESIGHT", label: "Milesight", color: "#00AEEF", logoUrl: "" },
     { value: "UNIFI", label: "Ubiquiti UniFi", color: "#005EAD", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/e/e0/Ubiquiti_Networks_logo.svg" },
     { value: "UNIVIEW", label: "Uniview", color: "#005EB8", logoUrl: "https://www.uniview.com/etc/designs/uniview/logo.png" },
@@ -390,6 +390,32 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
                                                     placeholder="Lote 1030, Entrada B..."
                                                     className="bg-neutral-900 border-neutral-800 h-12 rounded-lg font-bold"
                                                 />
+                                            </div>
+                                        </div>
+                                        {/* NUEVO: Personalización Visual */}
+                                        <div className="space-y-4 pt-6 mt-6 border-t border-white/5">
+                                            <Label className="text-neutral-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 border-b border-white/5 pb-2">
+                                                <ImagePlus size={10} className="text-blue-500" /> Personalización Visual
+                                            </Label>
+                                            <div className="grid grid-cols-2 gap-8">
+                                                <div className="space-y-2">
+                                                    <Label className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">Foto del Hardware</Label>
+                                                    <Input 
+                                                        type="file" 
+                                                        accept="image/*"
+                                                        onChange={(e) => setModelPhotoFile(e.target.files?.[0] || null)}
+                                                        className="bg-neutral-900 border-neutral-800 h-11 text-[11px] cursor-pointer file:cursor-pointer file:bg-blue-600/20 file:text-blue-400 file:border-0 file:rounded-md file:px-3 file:h-full file:mr-4 file:text-[10px] file:font-black file:uppercase"
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">Logo del Fabricante</Label>
+                                                    <Input 
+                                                        type="file" 
+                                                        accept="image/*"
+                                                        onChange={(e) => setBrandLogoFile(e.target.files?.[0] || null)}
+                                                        className="bg-neutral-900 border-neutral-800 h-11 text-[11px] cursor-pointer file:cursor-pointer file:bg-emerald-600/20 file:text-emerald-400 file:border-0 file:rounded-md file:px-3 file:h-full file:mr-4 file:text-[10px] file:font-black file:uppercase"
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
