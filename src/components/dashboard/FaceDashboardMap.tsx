@@ -210,8 +210,9 @@ function BlacklistPopup({ event, onClose }: { event: any, onClose: () => void })
 
     return (
         <motion.div
-            initial={{ opacity: 0, scale: 0, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: -70 }}
+            initial={{ opacity: 0, scale: 0.5, y: 0 }}
+            animate={{ opacity: 1, scale: 1, y: -55 }}
+            transition={{ type: "spring", stiffness: 300, damping: 15 }}
             exit={{ opacity: 0, scale: 0, y: 10 }}
             className="absolute bottom-full mb-2 w-28 bg-black/95 backdrop-blur-md border border-red-600 rounded-xl shadow-[0_0_40px_rgba(220,38,38,0.4)] z-[60] p-1.5"
         >

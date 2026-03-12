@@ -35,5 +35,13 @@
       "p256dh": "BKsYXeZmSLRh-twLtkwiIAvLLwHvZGXOXtkdYfHxRKT5HvBETZ_hij_aeMMj0g0Ev6ek2cTxrLduEwMocHv2q6c",
       "auth": "YGzwGPbljUp-a8UmmNBK_g"
     }
+  },
+  {
+    "endpoint": "https://wns2-bl2p.notify.windows.com/w/?token=BQYAAAAXlyXElzQ%2f0saFbWGLjS0yvLN3gnOWnaxadv3m8VYYSKiCzDvfLdUfITmH5RpYJMsMw6bgRojFXc8WiD9rgnTpOEF4ghCRr49WnVrmHSJMthPw6o8PvUV%2fZ9m0CF56R0IdKtRfoM6rfXcnNtlaeVWz9lLBG0L3mYq3NkvzdbHZF0L2rm6uODZvzlnzBM%2fv8hLIg1A9Abt8a%2faouJz3MNLb7mdjyEj9Q9zRxRlsmsNMvTjuerTby9UN35hnFmoWS7uhoisrh1sW%2bruwUr%2fGQYzrS96aNANJjzvIaIjMxNcQsN%2fU8%2fAbU4gVHQqmFWra4UCvnw%2bA7yvZyorhsz5Ik5B3",
+    "expirationTime": null,
+    "keys": {
+      "p256dh": "BECF5iNfGHStxatkeheq8y1ZTsMmDUAv9xtgqapy3ARl4N7qHM9CtwVfhMxd5JDCFIYKJma0ApyUHeC0oGFqTzk",
+      "auth": "QNH3Tl3MV7kY6Smxz-FOhA"
+    }
   }
 ]

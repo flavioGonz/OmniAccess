@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useRef } from "react";
 import {
@@ -46,6 +46,7 @@ import { cn } from "@/lib/utils";
 import { DriverDetailsDialog } from "@/components/DriverDetailsDialog";
 import { DRIVER_MODELS, type DeviceBrand } from "@/lib/driver-models";
 import { updateSetting, getSetting, testS3Connection, getBucketLifecycle, updateBucketLifecycle, testDbConnection, getBucketStats, getDbStats, downloadBackup, restoreBackup, populateDatabase, testWahaConnection, getWahaHistory, testExternalDbConnection, updateDatabaseUrl, runDatabaseMigrations, getLearnedPlates, clearLearnedPlates, testFaceEngineConnection } from "@/app/actions/settings";
+import { clearAllVisitorFaces } from "@/app/actions/face-admin";
 import { getAdminsList as getAdmins, saveAdmin as saveAdminAction, deleteAdmin as deleteAdminAction } from "@/app/actions/users";
 import { useEffect, useTransition } from "react";
 import { sileo as toast } from "sileo";
@@ -136,6 +137,7 @@ const SETTINGS_SECTIONS = [
 const DRIVERS = [
     { brand: "Hikvision", tech: "ISAPI/Event", active: true, color: "red", logo: "/logos/hikvision.png" },
     { brand: "Akuvox", tech: "HTTP/Webhook", active: true, color: "blue", logo: "/logos/akuvox.png" },
+    { brand: "Avicam", tech: "HTTP/Webhook", active: true, color: "rose", logo: "https://avicam.com.br/wp-content/uploads/2019/11/logo_avicam.png" },
     { brand: "Dahua", tech: "CGI/HTTP", active: false, color: "red" },
     { brand: "ZKTeco", tech: "Push HTTP", active: false, color: "blue" },
     { brand: "Axis", tech: "Vapix API", active: false, color: "orange" },
@@ -2026,6 +2028,25 @@ function CompareFaceSection() {
     const [saving, setSaving] = useState(false);
     const [testing, setTesting] = useState(false);
     const [testStatus, setTestStatus] = useState<{ success: boolean, message: string } | null>(null);
+    const [clearing, setClearing] = useState(false);
+
+    const handleClearVisitors = async () => {
+        if (!confirm("¿Estás seguro de que deseas eliminar TODOS los rostros de visitantes? Esta acción no se puede deshacer.")) return;
+
+        setClearing(true);
+        try {
+            const result = await clearAllVisitorFaces();
+            if (result.success) {
+                toast.success({ title: `Se han eliminado ${result.count} visitantes correctamente.` });
+            } else {
+                toast.error({ title: "Error al eliminar visitantes: " + result.message });
+            }
+        } catch (err: any) {
+            toast.error({ title: "Error crítico: " + err.message });
+        } finally {
+            setClearing(false);
+        }
+    };
 
     useEffect(() => {
         loadConfig();
@@ -2202,6 +2223,15 @@ function CompareFaceSection() {
                 >
                     {testing ? <RefreshCcw className="animate-spin mr-2" size={14} /> : <Activity className="mr-2" size={14} />}
                     TEST CONEXION
+                </Button>
+                <Button
+                    onClick={handleClearVisitors}
+                    disabled={clearing}
+                    variant="ghost"
+                    className="text-red-400 hover:text-white hover:bg-red-500/10 font-bold text-[10px] uppercase tracking-widest h-10 px-6 rounded-lg border border-red-500/20"
+                >
+                    {clearing ? <RefreshCcw className="animate-spin mr-2" size={14} /> : <Trash2 className="mr-2" size={14} />}
+                    VACIAR VISITANTES
                 </Button>
                 <Button
                     onClick={handleSave}

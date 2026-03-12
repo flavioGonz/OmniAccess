@@ -267,6 +267,7 @@ const initialNodes: Node[] = [
 const webhookDrivers = [
     { id: 'webhook-hikvision', label: 'Hikvision', path: '/api/webhooks/hikvision', icon: Camera, color: '#3b82f6', image: '/logos/hikvision.png' },
     { id: 'webhook-akuvox', label: 'Akuvox', path: '/api/webhooks/akuvox', icon: Smartphone, color: '#3b82f6', image: '/logos/akuvox.png' },
+    { id: 'webhook-avicam', label: 'Avicam', path: '/api/webhooks/avicam', icon: Camera, color: '#f43f5e', image: 'https://avicam.com.br/wp-content/uploads/2019/11/logo_avicam.png' },
     { id: 'webhook-waha', label: 'WAHA Bot', path: '/api/webhooks/whatsapp', icon: MessageSquare, color: '#3b82f6' },
 ];
 
@@ -504,6 +505,9 @@ const SystemFlow = memo(function SystemFlow({ mode = "full" }: { mode?: "full" |
             } else if (data.type === 'AKUVOX' || data.model === 'AKUVOX') {
                 driverNodeId = 'webhook-akuvox';
                 eventInfo = { title: 'Evento Akuvox', desc: data.eventType || 'Access Log' };
+            } else if (data.vendor === 'AVICAM' || data.type === 'AVICAM') {
+                driverNodeId = 'webhook-avicam';
+                eventInfo = { title: 'Rostro Avicam', desc: data.eventType || 'Detección' };
             } else if (data.origin === 'WAHA' || data.type === 'CHAT') {
                 driverNodeId = 'webhook-waha';
                 const msgSnippet = data.body ? (data.body.length > 20 ? data.body.substring(0, 17) + "..." : data.body) : "Mensaje WA";

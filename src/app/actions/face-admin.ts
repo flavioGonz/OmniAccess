@@ -58,3 +58,50 @@ export async function deleteCompareFaceSubject(subject: string) {
         return { success: false, error: error.message };
     }
 }
+
+export async function clearAllVisitorFaces() {
+    const targets = [
+        { url: (await getCompareFaceConfig()).url, key: "d7bdb468-26af-4306-b35d-499e5373ac4a" },
+        { url: "http://192.168.99.57:8000", key: "1f78ca0c-8c83-48ad-bc80-e6bfcb136d8d" }
+    ];
+
+    let totalDeleted = 0;
+    const errors: string[] = [];
+
+    for (const target of targets) {
+        try {
+            console.log(`Checking visitor faces at ${target.url}...`);
+            const response = await axios.get(`${target.url}/api/v1/recognition/subjects`, {
+                headers: { "x-api-key": target.key },
+                timeout: 5000
+            });
+
+            const subjects = response.data.subjects || [];
+            console.log(`Found ${subjects.length} subjects at ${target.url}`);
+
+            if (subjects.length > 0) {
+                const chunkSize = 5;
+                for (let i = 0; i < subjects.length; i += chunkSize) {
+                    const chunk = subjects.slice(i, i + chunkSize);
+                    await Promise.all(chunk.map((subject: string) =>
+                        axios.delete(`${target.url}/api/v1/recognition/subjects/${encodeURIComponent(subject)}`, {
+                            headers: { "x-api-key": target.key },
+                            timeout: 10000
+                        }).catch(e => console.error(`Failed to delete ${subject} at ${target.url}`, e.message))
+                    ));
+                }
+                totalDeleted += subjects.length;
+            }
+        } catch (error: any) {
+            console.error(`Error clearing visitors at ${target.url}:`, error.message);
+            // We don't stop, we try the next target
+            errors.push(`${target.url}: ${error.message}`);
+        }
+    }
+
+    if (totalDeleted === 0 && errors.length > 0) {
+        return { success: false, error: errors.join("; ") };
+    }
+
+    return { success: true, count: totalDeleted, message: `Cleared ${totalDeleted} visitors across ${targets.length} targets.` };
+}

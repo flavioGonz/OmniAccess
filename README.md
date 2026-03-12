@@ -17,12 +17,16 @@
 - **Importación Masiva**: Importa matrículas desde el hardware con deduplicación automática
 
 ### 👤 Reconocimiento Facial & Neural Engine
-- **Akuvox & Hikvision**: Integración con terminales y cámaras para reconocimiento facial.
+- **Akuvox, Hikvision & Avicam**: Integración con terminales y cámaras para reconocimiento facial.
+- **Driver Avicam**: Soporte avanzado para terminales faciales Avicam con corrección de zona horaria y subida de evidencia a S3.
 - **Dashboard Facial Táctico**: Interfaz de alta precisión con mapa en vivo y popups de alerta.
 - **Buscador de Rostros**: Herramienta de búsqueda manual subiendo fotos de visitantes para verificación instantánea.
 - **Detección Neural**: Segundo motor de comparación facial para máxima seguridad y reducción de falsos positivos.
 - **Gestión de Planos**: Carga de planos JPG/PNG para ubicación geo-espacial de cámaras y eventos.
 - **Alertas en Tiempo Real**: Notificaciones visuales de sujetos en lista negra con popups tácticos.
+
+![Dashboard Facial](public/screenshots/facial_dashboard.jpg)
+*Panel táctico de reconocimiento facial en tiempo real.*
 
 ### 🏢 Gestión de Residentes
 - **Usuarios y Unidades**: Sistema completo de gestión de residentes
@@ -40,6 +44,7 @@
 ### 🔧 Soporte Multi-Dispositivo
 - **Hikvision**: Cámaras LPR y ANPR
 - **Akuvox**: Terminales de acceso con facial
+- **Avicam**: Terminales de reconocimiento facial táctico (Nuevo!)
 - **Dahua**: Cámaras IP y control de acceso
 - **Intelbras**: Dispositivos de seguridad
 - **ZKTeco**: Lectores biométricos
@@ -250,6 +255,33 @@ Este proyecto está bajo la Licencia MIT. Ver `LICENSE` para más información.
 - [Hikvision](https://www.hikvision.com/) - Documentación de API
 - [Akuvox](https://www.akuvox.com/) - Soporte técnico
 - [Prisma](https://www.prisma.io/) - ORM excepcional
+
+---
+
+## 🔄 Cómo Actualizar Versiones
+
+Si ya tienes una versión instalada y quieres actualizar a la última disponible (incluyendo el nuevo driver de Avicam):
+
+1. **Obtener Cambios del Repositorio**:
+   ```bash
+   git pull origin main
+   ```
+
+2. **Instalar Nuevas Dependencias**:
+   ```bash
+   npm install
+   ```
+
+3. **Actualizar Cliente de Base de Datos**:
+   ```bash
+   npx prisma generate
+   npx prisma db push
+   ```
+
+4. **Reiniciar Procesos (PM2)**:
+   ```bash
+   pm2 restart all
+   ```
 
 ---
 

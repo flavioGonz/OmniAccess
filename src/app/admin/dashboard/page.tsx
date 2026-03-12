@@ -97,13 +97,12 @@ export default function AccessDashboard() {
 
     const loadInitialData = async () => {
         try {
-            // Filter: Only Current Day
-            const startOfDay = new Date();
-            startOfDay.setHours(0, 0, 0, 0);
+            // Filter: Last 24 Hours (Better than 00:00 UTC for multi-timezone systems)
+            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
             const data = await getAccessEvents({
                 take: 50,
-                from: startOfDay
+                from: twentyFourHoursAgo
             });
             setEvents(data.events as FullAccessEvent[]);
 
@@ -137,12 +136,12 @@ export default function AccessDashboard() {
         });
 
         newSocket.on("access_event", (event: FullAccessEvent) => {
-            // Filter old ANR events (older than current day)
+            // Allow events from up to 24h ago (for buffered devices like Avicam)
             const eventTime = new Date(event.timestamp).getTime();
-            const startOfDay = new Date().setHours(0, 0, 0, 0);
+            const limit = Date.now() - 24 * 60 * 60 * 1000;
 
-            if (eventTime < startOfDay) {
-                console.log("Old ANR event ignored in dashboard:", event.timestamp);
+            if (eventTime < limit) {
+                console.log("Very old event ignored in dashboard:", event.timestamp);
                 return;
             }
 

@@ -56,9 +56,9 @@ const DRIVER_INFO = {
         features: ["CGI Protocol", "Event Notifications", "PTZ Control"],
     },
     AVICAM: {
-        version: "0.9.0 (Dev)",
-        releaseDate: "N/A",
-        features: ["Generic ONVIF", "Basic Events"],
+        version: "1.0.0 (Stable)",
+        releaseDate: "11/03/2026",
+        features: ["HTTP/Webhook Integration", "Face Detection Events", "Real-time Monitoring", "MQTT Support"],
     },
     MILESIGHT: {
         version: "1.0.0",
