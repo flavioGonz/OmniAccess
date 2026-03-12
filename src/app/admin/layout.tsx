@@ -224,7 +224,6 @@ export default function AdminLayout({
 
                     <SidebarItem icon={<Calendar size={18} />} label="Calendario" href="/admin/calendar" active={pathname === "/admin/calendar"} collapsed={collapsed} />
                     <SidebarItem icon={<Settings size={18} />} label="Configuración" href="/admin/settings" active={pathname === "/admin/settings"} collapsed={collapsed} />
-                    <SidebarItem icon={<ShieldCheck size={18} />} label="Auditoría Hardware" href="/admin/audit" active={pathname === "/admin/audit"} collapsed={collapsed} />
                     <SidebarItem icon={<Activity size={18} />} label="Debug Webhooks" href="/admin/debug" active={pathname === "/admin/debug"} collapsed={collapsed} />
                     <SidebarItem icon={<FileText size={18} />} label="Changelog" href="/admin/changelog" active={pathname === "/admin/changelog"} collapsed={collapsed} />
                 </nav>
