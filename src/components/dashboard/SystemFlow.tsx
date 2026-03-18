@@ -267,7 +267,7 @@ const initialNodes: Node[] = [
 const webhookDrivers = [
     { id: 'webhook-hikvision', label: 'Hikvision', path: '/api/webhooks/hikvision', icon: Camera, color: '#3b82f6', image: '/logos/hikvision.png' },
     { id: 'webhook-akuvox', label: 'Akuvox', path: '/api/webhooks/akuvox', icon: Smartphone, color: '#3b82f6', image: '/logos/akuvox.png' },
-    { id: 'webhook-avicam', label: 'Avicam', path: '/api/webhooks/avicam', icon: Camera, color: '#f43f5e', image: 'https://avicam.com.br/wp-content/uploads/2019/11/logo_avicam.png' },
+    { id: 'webhook-avicam', label: 'Avicam', path: '/api/webhooks/avicam', icon: Camera, color: '#f43f5e', image: '/logos/avicam.png' },
     { id: 'webhook-waha', label: 'WAHA Bot', path: '/api/webhooks/whatsapp', icon: MessageSquare, color: '#3b82f6' },
 ];
 

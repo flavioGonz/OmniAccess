@@ -110,3 +110,20 @@ export async function deleteBitacoraEntry(id: string) {
     });
     revalidatePath("/admin/bitacora");
 }
+
+export async function searchRecentBitacora(query: string) {
+    if (!query || query.length < 3) return [];
+    
+    return await prisma.bitacora.findMany({
+        where: {
+            OR: [
+                { plate: { contains: query, mode: 'insensitive' } },
+                { name: { contains: query, mode: 'insensitive' } },
+                { dni: { contains: query, mode: 'insensitive' } },
+                { destination: { contains: query, mode: 'insensitive' } },
+            ]
+        },
+        orderBy: { timestamp: 'desc' },
+        take: 5
+    });
+}

@@ -1,4 +1,4 @@
-const { S3Client } = require("@aws-sdk/client-s3");
+const { S3Client, ListObjectsV2Command, DeleteObjectsCommand } = require("@aws-sdk/client-s3");
 const { Upload } = require("@aws-sdk/lib-storage");
 const { PrismaClient } = require("@prisma/client");
 
@@ -18,7 +18,7 @@ async function getS3Config() {
             endpoint: endpoint?.value || process.env.S3_ENDPOINT || "http://192.168.99.108:9000",
             accessKey: accessKey?.value || process.env.S3_ACCESS_KEY || "root",
             secretKey: secretKey?.value || process.env.S3_SECRET_KEY || "flavio20",
-            bucketLpr: bucketLpr?.value || process.env.S3_BUCKET || "lpr",
+            bucketLpr: bucketLpr?.value || process.env.S3_BUCKET || "lpr-prod",
             bucketFace: bucketFace?.value || "face"
         };
     } catch (e) {
@@ -27,9 +27,44 @@ async function getS3Config() {
             endpoint: process.env.S3_ENDPOINT || "http://192.168.99.108:9000",
             accessKey: process.env.S3_ACCESS_KEY || "root",
             secretKey: process.env.S3_SECRET_KEY || "flavio20",
-            bucketLpr: process.env.S3_BUCKET || "lpr",
+            bucketLpr: process.env.S3_BUCKET || "lpr-prod",
             bucketFace: "face"
         };
+    }
+}
+
+/**
+ * Manually deletes the oldest objects from a bucket to free up space.
+ */
+async function recycleOldestObjects(s3Client, bucketName, count = 100) {
+    console.log(`[S3-Recycle] ⚠️ Space low. Attempting to recycle oldest ${count} objects from ${bucketName}...`);
+    try {
+        const listCmd = new ListObjectsV2Command({
+            Bucket: bucketName,
+            MaxKeys: 1000
+        });
+
+        const listRes = await s3Client.send(listCmd);
+        if (!listRes.Contents || listRes.Contents.length === 0) return;
+
+        const oldest = listRes.Contents
+            .sort((a, b) => new Date(a.LastModified) - new Date(b.LastModified))
+            .slice(0, count);
+
+        if (oldest.length === 0) return;
+
+        const deleteCmd = new DeleteObjectsCommand({
+            Bucket: bucketName,
+            Delete: {
+                Objects: oldest.map(obj => ({ Key: obj.Key })),
+                Quiet: true
+            }
+        });
+
+        await s3Client.send(deleteCmd);
+        console.log(`[S3-Recycle] ✅ Successfully deleted ${oldest.length} oldest objects from ${bucketName}.`);
+    } catch (error) {
+        console.error(`[S3-Recycle] ❌ Failed to recycle objects:`, error.message);
     }
 }
 
@@ -49,7 +84,7 @@ async function uploadToS3(fileBuffer, filename, mimeType, bucketType = "lpr") {
     const bucketName = bucketType === "lpr" ? config.bucketLpr : config.bucketFace;
 
     try {
-        console.log(`[S3] Uploading: ${filename} to ${bucketName} (${config.endpoint})`);
+        console.log(`[S3] Uploading: ${filename} to ${bucketName}`);
         const upload = new Upload({
             client: s3Client,
             params: {
@@ -63,6 +98,22 @@ async function uploadToS3(fileBuffer, filename, mimeType, bucketType = "lpr") {
         await upload.done();
         return `/api/files/${bucketName}/${filename}`;
     } catch (error) {
+        if (error.message?.includes("minimum free drive threshold") || error.code === "QuotaExceededException") {
+            console.warn(`[S3] 🚨 STORAGE FULL. Triggering emergency recycling...`);
+            await recycleOldestObjects(s3Client, bucketName, 200);
+            
+            try {
+                const retryUpload = new Upload({
+                    client: s3Client,
+                    params: { Bucket: bucketName, Key: filename, Body: fileBuffer, ContentType: mimeType },
+                });
+                await retryUpload.done();
+                return `/api/files/${bucketName}/${filename}`;
+            } catch (retryError) {
+                console.error(`[S3] Retry failed: ${retryError.message}`);
+                throw retryError;
+            }
+        }
         console.error(`[S3] Upload failed for ${filename}:`, error.message);
         throw error;
     }

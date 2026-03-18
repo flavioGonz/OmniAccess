@@ -23,16 +23,19 @@ const nextConfig = {
       fullUrl: false,
     },
   },
-  async headers() {
+  async rewrites() {
     return [
       {
-        source: '/api/:path*',
-        headers: [
-          { key: 'Access-Control-Allow-Credentials', value: 'true' },
-          { key: 'Access-Control-Allow-Origin', value: '*' },
-          { key: 'Access-Control-Allow-Methods', value: 'GET,DELETE,PATCH,POST,PUT,OPTIONS' },
-          { key: 'Access-Control-Allow-Headers', value: 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version' },
-        ],
+        source: '/api/live/:path*',
+        destination: 'http://localhost:10000/api/live/:path*',
+      },
+      {
+        source: '/api/proxy/:path*',
+        destination: 'http://localhost:10000/api/proxy/:path*',
+      },
+      {
+        source: '/api/webhooks/:path*',
+        destination: 'http://localhost:10000/api/webhooks/:path*',
       },
     ];
   },

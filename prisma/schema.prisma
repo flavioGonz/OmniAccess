@@ -49,29 +49,29 @@ model Unit {
 }
 
 model User {
-  id            String        @id @default(cuid())
-  name          String
-  username      String?       @unique
-  email         String?
-  phone         String?
-  dni           String?
-  cara          String?
-  unitId        String?
-  apartment     String?
-  parkingSlotId String?       @unique
-  role          UserRole      @default(RESIDENT)
-  accessTags    String[]      @default([])
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  observations  String?
-  blacklistReason String?     // Motivo de inclusión en lista negra/especial
-  createdBy     String?       // Quién realizó el registro
-  accessEvents  AccessEvent[]
-  credentials   Credential[]
-  parkingSlot   ParkingSlot?  @relation(fields: [parkingSlotId], references: [id])
-  unit          Unit?         @relation(fields: [unitId], references: [id])
-  vehicles      Vehicle[]
-  accessGroups  AccessGroup[] @relation("AccessGroupToUser")
+  id              String        @id @default(cuid())
+  name            String
+  username        String?       @unique
+  email           String?
+  phone           String?
+  dni             String?
+  cara            String?
+  unitId          String?
+  apartment       String?
+  parkingSlotId   String?       @unique
+  role            UserRole      @default(RESIDENT)
+  accessTags      String[]      @default([])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  observations    String?
+  blacklistReason String?
+  createdBy       String?
+  accessEvents    AccessEvent[]
+  credentials     Credential[]
+  parkingSlot     ParkingSlot?  @relation(fields: [parkingSlotId], references: [id])
+  unit            Unit?         @relation(fields: [unitId], references: [id])
+  vehicles        Vehicle[]
+  accessGroups    AccessGroup[] @relation("AccessGroupToUser")
 }
 
 model Credential {
@@ -134,19 +134,16 @@ model Device {
   password        String?
   lastOnlinePull  DateTime?
   lastOnlinePush  DateTime?
-  
-  // Map positioning for Multi-Floor support
   floorPlanId     String?
   mapX            Float?
   mapY            Float?
-  
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   accessEvents    AccessEvent[]
   callEvents      CallEvent[]
+  floorPlan       FloorPlan?       @relation(fields: [floorPlanId], references: [id])
   hardwareMirrors HardwareMirror[]
   accessGroups    AccessGroup[]    @relation("AccessGroupToDevice")
-  floorPlan       FloorPlan?       @relation(fields: [floorPlanId], references: [id])
 }
 
 model AccessEvent {
@@ -173,22 +170,21 @@ model AccessEvent {
 model Bitacora {
   id            String       @id @default(cuid())
   timestamp     DateTime     @default(now())
-  type          String       // "ENTRY" or "EXIT"
+  type          String
   plate         String?
   photoPath     String?
   notes         String?
-  name          String?      // NOMBRE
-  dni           String?      // CEDULA
-  company       String?      // EMPRESA
-  destination   String?      // DESTINATARIO
-  guardName     String?      // GUARDIA
+  name          String?
+  dni           String?
+  company       String?
+  destination   String?
+  guardName     String?
   latitude      Float?
   longitude     Float?
   audioPath     String?
   accessEventId String?      @unique
   accessEvent   AccessEvent? @relation(fields: [accessEventId], references: [id])
 }
-
 
 model CallEvent {
   id         String   @id @default(cuid())

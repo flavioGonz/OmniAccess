@@ -10,7 +10,7 @@ import {
     SlidersHorizontal, Upload, Trash2, Map as MapIcon, Bell, Settings,
     Users, UserPlus, Ban, ArrowLeft, MoreVertical, Check, X,
     ScanFace, Cpu, ShieldAlert, ShieldCheck, Info, Activity,
-    Search, RefreshCcw, Brain, UserSearch, Loader2, Maximize2
+    Search, RefreshCcw, UserSearch, Loader2, Maximize2, ChevronUp
 } from "lucide-react";
 import { sileo as toast } from "sileo";
 
@@ -540,106 +540,7 @@ function FaceDashboardContent() {
                                 <UserPlus size={18} />
                             </Link>
 
-                            <button
-                                onClick={() => fileInputRef.current?.click()}
-                                title="Buscar Rostro Manualmente"
-                                className={cn(
-                                    "w-10 h-10 rounded-full flex items-center justify-center transition-all",
-                                    isSearchingFace ? "animate-pulse text-amber-500" : "text-amber-500 hover:bg-amber-500/10"
-                                )}
-                            >
-                                {isSearchingFace ? <Loader2 className="animate-spin" size={18} /> : <Search size={18} />}
-                            </button>
-                            <input
-                                type="file"
-                                ref={fileInputRef}
-                                className="hidden"
-                                accept="image/*"
-                                onChange={handleFileSelect}
-                            />
 
-                            <div className="h-[1px] w-6 bg-white/10 mx-auto my-1" />
-
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                    <button className="w-10 h-10 rounded-full flex items-center justify-center text-white hover:bg-white/10 transition-all" title="AI Configuration">
-                                        <Brain size={18} />
-                                    </button>
-                                </PopoverTrigger>
-                                <PopoverContent side="left" className="w-80 bg-black/90 border-white/10 backdrop-blur-xl p-6 rounded-2xl shadow-2xl z-[100]">
-                                    <div className="space-y-6">
-                                        <div className="flex items-center gap-2 mb-4">
-                                            <Cpu className="text-red-500" size={16} />
-                                            <h3 className="text-xs font-black text-white uppercase tracking-widest">AI Face Engine</h3>
-                                        </div>
-
-                                        <div className="space-y-3">
-                                            <div className="space-y-1">
-                                                <Label className="text-[9px] font-black uppercase text-neutral-500 tracking-widest pl-1">Endpoint</Label>
-                                                <Input
-                                                    value={aiConfig.endpoint}
-                                                    onChange={(e) => setAiConfig({ ...aiConfig, endpoint: e.target.value })}
-                                                    placeholder="http://..."
-                                                    className="bg-white/5 border-white/5 h-9 text-[10px] font-mono"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <Label className="text-[9px] font-black uppercase text-neutral-500 tracking-widest pl-1">API Key</Label>
-                                                <Input
-                                                    type="password"
-                                                    value={aiConfig.apiKey}
-                                                    onChange={(e) => setAiConfig({ ...aiConfig, apiKey: e.target.value })}
-                                                    className="bg-white/5 border-white/5 h-9 text-[10px] font-mono"
-                                                />
-                                            </div>
-                                            <div className="pt-2">
-                                                <div className="flex justify-between items-center mb-2">
-                                                    <Label className="text-[9px] font-black uppercase text-neutral-500 tracking-widest">Confianza</Label>
-                                                    <span className="text-xs font-black text-red-500">{Math.round(similarityThreshold)}%</span>
-                                                </div>
-                                                <input
-                                                    type="range"
-                                                    min="50" max="99"
-                                                    value={similarityThreshold}
-                                                    onChange={(e) => {
-                                                        const val = parseInt(e.target.value);
-                                                        setSimilarityThreshold(val);
-                                                        handleSaveThreshold(val);
-                                                    }}
-                                                    className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-red-600"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={async () => {
-                                                    setTestingAi(true);
-                                                    const res = await testFaceEngineConnection(aiConfig.endpoint, aiConfig.apiKey);
-                                                    if (res.success) toast.success({ title: res.message });
-                                                    else toast.error({ title: res.message });
-                                                    setTestingAi(false);
-                                                }}
-                                                className="flex-1 h-8 bg-white/5 hover:bg-white/10 rounded-lg text-white font-black text-[9px] uppercase tracking-widest transition-all"
-                                            >
-                                                {testingAi ? "Test..." : "Test"}
-                                            </button>
-                                            <button
-                                                onClick={async () => {
-                                                    setSavingAi(true);
-                                                    await updateSetting("COMPAREFACE_URL", aiConfig.endpoint);
-                                                    await updateSetting("COMPAREFACE_KEY", aiConfig.apiKey);
-                                                    toast.success({ title: "AI config actualizada" });
-                                                    setSavingAi(false);
-                                                }}
-                                                className="flex-1 h-8 bg-red-600 hover:bg-red-700 rounded-lg text-white font-black text-[9px] uppercase tracking-widest transition-all"
-                                            >
-                                                {savingAi ? "..." : "Guardar"}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </PopoverContent>
-                            </Popover>
 
                             <div className="h-[1px] w-6 bg-white/10 mx-auto my-1" />
 

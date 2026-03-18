@@ -59,7 +59,7 @@ export const DRIVER_MODELS = {
         { value: "SS 3510 MF", label: "SS 3510 MF", category: "Face Terminal", photo: "" },
     ],
     AVICAM: [
-        { value: "RF-2002f4", label: "RF-2002f4 Face Terminal", category: "Face Terminal", photo: "https://avicam.com.br/wp-content/uploads/2023/10/termimal_facial_avicam_rf_2002f4-1.png" },
+        { value: "RF-2002f4", label: "RF-2002f4 Face Terminal", category: "Face Terminal", photo: "https://images.tcdn.com.br/img/img_prod/1029778/terminal_de_reconhecimento_facial_tela_4_3_2xcameras_2mp_20_000_faces_wifi_3d_ip54_velocidade_0_2s_a_2761_1_7804121b83a80cba714e4d4c324eec4c.jpg" },
     ],
     MILESIGHT: [],
     UNIFI: [
@@ -102,6 +102,10 @@ export const DEVICE_MODELS: Record<string, Record<string, string>> = {
     DAHUA: {
         LPR_CAMERA: "https://material.dahuasecurity.com/uploads/image/20230227/29b9f7c00e6a4b1d9bf5b8f6c6d6c4d6.png",
         DEFAULT: "https://material.dahuasecurity.com/uploads/image/20230227/29b9f7c00e6a4b1d9bf5b8f6c6d6c4d6.png"
+    },
+    AVICAM: {
+        FACE_TERMINAL: "https://avicam.com.br/wp-content/uploads/2023/09/4b0ccfdb5b60-Logo_AVICAM_Curvas-1-300x212.png",
+        DEFAULT: "https://avicam.com.br/wp-content/uploads/2023/09/4b0ccfdb5b60-Logo_AVICAM_Curvas-1-300x212.png"
     }
 };
 

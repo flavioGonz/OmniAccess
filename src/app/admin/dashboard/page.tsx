@@ -36,6 +36,7 @@ import Image from "next/image";
 import { AccessEvent, Device, Unit } from "@prisma/client";
 import { getCarLogo } from "@/lib/car-logos";
 import { getVehicleBrandName } from "@/lib/hikvision-codes";
+import { getImagePath } from "@/lib/image-path";
 
 interface FullAccessEvent extends AccessEvent {
     user: {
@@ -301,9 +302,7 @@ export default function AccessDashboard() {
 
     // Helper for image URLs
     const getImageUrl = (path: string | null | undefined): string => {
-        if (!path) return "";
-        if (path.startsWith('http') || path.startsWith('/')) return path;
-        return `/api/files/${path}`;
+        return getImagePath(path) || "";
     };
 
     const EventItem = ({ event }: { event: FullAccessEvent & { hasDoorOpen?: boolean; hasDoorClose?: boolean } }) => {
@@ -389,64 +388,55 @@ export default function AccessDashboard() {
                     <div className="flex items-center gap-3">
                         {/* LEFT: ICON/IMAGE (ALL TYPES) */}
                         <div className={cn("rounded-lg shrink-0 flex items-center justify-center p-0.5", "bg-neutral-900 border border-white/10 shadow-sm overflow-hidden", "w-14 h-11 relative")}>
-                            {(isCall) ? (
-                                <div className="relative w-full h-full">
-                                    {fullImageUrl ? (
-                                        <Image
-                                            src={fullImageUrl}
-                                            alt="Snap"
-                                            fill
-                                            sizes="56px"
-                                            className="object-cover opacity-80"
-                                        />
-                                    ) : (
-                                        <div className={cn("w-full h-full flex items-center justify-center", config.bgClass)}>
-                                            <TypeIcon size={18} className={config.textClass} />
-                                        </div>
-                                    )}
-                                    {isCall && (
-                                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
-                                            <div className="relative">
-                                                <div className="absolute inset-0 bg-emerald-500 rounded-full animate-ping opacity-75" />
-                                                <Phone size={14} className="text-white relative z-10 drop-shadow-md" fill="currentColor" />
+                            {(() => {
+                                const src = getImageUrl(event.snapshotPath || event.imagePath) || (event.accessType !== 'PLATE' ? getImageUrl(event.user?.cara) : "");
+
+                                if (isCall) {
+                                    return (
+                                        <div className="relative w-full h-full">
+                                            {src ? (
+                                                <Image src={src} alt="Snap" fill sizes="56px" className="object-cover opacity-80" />
+                                            ) : (
+                                                <div className={cn("w-full h-full flex items-center justify-center", config.bgClass)}>
+                                                    <TypeIcon size={18} className={config.textClass} />
+                                                </div>
+                                            )}
+                                            <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
+                                                <div className="relative">
+                                                    <div className="absolute inset-0 bg-emerald-500 rounded-full animate-ping opacity-75" />
+                                                    <Phone size={14} className="text-white relative z-10 drop-shadow-md" fill="currentColor" />
+                                                </div>
                                             </div>
                                         </div>
-                                    )}
-                                </div>
-                            ) : event.accessType === 'FACE' ? (
-                                (fullImageUrl || meta.FaceImage || event.user?.cara) ? (
-                                    <Image
-                                        src={fullImageUrl || getImageUrl(meta.FaceImage || event.user?.cara)}
-                                        alt="Face"
-                                        fill
-                                        sizes="56px"
-                                        className="object-cover scale-110"
-                                    />
-                                ) : (
-                                    <div className={cn("w-full h-full flex items-center justify-center", config.bgClass)}>
-                                        <UserIcon size={18} className={config.textClass} />
+                                    );
+                                }
+
+                                if (src && (event.accessType === 'FACE' || event.accessType === 'PLATE')) {
+                                    return <Image src={src} alt="Snapshot" fill sizes="56px" className="object-cover scale-110" />;
+                                }
+
+                                if (event.accessType === 'TAG' && !event.plateDetected?.startsWith('DOOR')) {
+                                    return (
+                                        <div className={cn("w-full h-full rounded flex items-center justify-center", "bg-amber-500/10")}>
+                                            <CreditCard size={18} className="text-amber-400" />
+                                        </div>
+                                    );
+                                }
+
+                                if (logoUrl) {
+                                    return (
+                                        <div className="relative w-full h-full p-1 bg-white">
+                                            <Image src={logoUrl} alt="Logo" fill sizes="44px" className="object-contain" />
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <div className={cn("w-full h-full rounded flex items-center justify-center", config.bgClass)}>
+                                        <TypeIcon size={18} className={config.textClass} />
                                     </div>
-                                )
-                            ) : event.accessType === 'TAG' && !event.plateDetected?.startsWith('DOOR') ? (
-                                // TAG/RFID - Show RFID Icon (don't try to load potentially invalid snapshots)
-                                <div className={cn("w-full h-full rounded flex items-center justify-center", "bg-amber-500/10")}>
-                                    <CreditCard size={18} className="text-amber-400" />
-                                </div>
-                            ) : logoUrl ? (
-                                <div className="relative w-full h-full p-1 bg-white">
-                                    <Image
-                                        src={logoUrl}
-                                        alt="Logo"
-                                        fill
-                                        sizes="44px"
-                                        className="object-contain"
-                                    />
-                                </div>
-                            ) : (
-                                <div className={cn("w-full h-full rounded flex items-center justify-center", config.bgClass)}>
-                                    <TypeIcon size={18} className={config.textClass} />
-                                </div>
-                            )}
+                                );
+                            })()}
                         </div>
 
                         {/* CENTER: PRIMARY DATA */}

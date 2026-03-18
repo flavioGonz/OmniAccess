@@ -58,7 +58,7 @@ function SidebarItem({ icon, label, href, active, collapsed, target, badge }: Si
                 collapsed && "justify-center px-2"
             )}
         >
-            <div className={cn("shrink-0 relative", active ? "text-blue-500" : "group-hover:text-blue-400")}>
+            <div className={cn("shrink-0 relative", active ? "text-[#8b5cf6]" : "group-hover:text-[#8b5cf6]")}>
                 {icon}
                 {badge !== undefined && badge > 0 && (
                     <div className="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] bg-red-500 text-white text-[8px] font-black rounded-full flex items-center justify-center border-2 border-neutral-900 shadow-lg">
@@ -171,24 +171,24 @@ export default function AdminLayout({
     }
 
     return (
-        <div className="flex min-h-screen bg-gradient-to-br from-neutral-950 via-neutral-900 to-neutral-950 text-neutral-100 font-sans">
+        <div className="flex min-h-screen bg-[#0a0a0a] text-neutral-100 font-sans selection:bg-[#8b5cf6]/30">
             {/* Sidebar */}
             <aside
                 className={cn(
-                    "border-r border-neutral-800/50 flex flex-col fixed h-full bg-neutral-900/80 backdrop-blur-xl z-20 transition-all duration-300 ease-in-out",
+                    "border-r border-[#262626] flex flex-col fixed h-full bg-[#141414] backdrop-blur-xl z-30 transition-all duration-300 ease-in-out shadow-2xl",
                     collapsed ? "w-[70px]" : "w-64"
                 )}
             >
                 <div className="p-4 border-b border-neutral-800/50 bg-black/20 flex items-center justify-between h-[60px]">
                     <div className={cn("flex items-center gap-2 overflow-hidden transition-all", collapsed ? "w-0 opacity-0" : "w-auto opacity-100")}>
-                        <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center shrink-0">
-                            <ShieldCheck size={14} className="text-white" />
+                        <div className="w-7 h-7 bg-[#8b5cf6] rounded-lg flex items-center justify-center shrink-0 shadow-lg shadow-[#8b5cf6]/20">
+                            <ShieldCheck size={16} className="text-white" />
                         </div>
                         <div className="whitespace-nowrap">
-                            <h2 className="text-xs font-black text-white uppercase tracking-[0.2em]">
+                            <h2 className="text-sm font-black text-white uppercase tracking-tighter italic">
                                 OmniAccess
                             </h2>
-                            <p className="text-[8px] font-bold text-neutral-600 uppercase tracking-widest">Control y acceso</p>
+                            <p className="text-[8px] font-bold text-[#8b5cf6] uppercase tracking-[0.2em] opacity-80">Security Hub</p>
                         </div>
                     </div>
 
@@ -241,8 +241,8 @@ export default function AdminLayout({
                         </div>
                     )}
 
-                    <div className={cn("flex items-center gap-3 group cursor-pointer p-2 rounded-2xl hover:bg-neutral-800/50 transition-colors", collapsed && "justify-center p-0 hover:bg-transparent")}>
-                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white font-black text-xs shadow-lg shadow-blue-500/20 shrink-0">
+                    <div className={cn("flex items-center gap-3 group cursor-pointer p-2 rounded-2xl hover:bg-[#8b5cf6]/10 transition-colors", collapsed && "justify-center p-0 hover:bg-transparent")}>
+                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#8b5cf6] to-[#7c3aed] flex items-center justify-center text-white font-black text-xs shadow-lg shadow-[#8b5cf6]/20 shrink-0">
                             A
                         </div>
                         {!collapsed && (

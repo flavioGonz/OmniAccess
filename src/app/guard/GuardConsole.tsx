@@ -21,6 +21,7 @@ import {
     CameraOff,
     CheckCircle2,
     X,
+    ChevronUp,
     Image as ImageIcon,
     MapPin,
     Mic,
@@ -38,6 +39,7 @@ import {
     Home,
     Plus,
     Flame,
+    Download,
     Siren,
     Landmark,
     Delete,
@@ -59,7 +61,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { createBitacoraEntry, deleteBitacoraEntry, getBitacoraPage } from "@/app/actions/bitacora";
+import { createBitacoraEntry, deleteBitacoraEntry, getBitacoraPage, searchRecentBitacora } from "@/app/actions/bitacora";
 import { getAccessEvents, getPlateAnalysis } from "@/app/actions/history";
 import { getQuickCreateData, getGuardsList } from "@/app/actions/users";
 import { resolveFaceEventAction } from "@/app/actions/face-resolve";
@@ -176,6 +178,12 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
     const [quickCreateContext, setQuickCreateContext] = useState<any>(null);
     const [quickCreateData, setQuickCreateData] = useState<any>(null);
     const [loadingQuickCreateData, setLoadingQuickCreateData] = useState(false);
+    const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+    const [updateAvailable, setUpdateAvailable] = useState(false);
+    const [showUpdateSplash, setShowUpdateSplash] = useState(false);
+    const [recentRecords, setRecentRecords] = useState<any[]>([]);
+    const [showSearchFillModal, setShowSearchFillModal] = useState(false);
+    const [isSearchingRecords, setIsSearchingRecords] = useState(false);
 
     // Alert Normalization Modal
     const [showNormalizationModal, setShowNormalizationModal] = useState(false);
@@ -460,7 +468,7 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
             });
         });
 
-        newSocket.on('NEW_ACCESS', (event: any) => {
+        newSocket.on('access_event', (event: any) => {
             const isLpr = activeTabRef.current === "lpr";
             // Check if the event matches the current date filter
             const eventDate = new Date(event.timestamp).toISOString().split('T')[0];
@@ -476,7 +484,7 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
             const dirFilter = lprDirectionRef.current;
             const matchesDirection = dirFilter === "ALL" || event.direction === dirFilter;
 
-            if (isLpr && isSameDate && matchesSearch && matchesDirection && (event.accessType === "PLATE" || event.plateDetected)) {
+            if (isSameDate && matchesSearch && matchesDirection && (event.accessType === "PLATE" || event.plateDetected)) {
                 setLprEntries(prev => {
                     if (prev.find(e => e.id === event.id)) return prev;
                     return [event, ...prev];
@@ -647,6 +655,23 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
             }
         }
     }, [isAlertMode]);
+
+    // Bitacora Search Fill Logic
+    useEffect(() => {
+        const query = (plate.length >= 3) ? plate : "";
+        if (query) {
+            const timer = setTimeout(async () => {
+                setIsSearchingRecords(true);
+                const results = await searchRecentBitacora(query);
+                if (results && results.length > 0) {
+                    setRecentRecords(results);
+                    setShowSearchFillModal(true);
+                }
+                setIsSearchingRecords(false);
+            }, 1000);
+            return () => clearTimeout(timer);
+        }
+    }, [plate]);
 
     // Vibration Feedback for Alerts
     useEffect(() => {
@@ -2620,36 +2645,56 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                         <BottomTab icon={customIcons.control ? <Image src={customIcons.control} width={20} height={20} className="object-contain md:w-6 md:h-6" alt="Icon" /> : <FileText size={20} className="md:w-6 md:h-6" />} active={activeTab === "control"} onClick={() => handleTabChange("control")} label="Acceso" alertActive={isAlertMode} />
                         <BottomTab icon={customIcons.history ? <Image src={customIcons.history} width={20} height={20} className="object-contain md:w-6 md:h-6" alt="Icon" /> : <HistoryIcon size={20} className="md:w-6 md:h-6" />} active={activeTab === "history"} onClick={() => handleTabChange("history")} label="Historial" alertActive={isAlertMode} />
 
-                        {/* CENTER PANIC / ALERTS BUTTON - hold to trigger, tap to view */}
-                        <div className="relative -mt-8 md:-mt-10 mx-2 md:mx-4">
-                            <motion.button
-                                style={{ touchAction: "none" }}
-                                whileHover={{ scale: 1.1 }}
-                                whileTap={{ scale: 0.9 }}
-                                onClick={() => { handleTabChange("alerts"); playTactileSound(); }}
-                                onMouseDown={() => { if (!isAlertMode) startPanicHold(); }}
-                                onMouseUp={() => { if (!isAlertMode) cancelPanicHold(); }}
-                                onMouseLeave={() => { if (!isAlertMode) cancelPanicHold(); }}
-                                onTouchStart={() => { if (!isAlertMode) startPanicHold(); }}
-                                onTouchEnd={() => { if (!isAlertMode) cancelPanicHold(); }}
-                                className={cn(
-                                    "w-16 h-16 md:w-20 md:h-20 rounded-full shadow-2xl flex items-center justify-center transition-all border-4 select-none relative overflow-hidden",
-                                    activeTab === "alerts"
-                                        ? "bg-red-600 text-white border-red-700 shadow-red-600/30"
-                                        : "bg-white text-red-600 border-slate-100 hover:border-red-100"
+                                <div className="relative -mt-12 md:-mt-14 mx-2 md:mx-4">
+                                <motion.div
+                                    drag="y"
+                                    dragConstraints={{ top: isAlertMode ? 0 : -100, bottom: isAlertMode ? 100 : 0 }}
+                                    dragElastic={0.2}
+                                    onDragEnd={(_, info) => {
+                                        // Slide up to activate
+                                        if (info.offset.y < -60) {
+                                            if (!isAlertMode) {
+                                                toggleAlertMode(true);
+                                                toast.error({ title: "¡ALERTA DE PÁNICO ACTIVADA!" });
+                                            }
+                                        }
+                                        // Slide down to deactivate
+                                        if (info.offset.y > 60) {
+                                            if (isAlertMode) {
+                                                toggleAlertMode(false);
+                                                toast.success({ title: "PÁNICO DESACTIVADO" });
+                                            }
+                                        }
+                                    }}
+                                >
+                                    <button
+                                        onClick={() => {
+                                            if (!isAlertMode) handleTabChange("alerts");
+                                            playTactileSound();
+                                        }}
+                                    className={cn(
+                                        "w-20 h-20 md:w-24 md:h-24 rounded-full shadow-2xl flex items-center justify-center transition-all border-4 select-none relative overflow-hidden",
+                                        isAlertMode || activeTab === "alerts"
+                                            ? "bg-red-600 text-white border-red-700 shadow-red-600/30 animate-pulse"
+                                            : "bg-white text-red-600 border-slate-100 hover:border-red-100"
+                                    )}
+                                >
+                                    <Siren size={32} className={cn("md:w-8 md:h-8 relative z-10")} />
+                                </button>
+                                {!isAlertMode && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 0.4, y: [0, -5, 0] }}
+                                        transition={{ repeat: Infinity, duration: 2 }}
+                                        className="absolute -top-10 left-1/2 -translate-x-1/2 text-[10px] font-black uppercase text-red-600 whitespace-nowrap pointer-events-none"
+                                    >
+                                        Slide up <ChevronUp size={10} className="inline" />
+                                    </motion.div>
                                 )}
-                            >
-                                <Siren size={32} className={cn("md:w-8 md:h-8 relative z-10", activeTab === "alerts" && "animate-pulse")} />
-                                {!isAlertMode && panicHoldProgress > 0 && (
-                                    <svg className="absolute inset-0 -rotate-90 w-full h-full p-1 pointer-events-none z-20">
-                                        <circle cx="50%" cy="50%" r="44%" fill="none" stroke="#B20D30" strokeWidth="4" strokeDasharray="220" strokeDashoffset={220 - (220 * panicHoldProgress) / 100} strokeLinecap="round" className="transition-all duration-75" />
-                                    </svg>
-                                )}
-                            </motion.button>
+                            </motion.div>
                         </div>
-
                         <BottomTab icon={customIcons.lpr ? <Image src={customIcons.lpr} width={20} height={20} className="object-contain md:w-6 md:h-6" alt="Icon" /> : <Car size={20} className="md:w-6 md:h-6" />} active={activeTab === "lpr"} onClick={() => handleTabChange("lpr")} label="LPR" alertActive={isAlertMode} />
-                        <BottomTab icon={<ScanFace size={20} className="md:w-6 md:h-6" />} active={activeTab === "face"} onClick={() => handleTabChange("face")} label="Rostro" alertActive={isAlertMode} />
+
                         <BottomTab icon={customIcons.map ? <Image src={customIcons.map} width={20} height={20} className="object-contain md:w-6 md:h-6" alt="Icon" /> : <MapIcon size={20} className="md:w-6 md:h-6" />} active={activeTab === "map"} onClick={() => handleTabChange("map")} label="Mapa" alertActive={isAlertMode} />
                     </nav>
 
@@ -3489,6 +3534,42 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                     >
                                         <RefreshCcw size={16} /> Reiniciar Solicitud de Permisos
                                     </button>
+                                    <button
+                                        onClick={() => {
+                                            setIsCheckingUpdate(true);
+                                            setShowUpdateSplash(true);
+                                            if ('serviceWorker' in navigator) {
+                                                navigator.serviceWorker.getRegistrations().then(async (registrations) => {
+                                                    let found = false;
+                                                    for (let registration of registrations) {
+                                                        await registration.update();
+                                                        if (registration.waiting || registration.installing) {
+                                                            found = true;
+                                                        }
+                                                    }
+                                                    
+                                                    setTimeout(() => {
+                                                        setIsCheckingUpdate(false);
+                                                        if (found) {
+                                                            setUpdateAvailable(true);
+                                                        } else {
+                                                            toast.info({ title: "La aplicación ya está actualizada" });
+                                                            setShowUpdateSplash(false);
+                                                        }
+                                                    }, 2000);
+                                                });
+                                            } else {
+                                                setTimeout(() => {
+                                                    setIsCheckingUpdate(false);
+                                                    toast.info({ title: "PWA no soportada en este navegador" });
+                                                    setShowUpdateSplash(false);
+                                                }, 1500);
+                                            }
+                                        }}
+                                        className="w-full mt-2 py-4 bg-blue-600 border-2 border-blue-700 rounded-xl text-xs font-bold uppercase tracking-widest text-white hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20"
+                                    >
+                                        <Download size={16} /> Actualizar APP (Proceso Guiado)
+                                    </button>
                                 </div>
 
                                 <div className="space-y-6">
@@ -3746,6 +3827,138 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                         </motion.div>
                     )}
                 </AnimatePresence>
+            {/* PWA UPDATE SPLASH */}
+            <AnimatePresence>
+                {showUpdateSplash && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[5000] bg-blue-600 flex flex-col items-center justify-center p-8 text-white overflow-hidden shadow-2xl"
+                    >
+                        <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+                            className="mb-8 text-white/40"
+                        >
+                            <RefreshCcw size={100} strokeWidth={3} />
+                        </motion.div>
+                        <h2 className="text-5xl font-black uppercase tracking-tighter mb-4 text-center">
+                            {isCheckingUpdate ? "Verificando Versión" : (updateAvailable ? "Actualización Lista" : "Omniaccess Pro")}
+                        </h2>
+                        <p className="text-xs font-black text-white/50 uppercase tracking-[0.4em] mb-12 text-center">
+                            {isCheckingUpdate ? "Buscando cambios en la red..." : (updateAvailable ? "Se encontró una nueva versión de la plataforma" : "Tu sistema está actualizado")}
+                        </p>
+
+                        {updateAvailable && (
+                            <div className="w-full max-w-md space-y-4">
+                                <button
+                                    onClick={() => window.location.reload()}
+                                    className="w-full h-20 bg-white text-blue-600 rounded-[2.5rem] font-black uppercase tracking-widest text-sm active:scale-95 transition-all shadow-2xl flex items-center justify-center gap-3"
+                                >
+                                    <Download size={24} /> Actualizar ahora
+                                </button>
+                                <button
+                                    onClick={() => setShowUpdateSplash(false)}
+                                    className="w-full h-20 bg-blue-700 text-white rounded-[2.5rem] font-black uppercase tracking-widest text-sm active:scale-95 transition-all"
+                                >
+                                    Continuar sin actualizar
+                                </button>
+                            </div>
+                        )}
+                        {!updateAvailable && isCheckingUpdate && (
+                            <div className="w-64 h-2 bg-white/10 rounded-full overflow-hidden relative">
+                                <motion.div 
+                                    className="absolute inset-y-0 left-0 bg-white shadow-[0_0_20px_white]"
+                                    initial={{ width: "0%" }}
+                                    animate={{ width: "100%" }}
+                                    transition={{ duration: 2 }}
+                                />
+                            </div>
+                        )}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* SEARCH FILL MODAL */}
+            <AnimatePresence>
+                {showSearchFillModal && recentRecords.length > 0 && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[4500] bg-black/60 backdrop-blur-md flex items-center justify-center p-8"
+                        onClick={() => setShowSearchFillModal(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.9, y: 20 }}
+                            className="w-full max-w-3xl bg-white rounded-[3rem] p-12 shadow-2xl space-y-10 relative overflow-hidden"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-blue-50 to-transparent pointer-events-none" />
+                            
+                            <div className="space-y-3 text-center relative">
+                                <div className="w-20 h-20 bg-blue-600 text-white rounded-3xl mx-auto flex items-center justify-center mb-4 shadow-xl shadow-blue-600/20">
+                                    <Clock size={40} />
+                                </div>
+                                <h3 className="text-4xl font-black uppercase tracking-tighter text-slate-900 leading-none">Registros Históricos</h3>
+                                <p className="text-xs font-black text-slate-400 uppercase tracking-[0.3em]">Encontramos datos previos para esta matrícula</p>
+                            </div>
+
+                            <div className="space-y-4 max-h-[45vh] overflow-y-auto pr-4 custom-scrollbar">
+                                {recentRecords.map((record) => (
+                                    <button
+                                        key={record.id}
+                                        onClick={() => {
+                                            if (record.name) setName(record.name);
+                                            if (record.dni) setDni(record.dni);
+                                            setShowSearchFillModal(false);
+                                            toast.success({ title: "Datos recuperados correctamente" });
+                                        }}
+                                        className="w-full p-8 rounded-[2.5rem] bg-slate-50 border-2 border-slate-100 flex items-center justify-between text-left active:scale-[0.98] transition-all group hover:bg-white hover:border-blue-400 hover:shadow-2xl hover:shadow-blue-600/10"
+                                    >
+                                        <div className="space-y-3">
+                                            <div className="flex items-center gap-3">
+                                                <Badge className="bg-blue-100 text-blue-600 hover:bg-blue-100 border-none px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
+                                                    Visitó: {new Date(record.timestamp).toLocaleDateString()}
+                                                </Badge>
+                                                {record.plate && (
+                                                    <Badge className="bg-slate-900 text-white hover:bg-slate-900 border-none px-4 py-1 rounded-full text-[10px] font-black tracking-widest">
+                                                        {record.plate}
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                            <p className="text-2xl font-black text-slate-900 uppercase tracking-tight group-hover:text-blue-600 transition-colors">{record.name || "Sin nombre"}</p>
+                                            <div className="flex gap-8">
+                                                <span className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                                                    <FileText size={14} className="text-slate-300" /> DNI: {record.dni || "---"}
+                                                </span>
+                                                <span className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                                                    <Building2 size={14} className="text-slate-300" /> DESTINO: {record.destination || "---"}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="w-16 h-16 rounded-[1.5rem] bg-white shadow-sm border border-slate-100 flex items-center justify-center text-slate-200 group-hover:text-blue-500 group-hover:border-blue-200 group-hover:shadow-lg transition-all">
+                                            <CheckCircle2 size={32} />
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="flex gap-4 pt-4">
+                                <button
+                                    onClick={() => setShowSearchFillModal(false)}
+                                    className="flex-1 h-20 bg-slate-100 text-slate-400 rounded-3xl font-black uppercase tracking-widest text-xs hover:bg-slate-200 transition-all"
+                                >
+                                    INGRESAR DATOS NUEVOS
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
             </main >
 
             <style jsx global>{`

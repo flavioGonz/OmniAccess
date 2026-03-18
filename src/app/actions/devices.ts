@@ -6,8 +6,8 @@ import { revalidatePath } from "next/cache";
 import { HikvisionDriver } from "@/lib/drivers/HikvisionDriver";
 import { uploadToS3 } from "@/lib/s3";
 
-async function saveFile(file: File | null, folder: string): Promise<string | null> {
-    if (!file || !(file instanceof File) || file.size === 0) return null;
+async function saveFile(file: any, folder: string): Promise<string | null> {
+    if (!file || typeof file === 'string' || !file.size) return null;
     try {
         const bytes = await file.arrayBuffer();
         const buffer = Buffer.from(bytes);
@@ -718,6 +718,7 @@ export async function updateDevicePosition(id: string, x: number, y: number, flo
                 floorPlanId: floorPlanId || undefined
             }
         });
+        revalidatePath("/admin/dashboard-face");
         return { success: true };
     } catch (error) {
         console.error("Error updating device position:", error);
@@ -735,6 +736,7 @@ export async function deleteDevicePosition(id: string) {
                 floorPlanId: null
             }
         });
+        revalidatePath("/admin/dashboard-face");
         return { success: true };
     } catch (error) {
         console.error("Error deleting device position:", error);

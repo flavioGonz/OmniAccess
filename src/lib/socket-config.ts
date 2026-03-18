@@ -18,6 +18,8 @@ export function getSocketUrl() {
 }
 
 export function getApiUrl() {
-    if (typeof window === 'undefined') return '';
-    return getSocketUrl();
+    // Return empty string to use relative paths. 
+    // This allows Next.js next.config.ts rewrites to proxy requests to port 10000
+    // and avoids hydration mismatches/CORS/mixed-content issues.
+    return '';
 }

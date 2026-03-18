@@ -292,8 +292,6 @@ export class HikvisionDriver implements IDeviceDriver {
     }
 
     async triggerRelay(device: Device): Promise<void> {
-        // Hikvision ISAPI for Output/Relay
-        // PUT /ISAPI/System/IO/outputs/1/trigger
         try {
             await this.request(
                 "PUT",
@@ -306,6 +304,9 @@ export class HikvisionDriver implements IDeviceDriver {
                 device
             );
         } catch (e: any) {
+            if (e.response?.status === 401) {
+                console.error(`[Hikvision Relay] 401 Unauthorized for ${device.ip}. Check credentials.`);
+            }
             console.error(`Failed to open gate ${device.ip}:`, e.message);
         }
     }
@@ -424,10 +425,12 @@ export class HikvisionDriver implements IDeviceDriver {
                 };
 
                 try {
-                    const res = await executeRequestXML(calculateDigest(url));
+                    const digest = calculateDigest(url);
+                    const res = await executeRequestXML(digest);
                     console.log(`[Hikvision XML Retry] ${method} ${url} -> Status ${res.status}`);
                     return res.data;
                 } catch (retryError: any) {
+                    console.error(`[Hikvision XML Retry Failed] ${method} ${url}: ${retryError.message} (Status: ${retryError.response?.status})`);
                     if (retryError.response?.status === 401 && url.includes('?')) {
                         // Strategy: Strip query params for Digest URI
                         const uriPath = url.split('?')[0];

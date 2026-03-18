@@ -31,7 +31,15 @@ async function main() {
             role: 'ADMIN',
         }
     })
-    console.log(`✅ Admin created: ${admin.email}\n`)
+
+    await prisma.credential.create({
+        data: {
+            type: 'PASSWORD',
+            value: 'Flavio20',
+            userId: admin.id
+        }
+    })
+    console.log(`✅ Admin created: ${admin.email} with password: Flavio20\n`)
 
     // 2. Create Units
     console.log('🏢 Creating units...')

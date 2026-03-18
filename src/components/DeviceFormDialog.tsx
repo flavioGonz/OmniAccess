@@ -77,7 +77,7 @@ const BRANDS = [
     { value: "INTELBRAS", label: "Intelbras", color: "#009639", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/f/ff/Intelbras_logo.svg" },
     { value: "DAHUA", label: "Dahua", color: "#ED1C24", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/b/b3/Dahua_Technology_logo.svg" },
     { value: "ZKTECO", label: "ZKTeco", color: "#0191D2", logoUrl: "https://www.zkteco.com/upload/201908/5d4d3c3f3f0f7.png" },
-    { value: "AVICAM", label: "Avicam", color: "#E11D48", logoUrl: "https://avicam.com.br/wp-content/uploads/2023/09/4b0ccfdb5b60-Logo_AVICAM_Curvas-1-300x212.png" },
+    { value: "AVICAM", label: "Avicam", color: "#E11D48", logoUrl: "/logos/avicam.png" },
     { value: "MILESIGHT", label: "Milesight", color: "#00AEEF", logoUrl: "" },
     { value: "UNIFI", label: "Ubiquiti UniFi", color: "#005EAD", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/e/e0/Ubiquiti_Networks_logo.svg" },
     { value: "UNIVIEW", label: "Uniview", color: "#005EB8", logoUrl: "https://www.uniview.com/etc/designs/uniview/logo.png" },

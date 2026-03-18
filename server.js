@@ -125,6 +125,52 @@ const generateId = () => {
     return Math.random().toString(36).substring(2, 9);
 };
 
+// Helper for Auto-Adopting Devices from Discovery
+const adoptDevice = async (mac, ip, brand, deviceType = 'LPR_CAMERA') => {
+    try {
+        const normalizeMac = (m) => m ? String(m).replace(/[:-\s]/g, "").toUpperCase() : null;
+        const cleanMac = normalizeMac(mac);
+        const cleanIp = ip ? String(ip).replace(/^.*:/, '') : null;
+
+        if (!cleanMac && !cleanIp) return null;
+
+        // Final check before creation to avoid duplicates
+        const all = await prisma.device.findMany();
+        const existing = all.find(d => 
+            (cleanMac && normalizeMac(d.mac) === cleanMac) || 
+            (cleanIp && d.ip === cleanIp)
+        );
+        
+        if (existing) return existing;
+
+        const newDevice = await prisma.device.create({
+            data: {
+                name: `NUEVO: ${brand} (${cleanMac || cleanIp})`,
+                brand: brand,
+                deviceType: deviceType,
+                ip: cleanIp || '0.0.0.0',
+                mac: cleanMac,
+                direction: 'ENTRY',
+                authType: 'BASIC',
+                doorStatus: 'UNKNOWN',
+                username: 'admin', // Placeholder for manual update
+                password: '',      // Placeholder for manual update
+            }
+        });
+        
+        console.log(`[Discovery] 🆕 Device auto-adopted: ${newDevice.name} [${brand}]`);
+        
+        if (global.io) {
+            global.io.emit("device_adopted", newDevice);
+        }
+        
+        return newDevice;
+    } catch (e) {
+        console.error(`[Discovery] ❌ Failed to adopt device: ${e.message}`);
+        return null;
+    }
+};
+
 // Helper for Camera Snapshots (Basic/Digest)
 const fetchCameraSnapshot = async (device) => {
     let baseUrl = device.ip.startsWith('http') ? device.ip : `http://${device.ip}`;
@@ -284,14 +330,17 @@ const tryFetchWithDigest = async (url, path, device, method = "GET") => {
         const nonce = getVal("nonce");
         const qop = getVal("qop");
         const opaque = getVal("opaque");
-        const algorithmFromDevice = getVal("algorithm") || "MD5";
+        const algorithmFromDevice = getVal("algorithm"); const cnonce = crypto.randomBytes(8).toString("hex"); const algorithm = (algorithmFromDevice || "MD5").toUpperCase();
 
         if (!nonce) return null;
 
-        const ha1 = crypto.createHash("md5").update(`${device.username}:${realm}:${device.password}`).digest("hex");
+        let ha1 = crypto.createHash("md5").update(`${device.username}:${realm}:${device.password}`).digest("hex");
+        if (algorithm === "MD5-SESS") {
+            ha1 = crypto.createHash("md5").update(`${ha1}:${nonce}:${cnonce}`).digest("hex");
+        }
+        
         const ha2 = crypto.createHash("md5").update(`${method}:${path}`).digest("hex");
         const nc = "00000001";
-        const cnonce = crypto.randomBytes(8).toString("hex");
 
         let responseStr;
         if (qop === 'auth' || qop === 'auth-int') {
@@ -345,6 +394,10 @@ const proxyVideoStream = async (device, res, req) => {
     const ports = (device.brand === 'AKUVOX') ? ((isSPA || isTorre || isAndroid) ? ['8080', null] : [null, '8080']) : [null];
 
     const endpoints = [
+        "/ISAPI/Streaming/channels/101/httppreview",
+        "/ISAPI/Streaming/channels/102/httppreview",
+        "/ISAPI/Streaming/channels/1/httppreview",
+        "/ISAPI/Streaming/channels/2/httppreview",
         "/video.cgi",
         "/fcgi/video.cgi",
         "/fcgi/do?action=mjpeg",
@@ -479,16 +532,17 @@ const tryStreamWithDigest = async (url, path, device) => {
         const nonce = getVal("nonce");
         const qop = getVal("qop");
         const opaque = getVal("opaque");
-        const algorithmFromDevice = getVal("algorithm");
-        const algorithm = algorithmFromDevice || "MD5";
+        const algorithmFromDevice = getVal("algorithm"); const cnonce = crypto.randomBytes(8).toString("hex"); const algorithm = (algorithmFromDevice || "MD5").toUpperCase();
 
         if (!nonce) return null;
 
-        const ha1 = crypto.createHash("md5").update(`${device.username}:${realm}:${device.password}`).digest("hex");
+        let ha1 = crypto.createHash("md5").update(`${device.username}:${realm}:${device.password}`).digest("hex");
+        if (algorithm === "MD5-SESS") {
+            ha1 = crypto.createHash("md5").update(`${ha1}:${nonce}:${cnonce}`).digest("hex");
+        }
+        
         const ha2 = crypto.createHash("md5").update(`GET:${path}`).digest("hex");
         const nc = "00000001";
-        const cnonce = crypto.randomBytes(8).toString("hex");
-
         let responseStr;
         if (qop === 'auth' || qop === 'auth-int') {
             responseStr = crypto.createHash("md5").update(`${ha1}:${nonce}:${nc}:${cnonce}:${qop}:${ha2}`).digest("hex");
@@ -946,6 +1000,10 @@ const handleWebhook = async (req, res, logPrefix) => {
                 device = await prisma.device.findFirst({ where: { ip: ipAddress } });
             }
 
+            if (!device) {
+                device = await adoptDevice(macAddress, ipAddress || req.socket.remoteAddress, 'HIKVISION', 'FACE_TERMINAL');
+            }
+
             // --- Process Images (Full vs Face) ---
             let fullImagePath = null;
             let faceImagePath = null;
@@ -1038,8 +1096,10 @@ const handleWebhook = async (req, res, logPrefix) => {
                 global.io.emit("access_event", {
                     ...event,
                     device,
-                    user,
-                    direction: event.direction
+                    user: user || { name: personName },
+                    direction: event.direction,
+                    brand: 'HIKVISION',
+                    userName: personName || user?.name || "Desconocido"
                 });
                 // Emit webhook event for topology animation
                 global.io.emit("webhook-event", {
@@ -1331,6 +1391,10 @@ const handleWebhook = async (req, res, logPrefix) => {
             }
         }
 
+        if (!device) {
+            device = await adoptDevice(macAddress, ipAddress || req.socket.remoteAddress, 'HIKVISION', 'LPR_CAMERA');
+        }
+
         // UPDATE: Track push connection for actual events
         if (device) {
             await prisma.device.update({
@@ -1504,6 +1568,10 @@ const handleAvicamWebhook = async (req, res, logPrefix) => {
                 device = allDevices.find(d => d.ip === cleanRemoteIp || d.ip.includes(cleanRemoteIp));
                 if (device) console.log(`${logPrefix} [Avicam] Device matched by IP: ${device.name}`);
             }
+        }
+
+        if (!device) {
+            device = await adoptDevice(macAddress, req.socket.remoteAddress, 'AVICAM', 'FACE_TERMINAL');
         }
 
         if (device) {
@@ -1757,6 +1825,10 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
                 device = allDevices[0];
                 console.log(`${logPrefix} [RECOVERY] Only one Akuvox device in DB. Auto-matching...`);
             }
+        }
+
+        if (!device) {
+            device = await adoptDevice(macAddress, req.socket.remoteAddress, 'AKUVOX', 'DOOR_INTERCOM');
         }
 
         if (!device) {
@@ -2129,8 +2201,10 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
                 global.io.emit("access_event", {
                     ...event,
                     device,
-                    user,
-                    direction: event.direction // Ensure direction is explicitly sent
+                    user: user || { name: credentialValue },
+                    direction: event.direction,
+                    brand: 'AKUVOX',
+                    userName: credentialValue || user?.name || "Desconocido"
                 });
                 // Emit webhook event for topology animation
                 global.io.emit("webhook-event", {
@@ -2168,6 +2242,27 @@ const requestHandler = async (req, res) => {
     if (req.url === '/health' || req.url === '/ping') {
         res.writeHead(200);
         res.end('OK');
+        return;
+    }
+
+    // Test Socket
+    if (req.url === '/api/test-socket') {
+        console.log(`${logPrefix} 🧪 Manual Socket Test Triggered`);
+        if (global.io) {
+            global.io.emit("access_event", {
+                id: "test-" + Date.now(),
+                accessType: "FACE",
+                userName: "Test Manual",
+                brand: "AVICAM",
+                timestamp: new Date(),
+                device: { name: "Cámara Test" }
+            });
+            res.writeHead(200);
+            res.end("Emitted");
+        } else {
+            res.writeHead(500);
+            res.end("global.io not defined");
+        }
         return;
     }
 
@@ -2415,8 +2510,8 @@ const requestHandler = async (req, res) => {
             data: { lastOnlinePush: new Date() }
         }).catch(() => { });
 
-        // STRATEGY 1: Direct MJPEG Pipe (Linux/Dahua Efficient Stream)
-        if (device.brand === 'AKUVOX' || device.brand === 'DAHUA') {
+        // STRATEGY 1: Direct MJPEG Pipe (Linux/Dahua/Hikvision Efficient Stream)
+        if (device.brand === 'AKUVOX' || device.brand === 'DAHUA' || device.brand === 'HIKVISION') {
             const success = await proxyVideoStream(device, res, req);
             if (success) return;
         }
@@ -2515,6 +2610,12 @@ const io = new Server(httpServer, {
 
 io.on("connection", (socket) => {
     console.log(`Socket client connected: ${socket.id}`);
+
+    socket.on("ping_test", (data) => {
+        console.log(`[SOCKET-DEBUG] Ping received: ${data}`);
+        socket.emit("pong_test", "pong-" + data);
+        io.emit("broadcast_test", "broadcast-" + data);
+    });
 
     // Send history to new connection
     if (debugLogsHistory.length > 0) {

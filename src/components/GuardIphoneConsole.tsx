@@ -9,14 +9,15 @@ import {
     Camera, Mic, Trash2, Volume2, CheckCircle2,
     X, MoreVertical, Shield, Settings, Landmark,
     Building2, FileText, UserCheck, Briefcase, Plus,
-    Flame, Home, Clock, ImageIcon, Loader2,
+    Flame, Home, Download, Clock, ImageIcon, Loader2,
     Car, Bike, Smartphone, ChevronRight, Square,
-    ShieldAlert, UserX, CarFront, Filter, RefreshCw, AlertTriangle, Scan
+    ShieldAlert, UserX, CarFront, Filter, RefreshCw, AlertTriangle, Scan,
+    ChevronUp
 } from "lucide-react";
 import { io } from "socket.io-client";
 import { getSocketUrl } from "@/lib/socket-config";
 import { sileo as toast } from "sileo";
-import { createBitacoraEntry } from "@/app/actions/bitacora";
+import { createBitacoraEntry, searchRecentBitacora } from "@/app/actions/bitacora";
 import { getAccessEvents as getLprHistory, getPlateAnalysis } from "@/app/actions/history";
 import { searchUsers } from "@/app/actions/search";
 import { searchByPhotoAction } from "@/app/actions/face-verify";
@@ -119,6 +120,13 @@ export default function GuardIphoneConsole({
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const cameraStreamRef = useRef<MediaStream | null>(null);
 
+    const alarmAudioRef = useRef<HTMLAudioElement | null>(null);
+    const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+    const [updateAvailable, setUpdateAvailable] = useState(false);
+    const [showUpdateSplash, setShowUpdateSplash] = useState(false);
+    const [recentRecords, setRecentRecords] = useState<any[]>([]);
+    const [showSearchFillModal, setShowSearchFillModal] = useState(false);
+    const [isSearchingRecords, setIsSearchingRecords] = useState(false);
     const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null);
     const [otherGuards, setOtherGuards] = useState<any[]>([]);
     const [isOCRActive, setIsOCRActive] = useState(false);
@@ -155,6 +163,10 @@ export default function GuardIphoneConsole({
             toast.success({ title: "Conectado al servidor en tiempo real" });
         });
 
+        socketRef.current.onAny((eventName: string, ...args: any[]) => {
+            console.log(`DEBUG-SOCKET [${eventName}]:`, args);
+        });
+
         socketRef.current.on("disconnect", () => {
             console.warn("Socket disconnected");
             toast.show({ title: "Reconectando...", duration: null });
@@ -167,16 +179,28 @@ export default function GuardIphoneConsole({
             });
         });
 
-        socketRef.current.on("NEW_ACCESS", (event: any) => {
-            // Check if it's an LPR event or has a plate
+        socketRef.current.on("access_event", (event: any) => {
+            // Handle LPR events
             if (event.accessType === "PLATE" || event.plateDetected) {
                 setLprEntries(prev => {
                     if (prev.some(e => e.id === event.id)) return prev;
                     return [event, ...prev].slice(0, 100);
                 });
-
-                // If the user is on another tab, maybe show a small toast or just update state
-                // This makes it "in vivo"
+            }
+            
+            // Handle FACE events (Real-time update)
+            if (event.accessType === "FACE") {
+                setFaceEntries(prev => {
+                    if (prev.some(e => e.id === event.id)) return prev;
+                    return [event, ...prev].slice(0, 100);
+                });
+                
+                const person = event.userName || event.user?.name || "Desconocido";
+                toast.show({ 
+                    title: `ROSTRO DETECTADO: ${person}`,
+                    description: `Ubicación: ${event.location || event.device?.name || 'Cámara'}`,
+                    duration: 5000 
+                });
             }
         });
 
@@ -270,8 +294,45 @@ export default function GuardIphoneConsole({
         return () => {
             if (socketRef.current) socketRef.current.disconnect();
             if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+            if (alarmAudioRef.current) {
+                alarmAudioRef.current.pause();
+                alarmAudioRef.current.currentTime = 0;
+            }
         };
     }, []); // Run only once to establish stable connection
+
+    // Alarm Audio Control
+    useEffect(() => {
+        if (isAlertMode) {
+            if (!alarmAudioRef.current) {
+                alarmAudioRef.current = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
+                alarmAudioRef.current.loop = true;
+            }
+            alarmAudioRef.current.play().catch(e => console.log("Audio play blocked", e));
+        } else {
+            if (alarmAudioRef.current) {
+                alarmAudioRef.current.pause();
+                alarmAudioRef.current.currentTime = 0;
+            }
+        }
+    }, [isAlertMode]);
+
+    // Bitacora Search Fill Logic
+    useEffect(() => {
+        const query = (plate.length >= 3) ? plate : (destination.length >= 3 ? destination : "");
+        if (query) {
+            const timer = setTimeout(async () => {
+                setIsSearchingRecords(true);
+                const results = await searchRecentBitacora(query);
+                if (results && results.length > 0) {
+                    setRecentRecords(results);
+                    setShowSearchFillModal(true);
+                }
+                setIsSearchingRecords(false);
+            }, 1000);
+            return () => clearTimeout(timer);
+        }
+    }, [plate, destination]);
 
     useEffect(() => {
         if (isRecording) {
@@ -714,7 +775,6 @@ export default function GuardIphoneConsole({
                                     <TactilePlateInputMobile
                                         value={plate}
                                         onChange={setPlate}
-                                        onCameraClick={() => { setIsOCRActive(true); playTactileSound(); }}
                                     />
                                 </div>
 
@@ -1284,7 +1344,7 @@ export default function GuardIphoneConsole({
 
             {/* Bottom Navigation */}
             <footer className="h-20 md:h-24 bg-white border-t border-slate-200 px-1 shrink-0 z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.03)] pb-safe">
-                <div className="grid grid-cols-7 h-full items-center">
+                <div className="grid grid-cols-5 h-full items-center">
                     <BottomNavItem
                         icon={<UserIcon size={18} />}
                         active={activeTab === "control"}
@@ -1297,43 +1357,66 @@ export default function GuardIphoneConsole({
                         onClick={() => setActiveTab("history")}
                         label="Bitácora"
                     />
-                    <BottomNavItem
-                        icon={<UserCheck size={18} />}
-                        active={activeTab === "faces"}
-                        onClick={() => setActiveTab("faces")}
-                        label="Rostros"
-                    />
 
-                    {/* PERFECTLY Centered Panic Button */}
+                    {/* PERFECTLY Centered Panic Button with Slide-up */}
                     <div className="flex justify-center -mt-8">
-                        <button
-                            onMouseDown={startPanicHold}
-                            onMouseUp={cancelPanicHold}
-                            onMouseLeave={cancelPanicHold}
-                            onTouchStart={startPanicHold}
-                            onTouchEnd={cancelPanicHold}
-                            onClick={() => { if (isAlertMode) toggleAlertMode(false); playTactileSound(); }}
-                            className={cn(
-                                "w-16 h-16 rounded-full shadow-2xl flex items-center justify-center transition-all active:scale-95 border-4 border-white overflow-hidden relative group",
-                                isAlertMode ? "bg-red-600 text-white animate-pulse" : "bg-white text-red-600 shadow-red-100"
-                            )}
+                        <motion.div
+                            drag="y"
+                            dragConstraints={{ top: isAlertMode ? 0 : -100, bottom: isAlertMode ? 100 : 0 }}
+                            dragElastic={0.2}
+                            onDragEnd={(_, info) => {
+                                // Slide up to activate
+                                if (info.offset.y < -60) {
+                                    if (!isAlertMode) {
+                                        toggleAlertMode(true);
+                                        toast.error({ title: "¡ALERTA DE PÁNICO ACTIVADA!" });
+                                    }
+                                }
+                                // Slide down to deactivate
+                                if (info.offset.y > 60) {
+                                    if (isAlertMode) {
+                                        toggleAlertMode(false);
+                                        toast.success({ title: "PÁNICO DESACTIVADO" });
+                                    }
+                                }
+                            }}
+                            className="relative"
                         >
-                            {/* Hold Progress Ring */}
-                            {!isAlertMode && panicHoldProgress > 0 && (
-                                <svg className="absolute inset-0 w-full h-full -rotate-90">
-                                    <circle
-                                        cx="32" cy="32" r="28"
-                                        stroke="currentColor"
-                                        strokeWidth="4"
-                                        fill="transparent"
-                                        strokeDasharray={175.9}
-                                        strokeDashoffset={175.9 - (175.9 * panicHoldProgress) / 100}
-                                        className="text-red-100"
-                                    />
-                                </svg>
+                            <button
+                                onClick={() => { playTactileSound(); }}
+                                className={cn(
+                                    "w-16 h-16 rounded-full shadow-2xl flex items-center justify-center transition-all active:scale-95 border-4 border-white overflow-hidden relative group",
+                                    isAlertMode ? "bg-red-600 text-white animate-pulse" : "bg-white text-red-600 shadow-red-100"
+                                )}
+                            >
+                                <motion.div
+                                    animate={isAlertMode ? { scale: [1, 1.2, 1] } : {}}
+                                    transition={{ repeat: Infinity, duration: 1 }}
+                                >
+                                    <Siren size={28} className={cn("relative z-10", isAlertMode && "scale-110")} />
+                                </motion.div>
+                            </button>
+                            {!isAlertMode && (
+                                <motion.div 
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 0.4, y: [0, -5, 0] }}
+                                    transition={{ repeat: Infinity, duration: 2 }}
+                                    className="absolute -top-8 left-1/2 -translate-x-1/2 text-[8px] font-black uppercase text-red-600 whitespace-nowrap pointer-events-none"
+                                >
+                                    Slide up <ChevronUp size={8} className="inline" />
+                                </motion.div>
                             )}
-                            <Siren size={28} className={cn("relative z-10", isAlertMode && "scale-110")} />
-                        </button>
+                            {isAlertMode && (
+                                <motion.div 
+                                    initial={{ opacity: 0, y: -10 }}
+                                    animate={{ opacity: 0.6, y: [0, 5, 0] }}
+                                    transition={{ repeat: Infinity, duration: 2 }}
+                                    className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-[8px] font-black uppercase text-white whitespace-nowrap pointer-events-none"
+                                >
+                                    Slide down <ChevronUp size={8} className="inline rotate-180" />
+                                </motion.div>
+                            )}
+                        </motion.div>
                     </div>
 
                     <BottomNavItem
@@ -1347,12 +1430,6 @@ export default function GuardIphoneConsole({
                         active={activeTab === "map"}
                         onClick={() => setActiveTab("map")}
                         label="Mapa"
-                    />
-                    <BottomNavItem
-                        icon={<Settings size={18} />}
-                        active={showSettingsModal}
-                        onClick={() => { setShowSettingsModal(true); playTactileSound(); }}
-                        label="Perfil"
                     />
                 </div>
             </footer>
@@ -1882,6 +1959,46 @@ export default function GuardIphoneConsole({
 
                                 <button
                                     onClick={() => {
+                                        setIsCheckingUpdate(true);
+                                        setShowUpdateSplash(true);
+                                        if ('serviceWorker' in navigator) {
+                                            navigator.serviceWorker.getRegistrations().then(async (registrations) => {
+                                                let found = false;
+                                                for (let registration of registrations) {
+                                                    await registration.update();
+                                                    if (registration.waiting || registration.installing) {
+                                                        found = true;
+                                                    }
+                                                }
+                                                
+                                                setTimeout(() => {
+                                                    setIsCheckingUpdate(false);
+                                                    if (found) {
+                                                        setUpdateAvailable(true);
+                                                    } else {
+                                                        toast.info({ title: "La aplicación ya está actualizada" });
+                                                        setShowUpdateSplash(false);
+                                                    }
+                                                }, 2000);
+                                            });
+                                        } else {
+                                            setTimeout(() => {
+                                                setIsCheckingUpdate(false);
+                                                toast.info({ title: "PWA no soportada en este navegador" });
+                                                setShowUpdateSplash(false);
+                                            }, 1500);
+                                        }
+                                    }}
+                                    className="w-full h-16 bg-blue-50 rounded-3xl px-6 flex items-center gap-4 group active:bg-blue-100 transition-all"
+                                >
+                                    <div className="w-10 h-10 rounded-2xl bg-white shadow-sm flex items-center justify-center text-blue-600">
+                                        <Download size={18} />
+                                    </div>
+                                    <span className="text-blue-700 font-black uppercase text-xs">Actualizar APP</span>
+                                </button>
+
+                                <button
+                                    onClick={() => {
                                         if (confirm("¿Estás seguro que deseas cerrar sesión?")) {
                                             localStorage.removeItem("bitacora_guard_name");
                                             localStorage.removeItem("bitacora_guard_photo");
@@ -1906,16 +2023,7 @@ export default function GuardIphoneConsole({
                 )}
             </AnimatePresence>
 
-            {/* OCR Scanner Overlay */}
-            <AnimatePresence>
-                {isOCRActive && (
-                    <OCRScanner
-                        onDetected={handleOCRDetected}
-                        onClose={() => { setIsOCRActive(false); setFaceSearchMode(false); }}
-                        initialPhotoMode={faceSearchMode}
-                    />
-                )}
-            </AnimatePresence>
+
             {/* FULLSCREEN IMAGE ZOOM MODAL */}
             <AnimatePresence>
                 {zoomImage && (
@@ -2019,6 +2127,130 @@ export default function GuardIphoneConsole({
                                 className="w-full h-14 bg-slate-100 text-slate-900 rounded-3xl font-black uppercase tracking-widest text-xs active:scale-95 transition-all"
                             >
                                 CERRAR REPORTE
+                            </button>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* PWA UPDATE SPLASH */}
+            <AnimatePresence>
+                {showUpdateSplash && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[2000] bg-blue-600 flex flex-col items-center justify-center p-8 text-white overflow-hidden"
+                    >
+                        <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+                            className="mb-8 text-white/40"
+                        >
+                            <RefreshCw size={80} strokeWidth={3} />
+                        </motion.div>
+                        <h2 className="text-3xl font-black uppercase tracking-tighter mb-4 text-center">
+                            {isCheckingUpdate ? "Verificando Versión" : (updateAvailable ? "Actualización Lista" : "Omniaccess Pro")}
+                        </h2>
+                        <p className="text-[10px] font-bold text-white/50 uppercase tracking-[0.3em] mb-12 text-center">
+                            {isCheckingUpdate ? "Buscando cambios en la nube..." : (updateAvailable ? "Hay una nueva versión estable" : "Sistema al día")}
+                        </p>
+
+                        {updateAvailable && (
+                            <div className="w-full max-w-sm space-y-4">
+                                <button
+                                    onClick={() => window.location.reload()}
+                                    className="w-full h-18 bg-white text-blue-600 rounded-[2rem] font-black uppercase tracking-widest text-xs active:scale-95 transition-all shadow-2xl flex items-center justify-center gap-3"
+                                >
+                                    <Download size={18} /> Actualizar ahora
+                                </button>
+                                <button
+                                    onClick={() => setShowUpdateSplash(false)}
+                                    className="w-full h-18 bg-blue-700 text-white rounded-[2rem] font-black uppercase tracking-widest text-xs active:scale-95 transition-all"
+                                >
+                                    Recordar más tarde
+                                </button>
+                            </div>
+                        )}
+                        {!updateAvailable && isCheckingUpdate && (
+                            <div className="w-48 h-1.5 bg-white/10 rounded-full overflow-hidden relative">
+                                <motion.div 
+                                    className="absolute inset-y-0 left-0 bg-white"
+                                    initial={{ width: "0%" }}
+                                    animate={{ width: "100%" }}
+                                    transition={{ duration: 2 }}
+                                />
+                            </div>
+                        )}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* SEARCH FILL MODAL */}
+            <AnimatePresence>
+                {showSearchFillModal && recentRecords.length > 0 && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[1800] bg-slate-950/40 backdrop-blur-sm flex items-end"
+                        onClick={() => setShowSearchFillModal(false)}
+                    >
+                        <motion.div
+                            initial={{ y: "100%" }}
+                            animate={{ y: 0 }}
+                            exit={{ y: "100%" }}
+                            className="w-full bg-white rounded-t-[40px] p-8 pb-12 shadow-2xl space-y-8"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="flex justify-center">
+                                <div className="w-16 h-1.5 bg-slate-100 rounded-full" />
+                            </div>
+                            <div className="space-y-2 text-center">
+                                <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl mx-auto flex items-center justify-center mb-2">
+                                    <Clock size={28} />
+                                </div>
+                                <h3 className="text-2xl font-black uppercase tracking-tight text-slate-900 leading-none">Registros Encontrados</h3>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">¿Desea autocompletar con datos previos?</p>
+                            </div>
+
+                            <div className="space-y-4 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
+                                {recentRecords.map((record) => (
+                                    <button
+                                        key={record.id}
+                                        onClick={() => {
+                                            if (record.name) setName(record.name);
+                                            if (record.dni) setDni(record.dni);
+                                            if (record.destination) setDestination(record.destination);
+                                            setShowSearchFillModal(false);
+                                            toast.success({ title: "Datos autocompletados" });
+                                        }}
+                                        className="w-full p-6 rounded-[2rem] bg-slate-50 border border-slate-100 flex items-center justify-between text-left active:scale-[0.98] transition-all group hover:bg-white hover:border-blue-200"
+                                    >
+                                        <div className="space-y-2">
+                                            <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.2em]">Última visita: {new Date(record.timestamp).toLocaleDateString()}</p>
+                                            <p className="text-lg font-black text-slate-900 uppercase">{record.name || "Sin nombre"}</p>
+                                            <div className="flex gap-4">
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                                                    <FileText size={10} /> {record.dni || "---"}
+                                                </span>
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                                                    <Building2 size={10} /> {record.destination || "---"}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="w-10 h-10 rounded-2xl bg-white shadow-sm flex items-center justify-center text-slate-300 group-hover:text-blue-500 transition-colors">
+                                            <CheckCircle2 size={20} />
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+
+                            <button
+                                onClick={() => setShowSearchFillModal(false)}
+                                className="w-full h-16 bg-slate-100 text-slate-400 rounded-3xl font-black uppercase tracking-widest text-xs active:bg-slate-200 transition-all"
+                            >
+                                CONTINUAR MANUALMENTE
                             </button>
                         </motion.div>
                     </motion.div>
