@@ -34,24 +34,24 @@ export default function SecuritySidebar() {
     return (
         <aside
             className={cn(
-                "border-r border-white/5 flex flex-col h-full bg-[#050505] backdrop-blur-xl z-[150] transition-all duration-300 ease-in-out shrink-0",
+                "border-r border-border flex flex-col h-full bg-[#050505] backdrop-blur-xl z-[150] transition-all duration-300 ease-in-out shrink-0",
                 collapsed ? "w-[70px]" : "w-64"
             )}
         >
             <div className="p-4 border-b border-white/5 bg-black/20 flex items-center justify-between h-[60px]">
                 <div className={cn("flex items-center gap-2 overflow-hidden transition-all", collapsed ? "w-0 opacity-0" : "w-auto opacity-100")}>
                     <div className="w-6 h-6 bg-red-600 rounded flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(220,38,38,0.5)]">
-                        <ShieldCheck size={14} className="text-white" />
+                        <ShieldCheck size={14} className="text-foreground" />
                     </div>
                     <div className="whitespace-nowrap">
-                        <h2 className="text-xs font-black text-white uppercase tracking-[0.2em]">OmniAccess</h2>
-                        <p className="text-[8px] font-bold text-neutral-600 uppercase tracking-widest leading-none">Sentinel Pro</p>
+                        <h2 className="text-xs font-black text-foreground uppercase tracking-[0.2em]">OmniAccess</h2>
+                        <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest leading-none">Sentinel Pro</p>
                     </div>
                 </div>
 
                 <button
                     onClick={() => setCollapsed(!collapsed)}
-                    className={cn("p-1.5 rounded-lg hover:bg-white/5 text-neutral-500 transition-colors", collapsed && "mx-auto")}
+                    className={cn("p-1.5 rounded-lg hover:bg-accent text-muted-foreground transition-colors", collapsed && "mx-auto")}
                 >
                     {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
                 </button>
@@ -61,10 +61,10 @@ export default function SecuritySidebar() {
                 {items.map((item, id) => {
                     if (item.divider) {
                         return !collapsed ? (
-                            <div key={id} className="pt-3 pb-1 px-3 text-[9px] font-semibold text-neutral-600 uppercase tracking-wider">
+                            <div key={id} className="pt-3 pb-1 px-3 text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">
                                 {item.label}
                             </div>
-                        ) : <div key={id} className="my-2 border-t border-white/5" />;
+                        ) : <div key={id} className="my-2 border-t border-border" />;
                     }
 
                     const Icon = item.icon!;
@@ -76,7 +76,7 @@ export default function SecuritySidebar() {
                             href={item.href || "#"}
                             className={cn(
                                 "flex items-center gap-3 px-3 py-2.5 text-xs font-medium rounded-xl transition-all group relative",
-                                active ? "bg-red-600/10 text-white border border-red-600/20 shadow-[inset_0_0_10px_rgba(220,38,38,0.1)]" : "text-neutral-500 hover:bg-white/5 hover:text-white",
+                                active ? "bg-red-600/10 text-foreground border border-red-600/20 shadow-[inset_0_0_10px_rgba(220,38,38,0.1)]" : "text-muted-foreground hover:bg-accent hover:text-foreground",
                                 collapsed && "justify-center px-2"
                             )}
                         >
@@ -96,12 +96,12 @@ export default function SecuritySidebar() {
 
             {/* Profile */}
             <div className="p-3 border-t border-white/5 bg-black/40">
-                <div className={cn("flex items-center gap-3 p-2 rounded-2xl hover:bg-white/5 transition-colors cursor-pointer", collapsed && "justify-center p-0")}>
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-500 to-red-800 flex items-center justify-center text-white font-black text-xs shadow-lg shrink-0">A</div>
+                <div className={cn("flex items-center gap-3 p-2 rounded-2xl hover:bg-accent transition-colors cursor-pointer", collapsed && "justify-center p-0")}>
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-500 to-red-800 flex items-center justify-center text-foreground font-black text-xs shadow-lg shrink-0">A</div>
                     {!collapsed && (
                         <div className="overflow-hidden">
-                            <p className="text-[10px] font-black text-white leading-tight truncate">Admin Sentinel</p>
-                            <p className="text-[8px] text-neutral-600 font-bold uppercase tracking-tighter truncate">Tactical Unit</p>
+                            <p className="text-[10px] font-black text-foreground leading-tight truncate">Admin Sentinel</p>
+                            <p className="text-[8px] text-muted-foreground font-bold uppercase tracking-tighter truncate">Tactical Unit</p>
                         </div>
                     )}
                 </div>

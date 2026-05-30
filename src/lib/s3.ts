@@ -14,19 +14,19 @@ async function getS3Config() {
         ]);
 
         return {
-            endpoint: endpoint?.value || process.env.S3_ENDPOINT || "http://192.168.99.108:9000",
-            accessKey: accessKey?.value || process.env.S3_ACCESS_KEY || "root",
-            secretKey: secretKey?.value || process.env.S3_SECRET_KEY || "flavio20",
+            endpoint: endpoint?.value || process.env.S3_ENDPOINT || "",
+            accessKey: accessKey?.value || process.env.S3_ACCESS_KEY || "",
+            secretKey: secretKey?.value || process.env.S3_SECRET_KEY || "",
             bucketLpr: bucketLpr?.value || process.env.S3_BUCKET || "lpr-prod",
             bucketFace: bucketFace?.value || "face"
         };
     } catch (e) {
         console.warn("[S3 Config] Error fetching from DB, using fallback:", e);
         return {
-            endpoint: process.env.S3_ENDPOINT || "http://192.168.99.108:9000",
-            accessKey: process.env.S3_ACCESS_KEY || "root",
-            secretKey: process.env.S3_SECRET_KEY || "flavio20",
-            bucketLpr: process.env.S3_BUCKET_LPR || "lpr-prod",
+            endpoint: process.env.S3_ENDPOINT || "",
+            accessKey: process.env.S3_ACCESS_KEY || "",
+            secretKey: process.env.S3_SECRET_KEY || "",
+            bucketLpr: process.env.S3_BUCKET || "lpr-prod",
             bucketFace: process.env.S3_BUCKET_FACE || "face"
         };
     }
@@ -37,7 +37,6 @@ async function getS3Config() {
  * This is a safety measure when MinIO lifecycle is failing or slow.
  */
 async function recycleOldestObjects(s3Client: S3Client, bucketName: string, count: number = 100) {
-    console.log(`[S3-Recycle] ⚠️ Space low. Attempting to recycle oldest ${count} objects from ${bucketName}...`);
     try {
         const listCmd = new ListObjectsV2Command({
             Bucket: bucketName,
@@ -46,7 +45,6 @@ async function recycleOldestObjects(s3Client: S3Client, bucketName: string, coun
 
         const listRes = await s3Client.send(listCmd);
         if (!listRes.Contents || listRes.Contents.length === 0) {
-            console.log(`[S3-Recycle] Bucket ${bucketName} is empty, nothing to recycle.`);
             return;
         }
 
@@ -66,7 +64,6 @@ async function recycleOldestObjects(s3Client: S3Client, bucketName: string, coun
         });
 
         await s3Client.send(deleteCmd);
-        console.log(`[S3-Recycle] ✅ Successfully deleted ${oldest.length} oldest objects from ${bucketName}.`);
     } catch (error: any) {
         console.error(`[S3-Recycle] ❌ Failed to recycle objects:`, error.message);
     }
@@ -113,7 +110,6 @@ export async function uploadToS3(
             
             // Retry once after recycling
             try {
-                console.log(`[S3] Retrying upload: ${filename} after recycling...`);
                 const retryUpload = new Upload({
                     client: s3Client,
                     params: {

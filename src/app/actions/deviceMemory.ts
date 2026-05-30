@@ -31,7 +31,6 @@ export async function getDeviceFaces(deviceId: string) {
             }));
         } else {
             // Default to Face Search for everything else (Terminals, Face Cams, IPCs)
-            console.log(`[DeviceMemory] Attempting Face Search for Hikvision ${device.ip}`);
             const faces = await driver.getFacesFromCamera(device);
             items = faces.map((f: any, index: number) => ({
                 ID: f.employeeNo || f.FPID || f.faceURL || f.ID || `HIKFACE-${index}`,
@@ -46,7 +45,6 @@ export async function getDeviceFaces(deviceId: string) {
 
             // Fallback to LPR search if NO faces found and it's not explicitly a terminal
             if (items.length === 0 && device.deviceType !== 'FACE_TERMINAL') {
-                console.log(`[DeviceMemory] No faces found, falling back to LPR search for ${device.ip}`);
                 const plates = await driver.getPlates(device);
                 items = plates.map((plateNumber: string, index: number) => ({
                     ID: plateNumber,
@@ -181,7 +179,6 @@ export async function syncIdentityAction(deviceId: string, item: any, unitId?: s
                 cara: item.FaceUrl || null
             }
         });
-        console.log(`[Import] Created user: ${item.Name}`);
     }
 
     if (item.HasTag) {
@@ -337,35 +334,64 @@ export async function syncHardwareLogs(deviceId: string) {
         const logs = await driver.getDoorlog(device, 100); // Fetch last 100
 
         let created = 0;
+
+        // Prefetch: get all existing events for this device in the time range to avoid N+1
+        const logTimestamps = logs
+            .map((l: any) => new Date(l.Time))
+            .filter((d: Date) => !isNaN(d.getTime()));
+        const minTime = logTimestamps.length > 0
+            ? new Date(Math.min(...logTimestamps.map((d: Date) => d.getTime())) - 2000)
+            : new Date();
+        const maxTime = logTimestamps.length > 0
+            ? new Date(Math.max(...logTimestamps.map((d: Date) => d.getTime())) + 2000)
+            : new Date();
+
+        const existingEvents = await prisma.accessEvent.findMany({
+            where: {
+                deviceId: device.id,
+                timestamp: { gte: minTime, lte: maxTime }
+            },
+            select: { timestamp: true }
+        });
+        const existingTimestamps = existingEvents.map(e => e.timestamp.getTime());
+
+        // Prefetch users by names and card credentials
+        const logNames = logs.map((l: any) => l.Name).filter(Boolean);
+        const logCards = logs.map((l: any) => l.Card).filter(Boolean);
+        const [usersByName, usersByCard] = await Promise.all([
+            logNames.length > 0
+                ? prisma.user.findMany({ where: { name: { in: logNames } } })
+                : Promise.resolve([]),
+            logCards.length > 0
+                ? prisma.user.findMany({
+                    where: { credentials: { some: { value: { in: logCards } } } }
+                })
+                : Promise.resolve([])
+        ]);
+        const nameUserMap = new Map(usersByName.map(u => [u.name, u]));
+        const cardUserMap = new Map<string, any>();
+        // For card lookup we need credential->user mapping
+        if (logCards.length > 0) {
+            const cardCreds = await prisma.credential.findMany({
+                where: { value: { in: logCards } },
+                include: { user: true }
+            });
+            for (const cred of cardCreds) {
+                cardUserMap.set(cred.value, cred.user);
+            }
+        }
+
         for (const log of logs) {
             const timestamp = new Date(log.Time);
             if (isNaN(timestamp.getTime())) continue;
 
-            // Use a 2-second buffer to capture events already synced by webhooks
-            const startTime = new Date(timestamp.getTime() - 2000);
-            const endTime = new Date(timestamp.getTime() + 2000);
-
-            // Check if exists
-            const existing = await prisma.accessEvent.findFirst({
-                where: {
-                    deviceId: device.id,
-                    timestamp: {
-                        gte: startTime,
-                        lte: endTime
-                    }
-                }
-            });
+            // Check if exists using prefetched data (2-second window)
+            const ts = timestamp.getTime();
+            const existing = existingTimestamps.some(et => Math.abs(et - ts) <= 2000);
 
             if (!existing) {
-                // Try to find user by card or name
-                const user = await prisma.user.findFirst({
-                    where: {
-                        OR: [
-                            { name: log.Name },
-                            { credentials: { some: { value: log.Card } } }
-                        ]
-                    }
-                });
+                // Use prefetched user maps
+                const user = nameUserMap.get(log.Name) || cardUserMap.get(log.Card) || null;
 
                 await prisma.accessEvent.create({
                     data: {

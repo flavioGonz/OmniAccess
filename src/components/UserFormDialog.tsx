@@ -206,7 +206,6 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
             const plate = formData.get("plate") as string;
 
             if (plate && plate.trim() !== "" && syncDeviceIds.length > 0) {
-                console.log(`[LPR Sync] Starting sync for ${plate} to ${syncDeviceIds.length} devices...`, syncDeviceIds);
                 setActiveTab("sync");
                 setSyncStatus({ total: syncDeviceIds.length, current: 0, currentName: "" });
 
@@ -218,7 +217,6 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                     const devId = syncDeviceIds[i];
                     const device = devices.find(d => d.id === devId);
 
-                    console.log(`[LPR Sync] Processing ${i + 1}/${syncDeviceIds.length}: ${device?.name || devId}`);
 
                     setSyncStatus({
                         total: syncDeviceIds.length,
@@ -230,7 +228,6 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
 
                     try {
                         const res = await addDevicePlate(devId, plate.toUpperCase().trim());
-                        console.log(`[LPR Sync] Result for ${device?.name || devId}:`, res);
 
                         if (res.success) {
                             setDeviceSyncStatuses(prev => ({ ...prev, [devId]: 'success' }));
@@ -254,7 +251,6 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
             const syncFaceDeviceIds = Array.from(new Set(allFaceSyncIds));
 
             if (previewUrl && syncFaceDeviceIds.length > 0 && currentUserId) {
-                console.log(`[Face Sync] Starting sync for ${user?.name || "User"} to ${syncFaceDeviceIds.length} devices...`);
                 setActiveTab("sync");
                 if (!plate) setSyncStatus({ total: syncFaceDeviceIds.length, current: 0, currentName: "" }); // Reset if plate sync didn't run
 
@@ -273,7 +269,6 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                     try {
                         // Use syncUserToDevice which handles face sync
                         const res = await syncUserToDevice(devId, currentUserId);
-                        console.log(`[Face Sync] Result for ${device?.name}:`, res);
 
                         if (res) {
                             setDeviceSyncStatuses(prev => ({ ...prev, [devId]: 'success' }));
@@ -302,7 +297,7 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl p-0 bg-[#0a0a0a] border-white/10 overflow-hidden rounded-2xl gap-0 shadow-[0_20px_60px_rgba(0,0,0,0.8)] transition-all duration-300">
+            <DialogContent className="max-w-4xl p-0 bg-[#0a0a0a] border-border overflow-hidden rounded-2xl gap-0 shadow-[0_20px_60px_rgba(0,0,0,0.8)] transition-all duration-300">
                 <div className="flex flex-col md:flex-row h-full min-h-[500px]">
 
                     {/* Left Side: Form with Tabs */}
@@ -311,9 +306,9 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                             {initialData?.cara && !selectedFile && (
                                 <input type="hidden" name="cara" value={initialData.cara} />
                             )}
-                            <div className="px-6 pt-6 pb-3 border-b border-white/5">
+                            <div className="px-6 pt-6 pb-3 border-b border-border">
                                 <DialogHeader className="space-y-2">
-                                    <DialogTitle className="text-xl font-black text-white flex items-center gap-3 tracking-tight">
+                                    <DialogTitle className="text-xl font-black text-foreground flex items-center gap-3 tracking-tight">
                                         <div className={cn(
                                             "p-2 rounded-lg",
                                             isEdit ? "bg-blue-500/10 border border-blue-500/20" : "bg-emerald-500/10 border border-emerald-500/20"
@@ -322,7 +317,7 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                         </div>
                                         {isEdit ? "Perfil de Usuario" : "Nuevo Registro"}
                                     </DialogTitle>
-                                    <DialogDescription className="text-neutral-400 text-xs leading-relaxed pl-11">
+                                    <DialogDescription className="text-muted-foreground text-xs leading-relaxed pl-11">
                                         Gestión integral de identidad, residencia y credenciales de acceso
                                     </DialogDescription>
                                 </DialogHeader>
@@ -331,13 +326,13 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                             <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
                                 <div className="px-6 pt-3 pb-2">
                                     <TabsList className="w-full grid grid-cols-3 bg-black/40 border border-white/5 h-10 p-1 rounded-lg">
-                                        <TabsTrigger value="general" className="text-[10px] font-bold uppercase tracking-wider data-[state=active]:bg-white/10 data-[state=active]:text-white text-neutral-500 rounded-md transition-all duration-200">
+                                        <TabsTrigger value="general" className="text-[10px] font-bold uppercase tracking-wider data-[state=active]:bg-foreground/10 data-[state=active]:text-foreground text-muted-foreground rounded-md transition-all duration-200">
                                             General
                                         </TabsTrigger>
-                                        <TabsTrigger value="credentials" className="text-[10px] font-bold uppercase tracking-wider data-[state=active]:bg-white/10 data-[state=active]:text-white text-neutral-500 rounded-md transition-all duration-200">
+                                        <TabsTrigger value="credentials" className="text-[10px] font-bold uppercase tracking-wider data-[state=active]:bg-foreground/10 data-[state=active]:text-foreground text-muted-foreground rounded-md transition-all duration-200">
                                             Credenciales
                                         </TabsTrigger>
-                                        <TabsTrigger value="sync" className="text-[10px] font-bold uppercase tracking-wider data-[state=active]:bg-white/10 data-[state=active]:text-white text-neutral-500 rounded-md transition-all duration-200">
+                                        <TabsTrigger value="sync" className="text-[10px] font-bold uppercase tracking-wider data-[state=active]:bg-foreground/10 data-[state=active]:text-foreground text-muted-foreground rounded-md transition-all duration-200">
                                             Sincronización
                                         </TabsTrigger>
                                     </TabsList>
@@ -348,13 +343,13 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                     <TabsContent value="general" forceMount={true} className="mt-0 space-y-4 data-[state=inactive]:hidden">
                                         <div className="space-y-3">
                                             {/* Bloque Info Personal */}
-                                            <div className="flex items-center gap-2 text-[10px] font-black text-neutral-600 uppercase tracking-widest border-b border-neutral-800 pb-1">
+                                            <div className="flex items-center gap-2 text-[10px] font-black text-muted-foreground uppercase tracking-widest border-b border-border pb-1">
                                                 <UserIcon size={12} /> Información Básica
                                             </div>
 
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 p-3 rounded-lg bg-neutral-900/30 border border-neutral-800/50">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 p-3 rounded-lg bg-card/30 border border-border/50">
                                                 <div className="space-y-1.5">
-                                                    <Label className="text-neutral-400 text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                                                    <Label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
                                                         <UserIcon size={12} /> Nombre Completo
                                                     </Label>
                                                     <Input
@@ -362,12 +357,12 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                                         defaultValue={user?.name || initialData?.name}
                                                         placeholder="Nombre Apellido"
                                                         required
-                                                        className="bg-neutral-900 border-neutral-800 focus:border-blue-500/50 h-8 rounded-lg text-xs transition-all"
+                                                        className="bg-card border-border focus:border-blue-500/50 h-8 rounded-lg text-xs transition-all"
                                                     />
                                                 </div>
 
                                                 <div className="space-y-1.5">
-                                                    <Label className="text-neutral-400 text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                                                    <Label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
                                                         <Phone size={12} /> Teléfono / Whatsapp
                                                     </Label>
                                                     <Input
@@ -375,19 +370,19 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                                         type="tel"
                                                         defaultValue={user?.phone || ""}
                                                         placeholder="+54 9 11 ..."
-                                                        className="bg-neutral-900 border-neutral-800 focus:border-blue-500/50 h-8 rounded-lg text-xs transition-all"
+                                                        className="bg-card border-border focus:border-blue-500/50 h-8 rounded-lg text-xs transition-all"
                                                     />
                                                 </div>
 
                                                 <div className="space-y-1.5">
-                                                    <Label className="text-neutral-400 text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                                                    <Label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
                                                         <Briefcase size={12} /> Rol de Acceso
                                                     </Label>
                                                     <Select name="role" defaultValue={user?.role || "RESIDENT"}>
-                                                        <SelectTrigger className="bg-neutral-900 border-neutral-800 h-8 rounded-lg text-xs">
+                                                        <SelectTrigger className="bg-card border-border h-8 rounded-lg text-xs">
                                                             <SelectValue />
                                                         </SelectTrigger>
-                                                        <SelectContent className="bg-neutral-900 border-neutral-800 text-white rounded-lg">
+                                                        <SelectContent className="bg-card border-border text-foreground rounded-lg">
                                                             <SelectItem value="RESIDENT">Residente</SelectItem>
                                                             <SelectItem value="VISITOR">Visita</SelectItem>
                                                             <SelectItem value="TEMPORARY_VISITOR">Visita Temporal</SelectItem>
@@ -400,26 +395,26 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                                 </div>
 
                                                 <div className="space-y-1.5">
-                                                    <Label className="text-neutral-400 text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                                                    <Label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
                                                         <Shield size={12} /> Identificación (DNI)
                                                     </Label>
                                                     <Input
                                                         name="dni"
                                                         defaultValue={user?.dni || initialData?.dni}
                                                         placeholder="Opcional"
-                                                        className="bg-neutral-900 border-neutral-800 focus:border-blue-500/50 h-8 rounded-lg text-xs transition-all"
+                                                        className="bg-card border-border focus:border-blue-500/50 h-8 rounded-lg text-xs transition-all"
                                                     />
                                                 </div>
                                             </div>
 
                                             {/* Bloque Residencia */}
-                                            <div className="flex items-center gap-2 text-[10px] font-black text-neutral-600 uppercase tracking-widest border-b border-neutral-800 pb-1 mt-4">
+                                            <div className="flex items-center gap-2 text-[10px] font-black text-muted-foreground uppercase tracking-widest border-b border-border pb-1 mt-4">
                                                 <DoorOpen size={12} /> Residencia & Ubicación
                                             </div>
 
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 p-4 rounded-xl bg-black/20 border border-white/5">
                                                 <div className="space-y-2">
-                                                    <Label className="text-neutral-300 text-[11px] font-semibold tracking-wide flex items-center gap-2">
+                                                    <Label className="text-muted-foreground text-[11px] font-semibold tracking-wide flex items-center gap-2">
                                                         <DoorOpen size={14} className="text-blue-400" /> Lote / Unidad
                                                     </Label>
                                                     <Select
@@ -430,24 +425,24 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                                         <SelectTrigger className="bg-black/40 border-white/10 h-9 rounded-lg text-xs hover:border-white/20 transition-colors">
                                                             <SelectValue placeholder="Seleccionar lote..." />
                                                         </SelectTrigger>
-                                                        <SelectContent className="bg-neutral-900 border-white/10 text-white rounded-xl max-h-[200px]">
-                                                            <SelectItem value="none" className="text-neutral-500">Sin Asignación</SelectItem>
+                                                        <SelectContent className="bg-card border-border text-foreground rounded-xl max-h-[200px]">
+                                                            <SelectItem value="none" className="text-muted-foreground">Sin Asignación</SelectItem>
                                                             {units.map(u => (
-                                                                <SelectItem key={u.id} value={u.id} className="hover:bg-white/5">{u.name}</SelectItem>
+                                                                <SelectItem key={u.id} value={u.id} className="hover:bg-accent">{u.name}</SelectItem>
                                                             ))}
                                                         </SelectContent>
                                                     </Select>
                                                 </div>
 
                                                 <div className="space-y-1.5">
-                                                    <Label className="text-neutral-400 text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                                                    <Label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
                                                         <ParkingSquare size={12} /> Cochera / Parking Slot
                                                     </Label>
                                                     <Select name="parkingSlotId" defaultValue={user?.parkingSlotId || "none"}>
-                                                        <SelectTrigger className="bg-neutral-900 border-neutral-800 h-8 rounded-lg text-xs">
+                                                        <SelectTrigger className="bg-card border-border h-8 rounded-lg text-xs">
                                                             <SelectValue placeholder="Seleccionar Cochera..." />
                                                         </SelectTrigger>
-                                                        <SelectContent className="bg-neutral-900 border-neutral-800 text-white rounded-lg max-h-[200px]">
+                                                        <SelectContent className="bg-card border-border text-foreground rounded-lg max-h-[200px]">
                                                             <SelectItem value="none">Sin Cochera Asignada</SelectItem>
                                                             {parkingSlots.map(slot => {
                                                                 const isOccupied = slot.user && slot.user.id !== user?.id;
@@ -456,7 +451,7 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                                                         key={slot.id}
                                                                         value={slot.id}
                                                                         disabled={isOccupied}
-                                                                        className={cn(isOccupied && "text-neutral-600")}
+                                                                        className={cn(isOccupied && "text-muted-foreground")}
                                                                     >
                                                                         {slot.label} {isOccupied ? `(Ocupado: ${slot.user.name})` : ''}
                                                                     </SelectItem>
@@ -468,25 +463,25 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
 
                                                 {(isBuilding || user?.apartment) && (
                                                     <div className="space-y-1.5 col-span-1 sm:col-span-2 animate-in fade-in zoom-in duration-300">
-                                                        <Label className="text-neutral-400 text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                                                        <Label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
                                                             <MapPin size={12} /> Depto / Unidad Funcional
                                                         </Label>
                                                         <Input
                                                             name="apartment"
                                                             defaultValue={user?.apartment || ""}
                                                             placeholder="Ej: 4B, PB-2..."
-                                                            className="bg-neutral-900 border-neutral-800 focus:border-blue-500/50 h-8 rounded-lg text-xs transition-all"
+                                                            className="bg-card border-border focus:border-blue-500/50 h-8 rounded-lg text-xs transition-all"
                                                         />
                                                     </div>
                                                 )}
                                             </div>
 
                                             {/* Bloque Grupos */}
-                                            <div className="flex items-center gap-2 text-[10px] font-black text-neutral-600 uppercase tracking-widest border-b border-neutral-800 pb-1 mt-4">
+                                            <div className="flex items-center gap-2 text-[10px] font-black text-muted-foreground uppercase tracking-widest border-b border-border pb-1 mt-4">
                                                 <KeyRound size={12} /> Grupos de Seguridad
                                             </div>
 
-                                            <div className="flex flex-wrap gap-2 pt-1 p-3 rounded-lg bg-neutral-900/30 border border-neutral-800/50">
+                                            <div className="flex flex-wrap gap-2 pt-1 p-3 rounded-lg bg-card/30 border border-border/50">
                                                 {groups.map(group => (
                                                     <div
                                                         key={group.id}
@@ -495,7 +490,7 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                                             "px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-all select-none flex items-center gap-2",
                                                             selectedGroupIds.includes(group.id)
                                                                 ? "bg-blue-500/20 border-blue-500/50 text-blue-400 hover:bg-blue-500/30"
-                                                                : "bg-neutral-900 border-neutral-800 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300"
+                                                                : "bg-card border-border text-muted-foreground hover:border-border hover:text-muted-foreground"
                                                         )}
                                                     >
                                                         {selectedGroupIds.includes(group.id) && <Check size={10} />}
@@ -503,7 +498,7 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                                     </div>
                                                 ))}
                                                 {groups.length === 0 && (
-                                                    <span className="text-[10px] text-neutral-600 italic">No hay grupos creados.</span>
+                                                    <span className="text-[10px] text-muted-foreground italic">No hay grupos creados.</span>
                                                 )}
                                             </div>
                                             {selectedGroupIds.map(id => (
@@ -516,35 +511,35 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                     <TabsContent value="credentials" forceMount={true} className="mt-0 space-y-6 data-[state=inactive]:hidden">
                                         {/* Physical Access */}
                                         <div className="space-y-4">
-                                            <div className="flex items-center gap-2 text-[10px] font-black text-neutral-600 uppercase tracking-widest border-b border-neutral-800 pb-2">
+                                            <div className="flex items-center gap-2 text-[10px] font-black text-muted-foreground uppercase tracking-widest border-b border-border pb-2">
                                                 <BadgeCheck size={12} /> Control de Acceso (Físico)
                                             </div>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                 <div className="space-y-1.5">
-                                                    <Label className="text-neutral-400 text-[10px] uppercase font-bold tracking-wider">Tags de Acceso (NFC / RFID)</Label>
+                                                    <Label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Tags de Acceso (NFC / RFID)</Label>
                                                     <div className="relative group">
-                                                        <CreditCard size={14} className="absolute left-3 top-2.5 text-neutral-600" />
+                                                        <CreditCard size={14} className="absolute left-3 top-2.5 text-muted-foreground" />
                                                         <Input
                                                             name="accessTags"
                                                             defaultValue={user?.accessTags?.join(", ") || user?.credentials?.find(c => c.type === 'TAG')?.value || ""}
                                                             placeholder="Ej: E20030040506, TAG-9921"
-                                                            className="bg-neutral-900 border-neutral-800 focus:border-blue-500/50 pl-9 h-8 rounded-lg text-xs transition-all font-mono text-emerald-400 placeholder:text-neutral-700 pointer-events-auto"
+                                                            className="bg-card border-border focus:border-blue-500/50 pl-9 h-8 rounded-lg text-xs transition-all font-mono text-emerald-400 placeholder:text-muted-foreground pointer-events-auto"
                                                         />
                                                     </div>
-                                                    <p className="text-[9px] text-neutral-600 mt-1 pl-1">Separa múltiples tags con comas.</p>
+                                                    <p className="text-[9px] text-muted-foreground mt-1 pl-1">Separa múltiples tags con comas.</p>
                                                 </div>
                                                 <div className="space-y-1.5">
-                                                    <Label className="text-neutral-400 text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                                                    <Label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
                                                         Código PIN
                                                     </Label>
                                                     <div className="relative group">
-                                                        <KeyRound size={14} className="absolute left-3 top-2.5 text-neutral-600" />
+                                                        <KeyRound size={14} className="absolute left-3 top-2.5 text-muted-foreground" />
                                                         <Input
                                                             name="pin"
                                                             value={pinValue}
                                                             onChange={(e) => setPinValue(e.target.value)}
                                                             placeholder="Ej: 1234"
-                                                            className="bg-neutral-900 border-neutral-800 focus:border-blue-500/50 pl-9 h-8 rounded-lg text-xs transition-all font-mono text-amber-400 placeholder:text-neutral-700"
+                                                            className="bg-card border-border focus:border-blue-500/50 pl-9 h-8 rounded-lg text-xs transition-all font-mono text-amber-400 placeholder:text-muted-foreground"
                                                         />
                                                     </div>
                                                 </div>
@@ -560,16 +555,16 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
 
                                         {/* Vehicle Access */}
                                         <div className="space-y-4">
-                                            <div className="flex items-center gap-2 text-[10px] font-black text-neutral-600 uppercase tracking-widest border-b border-neutral-800 pb-2">
+                                            <div className="flex items-center gap-2 text-[10px] font-black text-muted-foreground uppercase tracking-widest border-b border-border pb-2">
                                                 <Car size={12} /> Credenciales LPR (Vehículo)
                                             </div>
 
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-end">
                                                 <div className="space-y-2">
-                                                    <Label className="text-neutral-400 text-[10px] uppercase font-bold tracking-wider">Matrícula</Label>
-                                                    <div className="relative w-full h-16 bg-white rounded border border-neutral-400 overflow-hidden shadow-sm flex flex-col group">
+                                                    <Label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Matrícula</Label>
+                                                    <div className="relative w-full h-16 bg-white rounded border border-border overflow-hidden shadow-sm flex flex-col group">
                                                         <div className="h-4 bg-[#003399] w-full flex items-center justify-between px-2">
-                                                            <span className="text-[6px] text-white font-bold tracking-widest">MERCOSUR</span>
+                                                            <span className="text-[6px] text-foreground font-bold tracking-widest">MERCOSUR</span>
                                                             <div className="w-3 h-1.5 bg-yellow-400/20 rounded-[1px]" />
                                                         </div>
                                                         <div className="flex-1 flex items-center justify-center">
@@ -578,23 +573,23 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                                                 value={plateValue}
                                                                 onChange={(e) => setPlateValue(e.target.value.toUpperCase())}
                                                                 placeholder="AAA000"
-                                                                className="w-full text-center text-xl font-black tracking-[0.1em] text-neutral-900 bg-transparent outline-none uppercase placeholder:text-neutral-200"
+                                                                className="w-full text-center text-xl font-black tracking-[0.1em] text-muted-foreground bg-transparent outline-none uppercase placeholder:text-foreground"
                                                             />
                                                         </div>
                                                     </div>
                                                 </div>
 
                                                 <div className="space-y-1.5">
-                                                    <Label className="text-neutral-400 text-[10px] uppercase font-bold tracking-wider">Clase</Label>
+                                                    <Label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Clase</Label>
                                                     <Select name="vehicleType" defaultValue={user?.vehicles?.[0]?.type || "SEDAN"}>
-                                                        <SelectTrigger className="bg-neutral-900 border-neutral-800 h-8 rounded-lg text-xs">
+                                                        <SelectTrigger className="bg-card border-border h-8 rounded-lg text-xs">
                                                             <SelectValue />
                                                         </SelectTrigger>
-                                                        <SelectContent className="bg-neutral-900 border-neutral-800 text-white rounded-lg">
+                                                        <SelectContent className="bg-card border-border text-foreground rounded-lg">
                                                             {VEHICLE_TYPES.map(vt => (
                                                                 <SelectItem key={vt.value} value={vt.value}>
                                                                     <div className="flex items-center gap-2">
-                                                                        <vt.icon size={14} className="text-neutral-500" />
+                                                                        <vt.icon size={14} className="text-muted-foreground" />
                                                                         {vt.label}
                                                                     </div>
                                                                 </SelectItem>
@@ -609,13 +604,13 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                     {/* --- TAB: SYNC --- */}
                                     <TabsContent value="sync" forceMount={true} className="mt-0 space-y-6 data-[state=inactive]:hidden">
                                         <div className="space-y-3">
-                                            <div className="flex items-center gap-2 text-[10px] font-black text-neutral-600 uppercase tracking-widest border-b border-neutral-800 pb-1">
+                                            <div className="flex items-center gap-2 text-[10px] font-black text-muted-foreground uppercase tracking-widest border-b border-border pb-1">
                                                 <Server size={12} /> Equipos con Acceso (por Grupos)
                                             </div>
-                                            <div className="bg-neutral-900/50 rounded-lg p-3 border border-white/5">
+                                            <div className="bg-card/50 rounded-lg p-3 border border-border">
                                                 {selectedGroupIds.length > 0 ? (
                                                     <div className="space-y-2">
-                                                        <p className="text-[9px] text-neutral-500 font-bold uppercase">Dispositivos con acceso Permitido:</p>
+                                                        <p className="text-[9px] text-muted-foreground font-bold uppercase">Dispositivos con acceso Permitido:</p>
                                                         <div className="flex flex-wrap gap-2">
                                                             {groups.filter(g => selectedGroupIds.includes(g.id)).flatMap(g => (g as any).devices || []).length > 0 ? (
                                                                 groups.filter(g => selectedGroupIds.includes(g.id)).flatMap(g => (g as any).devices || []).map((dev: any, i: number) => (
@@ -625,7 +620,7 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                                                     </div>
                                                                 ))
                                                             ) : (
-                                                                <span className="text-[9px] text-neutral-600 italic">No hay equipos vinculados a los grupos seleccionados.</span>
+                                                                <span className="text-[9px] text-muted-foreground italic">No hay equipos vinculados a los grupos seleccionados.</span>
                                                             )}
                                                         </div>
                                                     </div>
@@ -640,7 +635,7 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
 
                                         {/* Manual LPR Sync Selection */}
                                         <div className="space-y-3">
-                                            <div className="flex items-center gap-2 text-[10px] font-black text-neutral-600 uppercase tracking-widest border-b border-neutral-800 pb-1">
+                                            <div className="flex items-center gap-2 text-[10px] font-black text-muted-foreground uppercase tracking-widest border-b border-border pb-1">
                                                 <Camera size={12} /> Sincronización Manual (Cámaras LPR)
                                             </div>
                                             <div className="grid grid-cols-1 gap-2">
@@ -657,13 +652,13 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                                                     "p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all",
                                                                     isSelected
                                                                         ? "bg-emerald-500/10 border-emerald-500/30 ring-1 ring-emerald-500/20"
-                                                                        : "bg-neutral-900/40 border-neutral-800 hover:border-neutral-700"
+                                                                        : "bg-card/40 border-border hover:border-border"
                                                                 )}
                                                             >
                                                                 <div className="flex items-center gap-3">
                                                                     <div className={cn(
                                                                         "p-2 rounded-lg",
-                                                                        isSelected ? "bg-emerald-500/20 text-emerald-400" : "bg-neutral-800 text-neutral-500"
+                                                                        isSelected ? "bg-emerald-500/20 text-emerald-400" : "bg-muted text-muted-foreground"
                                                                     )}>
                                                                         {deviceSyncStatuses[device.id] === 'syncing' ? (
                                                                             <Loader2 size={14} className="animate-spin" />
@@ -677,7 +672,7 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                                                     </div>
                                                                     <div>
                                                                         <div className="flex items-center gap-2">
-                                                                            <p className="text-[11px] font-black text-white uppercase tracking-tight">{device.name}</p>
+                                                                            <p className="text-[11px] font-black text-foreground uppercase tracking-tight">{device.name}</p>
                                                                             {deviceSyncStatuses[device.id] === 'success' && (
                                                                                 <span className="text-[7px] bg-emerald-500/10 text-emerald-500 px-1 py-0 rounded uppercase font-bold">OK</span>
                                                                             )}
@@ -685,7 +680,7 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                                                                 <span className="text-[7px] bg-red-500/10 text-red-500 px-1 py-0 rounded uppercase font-bold">Error</span>
                                                                             )}
                                                                         </div>
-                                                                        <p className="text-[10px] font-mono text-neutral-500">{device.ip}</p>
+                                                                        <p className="text-[10px] font-mono text-muted-foreground">{device.ip}</p>
                                                                     </div>
                                                                 </div>
                                                                 {isSelected && !deviceSyncStatuses[device.id] && <Check size={16} className="text-emerald-500" />}
@@ -695,7 +690,7 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                                         );
                                                     })
                                                 ) : (
-                                                    <p className="text-[10px] text-neutral-600 italic p-2 text-center">No hay cámaras LPR registradas.</p>
+                                                    <p className="text-[10px] text-muted-foreground italic p-2 text-center">No hay cámaras LPR registradas.</p>
                                                 )}
                                             </div>
                                             {selectedDeviceIds.map(id => (
@@ -712,7 +707,7 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                             {/* Manual Face Sync Selection (Only if Face available) */}
                                             {previewUrl && (
                                                 <div className="space-y-3 pt-4">
-                                                    <div className="flex items-center gap-2 text-[10px] font-black text-neutral-600 uppercase tracking-widest border-b border-neutral-800 pb-1">
+                                                    <div className="flex items-center gap-2 text-[10px] font-black text-muted-foreground uppercase tracking-widest border-b border-border pb-1">
                                                         <ScanFace size={12} /> Sincronización Biométrica (Terminales Faciales)
                                                     </div>
                                                     <div className="grid grid-cols-1 gap-2">
@@ -729,13 +724,13 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                                                             "p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all",
                                                                             isSelected
                                                                                 ? "bg-purple-500/10 border-purple-500/30 ring-1 ring-purple-500/20"
-                                                                                : "bg-neutral-900/40 border-neutral-800 hover:border-neutral-700"
+                                                                                : "bg-card/40 border-border hover:border-border"
                                                                         )}
                                                                     >
                                                                         <div className="flex items-center gap-3">
                                                                             <div className={cn(
                                                                                 "p-2 rounded-lg",
-                                                                                isSelected ? "bg-purple-500/20 text-purple-400" : "bg-neutral-800 text-neutral-500"
+                                                                                isSelected ? "bg-purple-500/20 text-purple-400" : "bg-muted text-muted-foreground"
                                                                             )}>
                                                                                 {deviceSyncStatuses[device.id] === 'syncing' ? (
                                                                                     <Loader2 size={14} className="animate-spin" />
@@ -749,7 +744,7 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                                                             </div>
                                                                             <div>
                                                                                 <div className="flex items-center gap-2">
-                                                                                    <p className="text-[11px] font-black text-white uppercase tracking-tight">{device.name}</p>
+                                                                                    <p className="text-[11px] font-black text-foreground uppercase tracking-tight">{device.name}</p>
                                                                                     {deviceSyncStatuses[device.id] === 'success' && (
                                                                                         <span className="text-[7px] bg-emerald-500/10 text-emerald-500 px-1 py-0 rounded uppercase font-bold">OK</span>
                                                                                     )}
@@ -757,7 +752,7 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                                                                         <span className="text-[7px] bg-red-500/10 text-red-500 px-1 py-0 rounded uppercase font-bold">Error</span>
                                                                                     )}
                                                                                 </div>
-                                                                                <p className="text-[10px] font-mono text-neutral-500">{device.ip}</p>
+                                                                                <p className="text-[10px] font-mono text-muted-foreground">{device.ip}</p>
                                                                             </div>
                                                                         </div>
                                                                         {isSelected && !deviceSyncStatuses[device.id] && <Check size={16} className="text-purple-500" />}
@@ -767,7 +762,7 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                                                 );
                                                             })
                                                         ) : (
-                                                            <p className="text-[10px] text-neutral-600 italic p-2 text-center">No hay terminales faciales registrados.</p>
+                                                            <p className="text-[10px] text-muted-foreground italic p-2 text-center">No hay terminales faciales registrados.</p>
                                                         )}
                                                     </div>
                                                     {selectedFaceDeviceIds.map(id => (
@@ -788,14 +783,14 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                                     <div className="flex justify-between items-center">
                                                         <div className="flex items-center gap-2">
                                                             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                                                            <span className="text-[10px] font-black text-white uppercase tracking-tight">Sincronizando matrícula...</span>
+                                                            <span className="text-[10px] font-black text-foreground uppercase tracking-tight">Sincronizando matrícula...</span>
                                                         </div>
                                                         <span className="text-[10px] font-mono text-emerald-400">{Math.round((syncStatus.current / syncStatus.total) * 100)}%</span>
                                                     </div>
                                                     <Progress value={(syncStatus.current / syncStatus.total) * 100} indicatorClassName="bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
                                                     <div className="flex items-center gap-2">
-                                                        <Loader2 className="w-3 h-3 text-neutral-500 animate-spin" />
-                                                        <p className="text-[9px] font-bold text-neutral-500 uppercase italic">
+                                                        <Loader2 className="w-3 h-3 text-muted-foreground animate-spin" />
+                                                        <p className="text-[9px] font-bold text-muted-foreground uppercase italic">
                                                             {syncStatus.current === syncStatus.total ? "Sincronización Finalizada" : `Enviando a: ${syncStatus.currentName}`}
                                                         </p>
                                                     </div>
@@ -806,12 +801,12 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                 </div>
                             </Tabs>
 
-                            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-neutral-800/50 bg-neutral-950/50">
+                            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border/50 bg-background/50">
                                 <Button
                                     type="button"
                                     variant="ghost"
                                     onClick={() => onOpenChange(false)}
-                                    className="h-10 px-6 rounded-xl text-neutral-500 hover:text-white hover:bg-neutral-800 text-xs font-bold uppercase tracking-widest"
+                                    className="h-10 px-6 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted text-xs font-bold uppercase tracking-widest"
                                 >
                                     <X size={16} className="mr-2" />
                                     Cancelar
@@ -844,8 +839,8 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                                 className="object-cover transition-all duration-700 ease-out group-hover:scale-105 opacity-95 group-hover:opacity-100"
                             />
                         ) : (
-                            <div className="flex-1 flex flex-col items-center justify-center text-neutral-800 space-y-4 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-neutral-800/20 via-transparent to-transparent">
-                                <div className="w-32 h-32 rounded-full border-4 border-dashed border-neutral-800 flex items-center justify-center animate-spin-slow">
+                            <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground space-y-4 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-neutral-800/20 via-transparent to-transparent">
+                                <div className="w-32 h-32 rounded-full border-4 border-dashed border-border flex items-center justify-center animate-spin-slow">
                                     <Camera size={48} className="opacity-20" />
                                 </div>
                                 <p className="text-[10px] uppercase tracking-[0.4em] font-black opacity-30">Biometría (Cara)</p>
@@ -862,15 +857,15 @@ export function UserFormDialog({ user, initialData, units, groups, devices, park
                             <Button
                                 type="button"
                                 onClick={() => fileInputRef.current?.click()}
-                                className="bg-white text-black hover:bg-white/95 shadow-2xl border-0 font-bold rounded-xl py-5 px-8 transform transition-all duration-200 hover:scale-105 active:scale-95 mb-6"
+                                className="bg-white text-black hover:bg-foreground/10 shadow-2xl border-0 font-bold rounded-xl py-5 px-8 transform transition-all duration-200 hover:scale-105 active:scale-95 mb-6"
                             >
                                 <Upload size={18} className="mr-2" />
                                 {previewUrl ? "Cambiar Foto" : "Subir Foto"}
                             </Button>
 
-                            <div className="flex items-center gap-2 px-4 py-2 bg-neutral-900/50 backdrop-blur-xl rounded-full border border-white/5">
+                            <div className="flex items-center gap-2 px-4 py-2 bg-card/50 backdrop-blur-xl rounded-full border border-border">
                                 <div className={cn("w-1.5 h-1.5 rounded-full", previewUrl ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" : "bg-red-500")} />
-                                <span className="text-[10px] font-black text-white/50 uppercase tracking-widest">
+                                <span className="text-[10px] font-black text-foreground/70 uppercase tracking-widest">
                                     {previewUrl ? "Identidad Verificada" : "Pendiente de Imagen"}
                                 </span>
                             </div>

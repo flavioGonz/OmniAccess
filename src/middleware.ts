@@ -2,45 +2,78 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
 
-const secretKey = process.env.JWT_SECRET || 'omniaccess-secret-key-2026'
-const key = new TextEncoder().encode(secretKey)
+const secretKey = process.env.JWT_SECRET
+const key = secretKey ? new TextEncoder().encode(secretKey) : null
 
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl
 
-    // PUBLIC ROUTES (No Auth Required)
+    // --- ALWAYS PUBLIC (no auth needed) ---
     if (
-        pathname.startsWith('/api') || // Allow all API routes (including webhooks)
         pathname.startsWith('/_next') ||
         pathname === '/favicon.ico' ||
         pathname.startsWith('/branding') ||
         pathname.startsWith('/guards') ||
         pathname.startsWith('/sounds') ||
+        pathname.startsWith('/io/') ||
+        pathname.startsWith('/go2rtc/') ||
         pathname === '/login' ||
-        pathname === '/guard' || // Allow guard console (authorized by internal PIN)
-        pathname.startsWith('/guard-iphone') // Allow iphone guard console
+        pathname === '/guard' ||
+        pathname.startsWith('/guard-iphone')
     ) {
         return NextResponse.next()
     }
 
-    // PROTECTED ROUTES (/admin/*)
-    if (pathname.startsWith('/admin')) {
-        const session = request.cookies.get('session')?.value
-        if (!session) {
-            return NextResponse.redirect(new URL('/login', request.url))
-        }
+    // --- PUBLIC API ROUTES (webhooks, external integrations) ---
+    if (
+        pathname.startsWith('/api/webhooks/') ||
+        pathname === '/api/subscribe' ||
+        pathname === '/api/events' ||
+        pathname.startsWith('/api/files/') ||
+        pathname === '/api/system-status' ||
+        pathname.startsWith('/api/topology/') ||
+        pathname === '/api/queue-report' ||
+        pathname.startsWith('/api/queue/poll') ||
+        pathname.startsWith('/api/queue/report/send') ||
+        pathname.startsWith('/api/queue/reset') ||
+        pathname.startsWith('/api/queue/schedule/tick') ||
+        pathname.startsWith('/api/queue/report/tick') ||
+        pathname.startsWith('/api/onvif/notify') ||
+        pathname.startsWith('/api/snapshot/') ||
+        pathname.startsWith('/facepad/')
+    ) {
+        return NextResponse.next()
+    }
 
+    // --- PROTECTED API ROUTES (need session) ---
+    if (pathname.startsWith('/api/')) {
+        const session = request.cookies.get('session')?.value
+        if (!session || !key) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+        }
         try {
             await jwtVerify(session, key, { algorithms: ['HS256'] })
             return NextResponse.next()
-        } catch (e) {
+        } catch {
+            return NextResponse.json({ error: 'Sesion expirada' }, { status: 401 })
+        }
+    }
+
+    // --- PROTECTED PAGES (/admin/*) ---
+    if (pathname.startsWith('/admin')) {
+        const session = request.cookies.get('session')?.value
+        if (!session || !key) {
+            return NextResponse.redirect(new URL('/login', request.url))
+        }
+        try {
+            await jwtVerify(session, key, { algorithms: ['HS256'] })
+            return NextResponse.next()
+        } catch {
             return NextResponse.redirect(new URL('/login', request.url))
         }
     }
 
-    // Default: Allow if not explicitly protected (e.g. public pages)
-    // But ideally we should protect everything else or redirect to login?
-    // Let's assume root / redirects to /login if no session?
+    // Root -> login
     if (pathname === '/') {
         return NextResponse.redirect(new URL('/login', request.url))
     }
@@ -48,6 +81,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
 }
 
+
 export const config = {
-    matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+    matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 }
+

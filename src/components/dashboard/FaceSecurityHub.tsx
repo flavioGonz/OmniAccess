@@ -167,7 +167,7 @@ export default function FaceSecurityHub() {
             {/* Toggle Button */}
             <button
                 onClick={() => setIsOpen(true)}
-                className="fixed bottom-8 right-8 z-50 w-16 h-16 rounded-full bg-[#B20D30] text-white shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group"
+                className="fixed bottom-8 right-8 z-50 w-16 h-16 rounded-full bg-[#B20D30] text-foreground shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group"
             >
                 <Shield size={28} className="group-hover:rotate-12 transition-transform" />
                 <div className="absolute -top-2 -right-2 w-6 h-6 bg-white text-[#B20D30] rounded-full text-[10px] font-black flex items-center justify-center border-2 border-[#B20D30] animate-pulse">
@@ -181,30 +181,30 @@ export default function FaceSecurityHub() {
                         initial={{ opacity: 0, x: 400 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: 400 }}
-                        className="fixed inset-y-0 right-0 w-[450px] z-[100] bg-[#0A0A0A] border-l border-white/10 shadow-[-20px_0_50px_rgba(0,0,0,0.5)] flex flex-col"
+                        className="fixed inset-y-0 right-0 w-[450px] z-[100] bg-[#0A0A0A] border-l border-border shadow-[-20px_0_50px_rgba(0,0,0,0.5)] flex flex-col"
                     >
                         {/* Header */}
-                        <div className="p-8 border-b border-white/5 bg-gradient-to-r from-[#B20D30]/10 to-transparent">
+                        <div className="p-8 border-b border-border bg-gradient-to-r from-[#B20D30]/10 to-transparent">
                             <div className="flex items-center justify-between mb-6">
                                 <div className="flex items-center gap-4">
                                     <div className="w-12 h-12 rounded-2xl bg-[#B20D30]/20 flex items-center justify-center border border-[#B20D30]/30">
                                         <Shield className="text-[#B20D30]" size={24} />
                                     </div>
                                     <div>
-                                        <h2 className="text-xl font-black text-white uppercase tracking-tighter">OmniAccess Hub</h2>
-                                        <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest">Inteligencia Biométrica</p>
+                                        <h2 className="text-xl font-black text-foreground uppercase tracking-tighter">OmniAccess Hub</h2>
+                                        <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Inteligencia Biométrica</p>
                                     </div>
                                 </div>
                                 <button
                                     onClick={() => setIsOpen(false)}
-                                    className="w-10 h-10 rounded-xl hover:bg-white/5 text-neutral-500 flex items-center justify-center transition-all"
+                                    className="w-10 h-10 rounded-xl hover:bg-accent text-muted-foreground flex items-center justify-center transition-all"
                                 >
                                     <X size={20} />
                                 </button>
                             </div>
 
                             {/* Tabs */}
-                            <div className="flex gap-2 p-1.5 bg-white/5 rounded-2xl">
+                            <div className="flex gap-2 p-1.5 bg-foreground/10 rounded-2xl">
                                 {(["blacklist", "search", "register"] as const).map((t) => (
                                     <button
                                         key={t}
@@ -215,7 +215,7 @@ export default function FaceSecurityHub() {
                                         }}
                                         className={cn(
                                             "flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                                            activeTab === t ? "bg-[#B20D30] text-white shadow-lg" : "text-neutral-500 hover:text-white"
+                                            activeTab === t ? "bg-[#B20D30] text-foreground shadow-lg" : "text-muted-foreground hover:text-foreground"
                                         )}
                                     >
                                         {t === "blacklist" ? "Lista Negra" : t === "search" ? "Buscador" : "Registrar"}
@@ -229,7 +229,7 @@ export default function FaceSecurityHub() {
                             {activeTab === "blacklist" && (
                                 <div className="space-y-6">
                                     <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 flex items-center gap-4">
-                                        <div className="w-10 h-10 rounded-full bg-red-500 text-white flex items-center justify-center shrink-0">
+                                        <div className="w-10 h-10 rounded-full bg-red-500 text-foreground flex items-center justify-center shrink-0">
                                             <AlertTriangle size={20} />
                                         </div>
                                         <p className="text-xs font-bold text-red-200">
@@ -239,15 +239,15 @@ export default function FaceSecurityHub() {
 
                                     {loading ? (
                                         <div className="flex flex-col items-center justify-center py-20 gap-4 opacity-50">
-                                            <Loader2 className="animate-spin text-white" size={32} />
-                                            <p className="text-[10px] font-black uppercase tracking-widest text-white">Sincronizando Base de Datos...</p>
+                                            <Loader2 className="animate-spin text-foreground" size={32} />
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-foreground">Sincronizando Base de Datos...</p>
                                         </div>
                                     ) : blacklist.length === 0 ? (
                                         <div className="text-center py-20 space-y-4">
-                                            <div className="w-20 h-20 rounded-full bg-white/5 mx-auto flex items-center justify-center text-neutral-700">
+                                            <div className="w-20 h-20 rounded-full bg-foreground/10 mx-auto flex items-center justify-center text-muted-foreground">
                                                 <ShieldCheck size={40} />
                                             </div>
-                                            <p className="text-[10px] font-black uppercase tracking-widest text-neutral-500">Lista Negra Limpia</p>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Lista Negra Limpia</p>
                                         </div>
                                     ) : (
                                         <div className="grid grid-cols-1 gap-4">
@@ -260,26 +260,26 @@ export default function FaceSecurityHub() {
                             {activeTab === "register" && (
                                 <form onSubmit={handleRegister} className="space-y-8">
                                     <div className="space-y-4">
-                                        <p className="text-[10px] font-black text-neutral-500 uppercase tracking-[0.3em]">Captura Biométrica</p>
+                                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em]">Captura Biométrica</p>
                                         <div
                                             onClick={() => document.getElementById('face-upload')?.click()}
-                                            className="w-full aspect-square rounded-[3rem] bg-white/5 border-2 border-dashed border-white/10 flex flex-col items-center justify-center gap-4 cursor-pointer hover:bg-white/10 transition-all relative overflow-hidden group"
+                                            className="w-full aspect-square rounded-[3rem] bg-foreground/10 border-2 border-dashed border-border flex flex-col items-center justify-center gap-4 cursor-pointer hover:bg-accent transition-all relative overflow-hidden group"
                                         >
                                             {regPreview ? (
                                                 <>
                                                     <Image src={regPreview} alt="Preview" fill className="object-cover group-hover:scale-105 transition-transform" />
                                                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <RefreshCw className="text-white animate-spin-slow" size={40} />
+                                                        <RefreshCw className="text-foreground animate-spin-slow" size={40} />
                                                     </div>
                                                 </>
                                             ) : (
                                                 <>
-                                                    <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center text-neutral-600 group-hover:text-white transition-colors">
+                                                    <div className="w-20 h-20 rounded-full bg-foreground/10 flex items-center justify-center text-muted-foreground group-hover:text-foreground transition-colors">
                                                         <Camera size={40} />
                                                     </div>
                                                     <div className="text-center">
-                                                        <p className="text-xs font-black text-white uppercase">Cargar Rostro</p>
-                                                        <p className="text-[9px] text-neutral-500 font-bold uppercase mt-1">PNG, JPG hasta 5MB</p>
+                                                        <p className="text-xs font-black text-foreground uppercase">Cargar Rostro</p>
+                                                        <p className="text-[9px] text-muted-foreground font-bold uppercase mt-1">PNG, JPG hasta 5MB</p>
                                                     </div>
                                                 </>
                                             )}
@@ -288,38 +288,38 @@ export default function FaceSecurityHub() {
                                     </div>
 
                                     <div className="space-y-6">
-                                        <p className="text-[10px] font-black text-neutral-500 uppercase tracking-[0.3em]">Datos del Perfil</p>
+                                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em]">Datos del Perfil</p>
                                         <div className="space-y-4">
                                             <div>
-                                                <label className="text-[8px] font-black text-neutral-500 uppercase mb-2 block">Nombre Completo / Alias</label>
+                                                <label className="text-[8px] font-black text-muted-foreground uppercase mb-2 block">Nombre Completo / Alias</label>
                                                 <Input
                                                     value={regName}
                                                     onChange={(e) => setRegName(e.target.value)}
                                                     placeholder="P ej: JUAN PÉREZ (SOSPECHOSO)"
-                                                    className="bg-white/5 border-white/10 text-white placeholder:text-neutral-700 h-14 rounded-2xl font-bold uppercase transition-all focus:ring-2 focus:ring-[#B20D30]"
+                                                    className="bg-foreground/10 border-border text-foreground placeholder:text-muted-foreground h-14 rounded-2xl font-bold uppercase transition-all focus:ring-2 focus:ring-[#B20D30]"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="text-[8px] font-black text-neutral-500 uppercase mb-2 block">Cédula / Identificación (Opcional)</label>
+                                                <label className="text-[8px] font-black text-muted-foreground uppercase mb-2 block">Cédula / Identificación (Opcional)</label>
                                                 <Input
                                                     value={regDni}
                                                     onChange={(e) => setRegDni(e.target.value)}
                                                     placeholder="Opcional"
-                                                    className="bg-white/5 border-white/10 text-white placeholder:text-neutral-700 h-14 rounded-2xl font-bold uppercase transition-all focus:ring-2 focus:ring-[#B20D30]"
+                                                    className="bg-foreground/10 border-border text-foreground placeholder:text-muted-foreground h-14 rounded-2xl font-bold uppercase transition-all focus:ring-2 focus:ring-[#B20D30]"
                                                 />
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center gap-4 bg-white/5 p-4 rounded-3xl border border-white/5">
+                                        <div className="flex items-center gap-4 bg-foreground/10 p-4 rounded-3xl border border-border">
                                             <div className={cn(
                                                 "w-10 h-10 rounded-full flex items-center justify-center transition-all",
-                                                regIsBlacklist ? "bg-red-500 text-white shadow-lg shadow-red-900/40" : "bg-emerald-500 text-white shadow-lg shadow-emerald-900/40"
+                                                regIsBlacklist ? "bg-red-500 text-foreground shadow-lg shadow-red-900/40" : "bg-emerald-500 text-foreground shadow-lg shadow-emerald-900/40"
                                             )}>
                                                 {regIsBlacklist ? <ShieldAlert size={20} /> : <UserCheck size={20} />}
                                             </div>
                                             <div className="flex-1">
-                                                <p className="text-[10px] font-black text-white uppercase">{regIsBlacklist ? "Registrar en Lista Negra" : "Registrar como VIP/Regular"}</p>
-                                                <p className="text-[8px] text-neutral-500 font-bold">Define si este rostro generará alerta.</p>
+                                                <p className="text-[10px] font-black text-foreground uppercase">{regIsBlacklist ? "Registrar en Lista Negra" : "Registrar como VIP/Regular"}</p>
+                                                <p className="text-[8px] text-muted-foreground font-bold">Define si este rostro generará alerta.</p>
                                             </div>
                                             <button
                                                 type="button"
@@ -342,7 +342,7 @@ export default function FaceSecurityHub() {
                                         disabled={isSubmitting}
                                         className={cn(
                                             "w-full h-16 rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] shadow-2xl transition-all active:scale-95",
-                                            regIsBlacklist ? "bg-[#B20D30] hover:bg-red-700 text-white" : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                            regIsBlacklist ? "bg-[#B20D30] hover:bg-red-700 text-foreground" : "bg-emerald-600 hover:bg-emerald-700 text-foreground"
                                         )}
                                     >
                                         {isSubmitting ? <Loader2 className="animate-spin" /> : "Finalizar Registro"}
@@ -353,36 +353,36 @@ export default function FaceSecurityHub() {
                             {activeTab === "search" && (
                                 <div className="space-y-8">
                                     <div className="space-y-6">
-                                        <p className="text-[10px] font-black text-neutral-500 uppercase tracking-[0.3em]">Tipo de Búsqueda</p>
+                                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em]">Tipo de Búsqueda</p>
 
                                         {/* Search Actions */}
                                         <div className="grid grid-cols-2 gap-4">
                                             <div
                                                 onClick={() => document.getElementById('image-search-input')?.click()}
-                                                className="group p-6 rounded-[2rem] bg-white/5 border border-white/5 hover:bg-[#B20D30]/10 hover:border-[#B20D30]/30 transition-all cursor-pointer flex flex-col items-center text-center gap-3"
+                                                className="group p-6 rounded-[2rem] bg-foreground/10 border border-border hover:bg-[#B20D30]/10 hover:border-[#B20D30]/30 transition-all cursor-pointer flex flex-col items-center text-center gap-3"
                                             >
                                                 {isSearchingImg ? (
                                                     <Loader2 className="text-[#B20D30] animate-spin" size={32} />
                                                 ) : (
-                                                    <ImageIcon className="text-neutral-500 group-hover:text-[#B20D30] transition-colors" size={32} />
+                                                    <ImageIcon className="text-muted-foreground group-hover:text-[#B20D30] transition-colors" size={32} />
                                                 )}
-                                                <span className="text-[10px] font-black uppercase tracking-widest text-white">Búsqueda Visual</span>
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-foreground">Búsqueda Visual</span>
                                             </div>
                                             <input id="image-search-input" type="file" accept="image/*" className="hidden" onChange={handleImageSearch} />
 
-                                            <div className="group p-6 rounded-[2rem] bg-white/5 border border-white/5 hover:bg-blue-500/10 hover:border-blue-500/30 transition-all flex flex-col items-center text-center gap-3">
-                                                <Fingerprint className="text-neutral-500 group-hover:text-blue-500 transition-colors" size={32} />
-                                                <span className="text-[10px] font-black uppercase tracking-widest text-white">Biometría</span>
+                                            <div className="group p-6 rounded-[2rem] bg-foreground/10 border border-border hover:bg-blue-500/10 hover:border-blue-500/30 transition-all flex flex-col items-center text-center gap-3">
+                                                <Fingerprint className="text-muted-foreground group-hover:text-blue-500 transition-colors" size={32} />
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-foreground">Biometría</span>
                                             </div>
                                         </div>
 
                                         <div className="relative">
-                                            <Search className="absolute left-5 top-5 text-neutral-600" size={20} />
+                                            <Search className="absolute left-5 top-5 text-muted-foreground" size={20} />
                                             <Input
                                                 value={searchQuery}
                                                 onChange={(e) => handleTextSearch(e.target.value)}
                                                 placeholder="Buscar por nombre o CI..."
-                                                className="bg-white/5 border-white/10 text-white pl-14 h-16 rounded-[2rem] font-bold uppercase transition-all focus:ring-2 focus:ring-[#B20D30]"
+                                                className="bg-foreground/10 border-border text-foreground pl-14 h-16 rounded-[2rem] font-bold uppercase transition-all focus:ring-2 focus:ring-[#B20D30]"
                                             />
                                         </div>
                                     </div>
@@ -406,7 +406,7 @@ export default function FaceSecurityHub() {
                                                 <div className="absolute inset-0 flex flex-col items-center justify-center z-30 pointer-events-none">
                                                     <div className="w-40 h-40 border border-[#B20D30]/50 rounded-full animate-ping opacity-20" />
                                                     <Loader2 className="animate-spin text-[#B20D30] mb-4" size={40} />
-                                                    <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white">Neural Analysis In Progress...</p>
+                                                    <p className="text-[10px] font-black uppercase tracking-[0.4em] text-foreground">Neural Analysis In Progress...</p>
                                                 </div>
                                             </motion.div>
                                         ) : (
@@ -419,10 +419,10 @@ export default function FaceSecurityHub() {
                                                     >
                                                         <div>
                                                             <p className="text-[8px] font-black text-[#B20D30] uppercase tracking-widest">Identidad Reconocida</p>
-                                                            <p className="text-sm font-black text-white uppercase">{recognizedSubject.subject}</p>
+                                                            <p className="text-sm font-black text-foreground uppercase">{recognizedSubject.subject}</p>
                                                         </div>
                                                         <div className="text-right">
-                                                            <p className="text-[8px] font-black text-neutral-500 uppercase tracking-widest">Confianza</p>
+                                                            <p className="text-[8px] font-black text-muted-foreground uppercase tracking-widest">Confianza</p>
                                                             <p className="text-sm font-black text-emerald-500">{(recognizedSubject.similarity * 100).toFixed(1)}%</p>
                                                         </div>
                                                     </motion.div>
@@ -451,7 +451,7 @@ export default function FaceSecurityHub() {
                                                                 setSearchResults([]);
                                                                 setSearchQuery("");
                                                             }}
-                                                            className="text-[10px] font-black uppercase tracking-widest text-[#B20D30] hover:text-white"
+                                                            className="text-[10px] font-black uppercase tracking-widest text-[#B20D30] hover:text-foreground"
                                                         >
                                                             Limpiar Búsqueda Visual
                                                         </Button>
@@ -467,8 +467,8 @@ export default function FaceSecurityHub() {
                         {/* Footer Overlay */}
                         <div className="p-8 border-t border-white/5 bg-black/40 backdrop-blur-md">
                             <div className="flex items-center justify-between opacity-50">
-                                <span className="text-[8px] font-black uppercase tracking-widest text-neutral-500">OmniAccess Biometric Core</span>
-                                <span className="text-[8px] font-black uppercase tracking-widest text-neutral-500 flex items-center gap-1">
+                                <span className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">OmniAccess Biometric Core</span>
+                                <span className="text-[8px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1">
                                     <div className="w-1 h-1 rounded-full bg-[#B20D30] animate-pulse" /> Encrypted System
                                 </span>
                             </div>
@@ -497,7 +497,7 @@ function UserCardList({ users, onRemove }: { users: any[], onRemove?: (id: strin
     return (
         <div className="grid grid-cols-1 gap-4">
             {users.map((user) => (
-                <div key={user.id} className="bg-white/5 border border-white/5 rounded-[2rem] p-5 flex items-center gap-4 hover:bg-white/10 transition-all group">
+                <div key={user.id} className="bg-foreground/10 border border-border rounded-[2rem] p-5 flex items-center gap-4 hover:bg-accent transition-all group">
                     <div className="w-20 h-20 rounded-[1.5rem] bg-black shrink-0 relative overflow-hidden border-2 border-white/10 group-hover:border-[#B20D30]/50 transition-colors">
                         {user.cara ? (
                             <Image
@@ -506,11 +506,11 @@ function UserCardList({ users, onRemove }: { users: any[], onRemove?: (id: strin
                                 fill
                                 className="object-cover grayscale group-hover:grayscale-0 transition-all"
                             />
-                        ) : <div className="w-full h-full flex items-center justify-center text-neutral-800"><Camera size={32} /></div>}
+                        ) : <div className="w-full h-full flex items-center justify-center text-muted-foreground"><Camera size={32} /></div>}
                     </div>
                     <div className="flex-1 min-w-0">
-                        <h4 className="text-sm font-black text-white uppercase truncate tracking-tighter">{user.name}</h4>
-                        <p className="text-[10px] font-bold text-neutral-500 mb-2 truncate">
+                        <h4 className="text-sm font-black text-foreground uppercase truncate tracking-tighter">{user.name}</h4>
+                        <p className="text-[10px] font-bold text-muted-foreground mb-2 truncate">
                             {user.dni || "S/DNI"} • {user.unit?.name || "Visitante"}
                         </p>
                         <div className="flex items-center gap-2">
@@ -519,13 +519,13 @@ function UserCardList({ users, onRemove }: { users: any[], onRemove?: (id: strin
                             ) : (
                                 <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[8px] font-black uppercase">AUTORIZADO</Badge>
                             )}
-                            <Badge className="bg-white/5 text-neutral-500 border-white/10 text-[8px] font-black uppercase">BIO-LINK</Badge>
+                            <Badge className="bg-foreground/10 text-muted-foreground border-border text-[8px] font-black uppercase">BIO-LINK</Badge>
                         </div>
                     </div>
                     {onRemove && (
                         <button
                             onClick={() => onRemove(user.id)}
-                            className="w-12 h-12 rounded-2xl bg-white/5 text-neutral-500 hover:bg-red-500 hover:text-white transition-all flex items-center justify-center"
+                            className="w-12 h-12 rounded-2xl bg-foreground/10 text-muted-foreground hover:bg-red-500 hover:text-foreground transition-all flex items-center justify-center"
                         >
                             <Trash2 size={20} />
                         </button>

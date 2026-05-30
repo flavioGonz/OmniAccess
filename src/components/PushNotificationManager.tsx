@@ -22,7 +22,6 @@ export function PushNotificationManager() {
     useEffect(() => {
         // Feature check
         if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-            console.log("Push notifications not supported");
             return;
         }
 
@@ -30,7 +29,6 @@ export function PushNotificationManager() {
             try {
                 // 1. Register Service Worker
                 const registration = await navigator.serviceWorker.register('/sw.js');
-                console.log('Service Worker Registered');
 
                 // 2. Check for existing subscription
                 let subscription = await registration.pushManager.getSubscription();
@@ -53,7 +51,6 @@ export function PushNotificationManager() {
                     body: JSON.stringify(subscription)
                 });
 
-                console.log("Push Subscription Sync Complete");
 
             } catch (error) {
                 console.error("Push registration error:", error);

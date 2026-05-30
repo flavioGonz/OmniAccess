@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Image from "next/image";
+import { useSearchParams, useRouter } from "next/navigation";
 import { getUsers, deleteUser } from "@/app/actions/users";
 import { getUnits } from "@/app/actions/units";
 import { getAccessGroups } from "@/app/actions/groups";
@@ -112,8 +113,24 @@ export default function UsersPage() {
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [userToDelete, setUserToDelete] = useState<UserWithRelations | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [createInitialData, setCreateInitialData] = useState<{ cara?: string } | undefined>(undefined);
     const observerTarget = useRef(null);
     const pageSize = 20; // Increased for denser view
+    const searchParams = useSearchParams();
+    const router = useRouter();
+
+    // Handle ?action=create&face=... from EventDetailsDialog
+    useEffect(() => {
+        const action = searchParams.get("action");
+        const face = searchParams.get("face");
+        if (action === "create") {
+            if (face) setCreateInitialData({ cara: decodeURIComponent(face) });
+            setSelectedUser(null);
+            setIsFormOpen(true);
+            // Clean URL
+            router.replace("/admin/users", { scroll: false });
+        }
+    }, [searchParams]);
 
     useEffect(() => {
         const observer = new IntersectionObserver(
@@ -217,8 +234,8 @@ export default function UsersPage() {
                             <Users size={18} className="text-indigo-400" />
                         </div>
                         <div>
-                            <h1 className="text-lg font-bold text-white tracking-tight leading-none">Gestión de Identidades</h1>
-                            <p className="text-[10px] text-neutral-500 font-medium uppercase tracking-widest mt-0.5">
+                            <h1 className="text-lg font-bold text-foreground tracking-tight leading-none">Gestión de Identidades</h1>
+                            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest mt-0.5">
                                 {users.length} Registros Totales
                             </p>
                         </div>
@@ -226,11 +243,11 @@ export default function UsersPage() {
 
                     <div className="flex items-center gap-2">
                         {/* Compact Actions */}
-                        <div className="flex items-center bg-neutral-900 rounded-md border border-white/5 p-1">
+                        <div className="flex items-center bg-card rounded-md border border-border p-1">
                             <ExportUsersButton users={users} />
-                            <div className="w-px h-4 bg-white/10 mx-1" />
+                            <div className="w-px h-4 bg-foreground/10 mx-1" />
                             <ImportUsersDialog onSuccess={() => { loadData(); fetchSyncMap(); }} />
-                            <div className="w-px h-4 bg-white/10 mx-1" />
+                            <div className="w-px h-4 bg-foreground/10 mx-1" />
                             <SyncToDevicesDialog onSuccess={() => { loadData(); fetchSyncMap(); }} />
                         </div>
 
@@ -239,7 +256,7 @@ export default function UsersPage() {
                             disabled={isSyncLoading}
                             variant="ghost"
                             size="sm"
-                            className="h-8 w-8 p-0 rounded-full hover:bg-neutral-800 text-neutral-400"
+                            className="h-8 w-8 p-0 rounded-full hover:bg-muted text-muted-foreground"
                             title="Actualizar Sync Map"
                         >
                             <Camera size={14} className={isSyncLoading ? "animate-spin" : ""} />
@@ -247,7 +264,7 @@ export default function UsersPage() {
 
                         <Button
                             onClick={() => { setSelectedUser(null); setIsFormOpen(true); }}
-                            className="h-8 px-4 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold uppercase tracking-wide rounded-md ml-2 border border-white/5 shadow-lg shadow-indigo-500/10"
+                            className="h-8 px-4 bg-indigo-600 hover:bg-indigo-500 text-foreground text-xs font-bold uppercase tracking-wide rounded-md ml-2 border border-border shadow-lg shadow-indigo-500/10"
                         >
                             <Plus size={14} className="mr-2" />
                             Nuevo
@@ -258,16 +275,16 @@ export default function UsersPage() {
                 {/* Filters & Search - Ultra Compact */}
                 <div className="flex items-center gap-3 mb-4">
                     <div className="relative flex-1 max-w-sm group">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 group-focus-within:text-indigo-400 transition-colors" size={13} />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-indigo-400 transition-colors" size={13} />
                         <Input
                             placeholder="Buscar usuario, DNI, unidad..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-9 h-8 bg-neutral-900 border-neutral-800 focus:border-indigo-500/30 text-xs rounded-md transition-all"
+                            className="pl-9 h-8 bg-card border-border focus:border-indigo-500/30 text-xs rounded-md transition-all"
                         />
                     </div>
 
-                    <div className="h-4 w-px bg-white/10" />
+                    <div className="h-4 w-px bg-foreground/10" />
 
                     <div className="flex items-center gap-1">
                         <Button
@@ -276,7 +293,7 @@ export default function UsersPage() {
                             onClick={() => setFilterRole(null)}
                             className={cn(
                                 "h-6 px-3 text-[10px] font-bold uppercase tracking-wider rounded-full border transition-all",
-                                filterRole === null ? "bg-white text-black border-white" : "text-neutral-500 border-transparent hover:bg-white/5"
+                                filterRole === null ? "bg-white text-black border-white" : "text-muted-foreground border-transparent hover:bg-accent"
                             )}
                         >
                             Todos
@@ -293,7 +310,7 @@ export default function UsersPage() {
                                         "h-6 px-3 text-[10px] font-bold uppercase tracking-wider rounded-full border transition-all flex items-center gap-1.5",
                                         filterRole === key
                                             ? cn(info.color, "bg-opacity-10 border-opacity-30")
-                                            : "text-neutral-500 border-transparent hover:bg-white/5"
+                                            : "text-muted-foreground border-transparent hover:bg-accent"
                                     )}
                                 >
                                     <RoleIcon size={12} />
@@ -305,30 +322,30 @@ export default function UsersPage() {
                 </div>
 
                 {/* Dense Table */}
-                <div className="flex-1 border border-white/5 rounded-lg overflow-hidden bg-neutral-900/40 relative">
+                <div className="flex-1 border border-border rounded-lg overflow-hidden bg-card/40 relative">
                     <div className="absolute inset-0 overflow-auto custom-scrollbar">
                         <Table>
                             <TableHeader className="sticky top-0 bg-[#0c0c0c] z-10 shadow-sm">
-                                <TableRow className="border-white/5 hover:bg-transparent h-9">
-                                    <TableHead className="w-[280px] text-[10px] font-bold uppercase tracking-wider text-neutral-500 h-9">Identidad</TableHead>
-                                    <TableHead className="w-[120px] text-[10px] font-bold uppercase tracking-wider text-neutral-500 h-9">Unidad / DNI</TableHead>
-                                    <TableHead className="w-[150px] text-[10px] font-bold uppercase tracking-wider text-neutral-500 h-9 text-center">Matrículas</TableHead>
-                                    <TableHead className="w-[150px] text-[10px] font-bold uppercase tracking-wider text-neutral-500 h-9 text-center">RFID / Tags</TableHead>
-                                    <TableHead className="w-[100px] text-[10px] font-bold uppercase tracking-wider text-neutral-500 h-9 text-center">PIN Code</TableHead>
-                                    <TableHead className="w-[80px] text-[10px] font-bold uppercase tracking-wider text-neutral-500 h-9 text-center">Biometría</TableHead>
-                                    <TableHead className="text-[10px] font-bold uppercase tracking-wider text-neutral-500 h-9 text-right pr-4">Acciones</TableHead>
+                                <TableRow className="border-border hover:bg-transparent h-9">
+                                    <TableHead className="w-[280px] text-[10px] font-bold uppercase tracking-wider text-muted-foreground h-9">Identidad</TableHead>
+                                    <TableHead className="w-[120px] text-[10px] font-bold uppercase tracking-wider text-muted-foreground h-9">Unidad / DNI</TableHead>
+                                    <TableHead className="w-[150px] text-[10px] font-bold uppercase tracking-wider text-muted-foreground h-9 text-center">Matrículas</TableHead>
+                                    <TableHead className="w-[150px] text-[10px] font-bold uppercase tracking-wider text-muted-foreground h-9 text-center">RFID / Tags</TableHead>
+                                    <TableHead className="w-[100px] text-[10px] font-bold uppercase tracking-wider text-muted-foreground h-9 text-center">PIN Code</TableHead>
+                                    <TableHead className="w-[80px] text-[10px] font-bold uppercase tracking-wider text-muted-foreground h-9 text-center">Biometría</TableHead>
+                                    <TableHead className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground h-9 text-right pr-4">Acciones</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {isLoading ? (
                                     <TableRow>
-                                        <TableCell colSpan={7} className="h-32 text-center text-xs text-neutral-500">
+                                        <TableCell colSpan={7} className="h-32 text-center text-xs text-muted-foreground">
                                             <Loader2 className="animate-spin inline-block mr-2" size={14} /> Cargando registros...
                                         </TableCell>
                                     </TableRow>
                                 ) : usersToDisplay.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={7} className="h-32 text-center text-xs text-neutral-500 uppercase tracking-widest">
+                                        <TableCell colSpan={7} className="h-32 text-center text-xs text-muted-foreground uppercase tracking-widest">
                                             Sin resultados
                                         </TableCell>
                                     </TableRow>
@@ -340,20 +357,20 @@ export default function UsersPage() {
                                             const hasContact = user.email || user.phone;
 
                                             return (
-                                                <TableRow key={user.id} className="border-white/5 hover:bg-white/[0.02] h-10 group transition-colors">
+                                                <TableRow key={user.id} className="border-border hover:bg-foreground/[0.04] h-10 group transition-colors">
                                                     {/* IDENTITY */}
                                                     <TableCell className="py-1">
                                                         <div className="flex items-center gap-3">
-                                                            <div className="w-7 h-7 bg-neutral-800 rounded-full flex items-center justify-center border border-white/5 overflow-hidden shrink-0">
+                                                            <div className="w-7 h-7 bg-muted rounded-full flex items-center justify-center border border-border overflow-hidden shrink-0">
                                                                 {user.cara ? (
                                                                     <img src={user.cara} className="w-full h-full object-cover" />
                                                                 ) : (
-                                                                    <span className="text-[9px] font-black text-neutral-500">{user.name.charAt(0)}</span>
+                                                                    <span className="text-[9px] font-black text-muted-foreground">{user.name.charAt(0)}</span>
                                                                 )}
                                                             </div>
                                                             <div className="flex flex-col min-w-0">
                                                                 <div className="flex items-center gap-2">
-                                                                    <span className="text-xs font-medium text-neutral-200 truncate max-w-[140px] group-hover:text-white transition-colors">{user.name}</span>
+                                                                    <span className="text-xs font-medium text-foreground truncate max-w-[140px] group-hover:text-foreground transition-colors">{user.name}</span>
                                                                     <Tooltip>
                                                                         <TooltipTrigger asChild>
                                                                             <Badge variant="outline" className={cn("text-[8px] h-3.5 px-1 rounded-[3px] border-0 capitalize font-bold cursor-help", roleInfo.color)}>
@@ -363,15 +380,15 @@ export default function UsersPage() {
                                                                         <TooltipContent className="bg-black border-white/10 text-xs">
                                                                             <p>Rol: {roleInfo.label}</p>
                                                                             {hasContact && (
-                                                                                <div className="mt-1 pt-1 border-t border-white/10 space-y-1">
-                                                                                    {user.email && <div className="flex items-center gap-2 text-neutral-400"><Mail size={10} /> {user.email}</div>}
-                                                                                    {user.phone && <div className="flex items-center gap-2 text-neutral-400"><Phone size={10} /> {user.phone}</div>}
+                                                                                <div className="mt-1 pt-1 border-t border-border space-y-1">
+                                                                                    {user.email && <div className="flex items-center gap-2 text-muted-foreground"><Mail size={10} /> {user.email}</div>}
+                                                                                    {user.phone && <div className="flex items-center gap-2 text-muted-foreground"><Phone size={10} /> {user.phone}</div>}
                                                                                 </div>
                                                                             )}
                                                                         </TooltipContent>
                                                                     </Tooltip>
                                                                 </div>
-                                                                <span className="text-[9px] text-neutral-600 font-mono tracking-tight truncate">ID: {user.id.slice(-6)}</span>
+                                                                <span className="text-[9px] text-muted-foreground font-mono tracking-tight truncate">ID: {user.id.slice(-6)}</span>
                                                             </div>
                                                         </div>
                                                     </TableCell>
@@ -380,14 +397,14 @@ export default function UsersPage() {
                                                     <TableCell className="py-1">
                                                         <div className="flex flex-col">
                                                             {user.unit ? (
-                                                                <div className="flex items-center gap-1.5 text-neutral-300">
-                                                                    <MapPin size={10} className="text-neutral-500" />
+                                                                <div className="flex items-center gap-1.5 text-muted-foreground">
+                                                                    <MapPin size={10} className="text-muted-foreground" />
                                                                     <span className="text-[10px] font-bold">{user.unit.name}</span>
                                                                 </div>
                                                             ) : (
-                                                                <span className="text-[10px] text-neutral-700 italic px-4">--</span>
+                                                                <span className="text-[10px] text-muted-foreground italic px-4">--</span>
                                                             )}
-                                                            <div className="flex items-center gap-1.5 text-neutral-500 mt-0.5 ml-0.5">
+                                                            <div className="flex items-center gap-1.5 text-muted-foreground mt-0.5 ml-0.5">
                                                                 <Hash size={9} />
                                                                 <span className="text-[9px] font-mono">{user.dni || "S/DNI"}</span>
                                                             </div>
@@ -406,12 +423,12 @@ export default function UsersPage() {
                                                                 {plates.length > 1 && (
                                                                     <Tooltip>
                                                                         <TooltipTrigger asChild>
-                                                                            <span className="text-[9px] text-neutral-600 cursor-help">+{plates.length - 1} más</span>
+                                                                            <span className="text-[9px] text-muted-foreground cursor-help">+{plates.length - 1} más</span>
                                                                         </TooltipTrigger>
                                                                         <TooltipContent className="bg-black border-white/10 p-2">
                                                                             <div className="space-y-1">
                                                                                 {plates.map((p: string) => (
-                                                                                    <div key={p} className="flex items-center gap-2 bg-white/5 px-2 py-1 rounded border border-white/5">
+                                                                                    <div key={p} className="flex items-center gap-2 bg-foreground/10 px-2 py-1 rounded border border-border">
                                                                                         <div className="w-1 h-1 rounded-full bg-blue-500" />
                                                                                         <span className="font-mono text-xs text-blue-200">{p}</span>
                                                                                     </div>
@@ -422,7 +439,7 @@ export default function UsersPage() {
                                                                 )}
                                                             </div>
                                                         ) : (
-                                                            <span className="text-neutral-800">-</span>
+                                                            <span className="text-muted-foreground">-</span>
                                                         )}
                                                     </TableCell>
 
@@ -438,7 +455,7 @@ export default function UsersPage() {
                                                                 {tags.length > 1 && (
                                                                     <Tooltip>
                                                                         <TooltipTrigger asChild>
-                                                                            <span className="text-[9px] text-neutral-600 cursor-help">+{tags.length - 1} más</span>
+                                                                            <span className="text-[9px] text-muted-foreground cursor-help">+{tags.length - 1} más</span>
                                                                         </TooltipTrigger>
                                                                         <TooltipContent className="bg-black border-white/10 p-2">
                                                                             <div className="space-y-1">
@@ -453,7 +470,7 @@ export default function UsersPage() {
                                                                 )}
                                                             </div>
                                                         ) : (
-                                                            <span className="text-neutral-800">-</span>
+                                                            <span className="text-muted-foreground">-</span>
                                                         )}
                                                     </TableCell>
 
@@ -469,7 +486,7 @@ export default function UsersPage() {
                                                                 {pins.length > 1 && (
                                                                     <Tooltip>
                                                                         <TooltipTrigger asChild>
-                                                                            <span className="text-[9px] text-neutral-600 cursor-help">+{pins.length - 1} más</span>
+                                                                            <span className="text-[9px] text-muted-foreground cursor-help">+{pins.length - 1} más</span>
                                                                         </TooltipTrigger>
                                                                         <TooltipContent className="bg-black border-white/10 p-2">
                                                                             <div className="space-y-1">
@@ -482,7 +499,7 @@ export default function UsersPage() {
                                                                 )}
                                                             </div>
                                                         ) : (
-                                                            <span className="text-neutral-800">-</span>
+                                                            <span className="text-muted-foreground">-</span>
                                                         )}
                                                     </TableCell>
 
@@ -500,7 +517,7 @@ export default function UsersPage() {
                                                                 </TooltipContent>
                                                             </Tooltip>
                                                         ) : (
-                                                            <div className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-white/5 border border-white/5 text-neutral-700">
+                                                            <div className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-foreground/10 border border-border text-muted-foreground">
                                                                 <ScanFace size={12} />
                                                             </div>
                                                         )}
@@ -515,7 +532,7 @@ export default function UsersPage() {
                                                                         variant="ghost"
                                                                         size="sm"
                                                                         onClick={() => { setSelectedUser(user); setIsFormOpen(true); }}
-                                                                        className="h-7 w-7 p-0 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-white"
+                                                                        className="h-7 w-7 p-0 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground"
                                                                     >
                                                                         <Edit size={12} />
                                                                     </Button>
@@ -529,7 +546,7 @@ export default function UsersPage() {
                                                                         variant="ghost"
                                                                         size="sm"
                                                                         onClick={() => setUserToDelete(user)}
-                                                                        className="h-7 w-7 p-0 rounded-md hover:bg-red-900/20 text-neutral-600 hover:text-red-400"
+                                                                        className="h-7 w-7 p-0 rounded-md hover:bg-red-900/20 text-muted-foreground hover:text-red-400"
                                                                     >
                                                                         <Trash2 size={12} />
                                                                     </Button>
@@ -546,7 +563,7 @@ export default function UsersPage() {
                                             <TableRow>
                                                 <TableCell colSpan={7} className="p-0 border-0">
                                                     <div ref={observerTarget} className="h-10 w-full flex items-center justify-center">
-                                                        <Loader2 className="animate-spin text-neutral-700" size={14} />
+                                                        <Loader2 className="animate-spin text-muted-foreground" size={14} />
                                                     </div>
                                                 </TableCell>
                                             </TableRow>
@@ -562,8 +579,12 @@ export default function UsersPage() {
             {/* Dialogs */}
             <UserFormDialog
                 open={isFormOpen}
-                onOpenChange={setIsFormOpen}
+                onOpenChange={(open) => {
+                    setIsFormOpen(open);
+                    if (!open) setCreateInitialData(undefined);
+                }}
                 user={selectedUser || undefined}
+                initialData={createInitialData}
                 units={units}
                 groups={groups}
                 devices={devices}
@@ -573,6 +594,7 @@ export default function UsersPage() {
                     fetchSyncMap();
                     setIsFormOpen(false);
                     setSelectedUser(null);
+                    setCreateInitialData(undefined);
                 }}
             />
 

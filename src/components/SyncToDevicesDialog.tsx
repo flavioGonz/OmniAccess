@@ -78,15 +78,15 @@ export function SyncToDevicesDialog({ onSuccess }: SyncToDevicesDialogProps) {
             </Tooltip>
 
             <Dialog open={open} onOpenChange={handleClose}>
-                <DialogContent className="max-w-3xl bg-[#09090b] border border-white/10 p-0 overflow-hidden">
-                    <DialogHeader className="p-6 bg-[#0c0c0c] border-b border-white/5">
-                        <DialogTitle className="text-xl font-black text-white uppercase flex items-center gap-3">
+                <DialogContent className="max-w-3xl bg-[#09090b] border border-border p-0 overflow-hidden">
+                    <DialogHeader className="p-6 bg-[#0c0c0c] border-b border-border">
+                        <DialogTitle className="text-xl font-black text-foreground uppercase flex items-center gap-3">
                             <div className="p-2 bg-indigo-600/10 rounded border border-indigo-600/20">
                                 <Camera className="text-indigo-400" size={24} />
                             </div>
                             Sincronización Masiva a Dispositivos
                         </DialogTitle>
-                        <DialogDescription className="text-neutral-400">
+                        <DialogDescription className="text-muted-foreground">
                             Este proceso enviará todas las matrículas de la base de datos a todos los dispositivos LPR compatibles.
                         </DialogDescription>
                     </DialogHeader>
@@ -101,19 +101,19 @@ export function SyncToDevicesDialog({ onSuccess }: SyncToDevicesDialogProps) {
                                         <h3 className="text-sm font-bold text-amber-500 uppercase tracking-wide mb-1">
                                             ⚠️ Proceso Disruptivo
                                         </h3>
-                                        <p className="text-xs text-neutral-300 leading-relaxed">
+                                        <p className="text-xs text-muted-foreground leading-relaxed">
                                             Este proceso <span className="font-bold text-amber-400">borrará completamente</span> las listas actuales
                                             de matrículas en cada cámara y las reemplazará con todas las matrículas registradas en la base de datos.
                                         </p>
-                                        <p className="text-xs text-neutral-400 mt-2">
+                                        <p className="text-xs text-muted-foreground mt-2">
                                             Las cámaras quedarán temporalmente sin acceso durante el proceso de sincronización.
                                         </p>
                                     </div>
                                 </div>
 
                                 {/* Process Flow */}
-                                <div className="bg-neutral-900 rounded-lg p-4 border border-white/5">
-                                    <h4 className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-3">
+                                <div className="bg-card rounded-lg p-4 border border-border">
+                                    <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">
                                         Flujo del Proceso
                                     </h4>
                                     <div className="space-y-2">
@@ -121,22 +121,22 @@ export function SyncToDevicesDialog({ onSuccess }: SyncToDevicesDialogProps) {
                                             <div className="w-6 h-6 rounded-full bg-indigo-600/20 text-indigo-400 flex items-center justify-center font-bold">
                                                 1
                                             </div>
-                                            <Database size={14} className="text-neutral-500" />
-                                            <span className="text-neutral-300">Obtener todas las matrículas de la base de datos</span>
+                                            <Database size={14} className="text-muted-foreground" />
+                                            <span className="text-muted-foreground">Obtener todas las matrículas de la base de datos</span>
                                         </div>
                                         <div className="flex items-center gap-3 text-xs">
                                             <div className="w-6 h-6 rounded-full bg-indigo-600/20 text-indigo-400 flex items-center justify-center font-bold">
                                                 2
                                             </div>
-                                            <Server size={14} className="text-neutral-500" />
-                                            <span className="text-neutral-300">Conectar con cada dispositivo LPR</span>
+                                            <Server size={14} className="text-muted-foreground" />
+                                            <span className="text-muted-foreground">Conectar con cada dispositivo LPR</span>
                                         </div>
                                         <div className="flex items-center gap-3 text-xs">
                                             <div className="w-6 h-6 rounded-full bg-red-600/20 text-red-400 flex items-center justify-center font-bold">
                                                 3
                                             </div>
                                             <XCircle size={14} className="text-red-400" />
-                                            <span className="text-neutral-300">
+                                            <span className="text-muted-foreground">
                                                 <span className="font-bold text-red-400">Borrar lista actual</span> de cada cámara
                                             </span>
                                         </div>
@@ -145,19 +145,19 @@ export function SyncToDevicesDialog({ onSuccess }: SyncToDevicesDialogProps) {
                                                 4
                                             </div>
                                             <ArrowRight size={14} className="text-emerald-400" />
-                                            <span className="text-neutral-300">Enviar todas las matrículas a cada dispositivo</span>
+                                            <span className="text-muted-foreground">Enviar todas las matrículas a cada dispositivo</span>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Confirmation */}
-                                <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
+                                <div className="flex justify-end gap-3 pt-4 border-t border-border">
                                     <Button variant="ghost" onClick={handleClose}>
                                         Cancelar
                                     </Button>
                                     <Button
                                         onClick={() => setConfirmed(true)}
-                                        className="bg-indigo-600 hover:bg-indigo-500 text-white"
+                                        className="bg-indigo-600 hover:bg-indigo-500 text-foreground"
                                     >
                                         Continuar
                                     </Button>
@@ -167,8 +167,8 @@ export function SyncToDevicesDialog({ onSuccess }: SyncToDevicesDialogProps) {
 
                         {confirmed && !results && (
                             <>
-                                <div className="bg-neutral-900 rounded-lg p-6 border border-white/5 text-center">
-                                    <p className="text-sm text-neutral-300 mb-4">
+                                <div className="bg-card rounded-lg p-6 border border-border text-center">
+                                    <p className="text-sm text-muted-foreground mb-4">
                                         ¿Estás seguro de que deseas sincronizar todas las matrículas a todos los dispositivos LPR?
                                     </p>
                                     <p className="text-xs text-amber-400 font-bold mb-6">
@@ -176,14 +176,14 @@ export function SyncToDevicesDialog({ onSuccess }: SyncToDevicesDialogProps) {
                                     </p>
                                 </div>
 
-                                <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
+                                <div className="flex justify-end gap-3 pt-4 border-t border-border">
                                     <Button variant="ghost" onClick={() => setConfirmed(false)} disabled={syncing}>
                                         Volver
                                     </Button>
                                     <Button
                                         onClick={handleSync}
                                         disabled={syncing}
-                                        className="bg-red-600 hover:bg-red-500 text-white"
+                                        className="bg-red-600 hover:bg-red-500 text-foreground"
                                     >
                                         {syncing ? (
                                             <>
@@ -206,19 +206,19 @@ export function SyncToDevicesDialog({ onSuccess }: SyncToDevicesDialogProps) {
                                 <div className="space-y-4">
                                     {/* Summary */}
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div className="bg-neutral-900 rounded-lg p-4 border border-white/5">
-                                            <p className="text-[10px] text-neutral-500 uppercase tracking-widest mb-1">
+                                        <div className="bg-card rounded-lg p-4 border border-border">
+                                            <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">
                                                 Dispositivos Procesados
                                             </p>
-                                            <p className="text-2xl font-black text-white">
+                                            <p className="text-2xl font-black text-foreground">
                                                 {results.totalDevices}
                                             </p>
                                         </div>
-                                        <div className="bg-neutral-900 rounded-lg p-4 border border-white/5">
-                                            <p className="text-[10px] text-neutral-500 uppercase tracking-widest mb-1">
+                                        <div className="bg-card rounded-lg p-4 border border-border">
+                                            <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">
                                                 Matrículas Enviadas
                                             </p>
-                                            <p className="text-2xl font-black text-white">
+                                            <p className="text-2xl font-black text-foreground">
                                                 {results.totalPlates}
                                             </p>
                                         </div>
@@ -226,7 +226,7 @@ export function SyncToDevicesDialog({ onSuccess }: SyncToDevicesDialogProps) {
 
                                     {/* Results List */}
                                     <div className="border border-white/10 rounded-lg overflow-hidden bg-black/20">
-                                        <div className="p-3 bg-white/5 border-b border-white/5 text-[10px] font-bold uppercase text-neutral-400 tracking-widest">
+                                        <div className="p-3 bg-foreground/10 border-b border-border text-[10px] font-bold uppercase text-muted-foreground tracking-widest">
                                             Resultados por Dispositivo
                                         </div>
                                         <ScrollArea className="h-64">
@@ -247,10 +247,10 @@ export function SyncToDevicesDialog({ onSuccess }: SyncToDevicesDialogProps) {
                                                                     <XCircle className="text-red-400" size={16} />
                                                                 )}
                                                                 <div>
-                                                                    <p className="text-sm font-bold text-white">
+                                                                    <p className="text-sm font-bold text-foreground">
                                                                         {result.deviceName}
                                                                     </p>
-                                                                    <p className="text-xs text-neutral-500 font-mono">
+                                                                    <p className="text-xs text-muted-foreground font-mono">
                                                                         {result.deviceIp}
                                                                     </p>
                                                                 </div>
@@ -268,11 +268,11 @@ export function SyncToDevicesDialog({ onSuccess }: SyncToDevicesDialogProps) {
                                                         </div>
 
                                                         {result.success ? (
-                                                            <div className="flex items-center gap-4 text-xs text-neutral-400">
+                                                            <div className="flex items-center gap-4 text-xs text-muted-foreground">
                                                                 <span>
-                                                                    Anterior: <span className="font-mono text-neutral-300">{result.previousCount}</span>
+                                                                    Anterior: <span className="font-mono text-muted-foreground">{result.previousCount}</span>
                                                                 </span>
-                                                                <ArrowRight size={12} className="text-neutral-600" />
+                                                                <ArrowRight size={12} className="text-muted-foreground" />
                                                                 <span>
                                                                     Sincronizadas: <span className="font-mono text-emerald-400">{result.syncedCount}</span>
                                                                 </span>
@@ -294,8 +294,8 @@ export function SyncToDevicesDialog({ onSuccess }: SyncToDevicesDialogProps) {
                                     </div>
                                 </div>
 
-                                <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
-                                    <Button onClick={handleClose} className="bg-indigo-600 hover:bg-indigo-500 text-white">
+                                <div className="flex justify-end gap-3 pt-4 border-t border-border">
+                                    <Button onClick={handleClose} className="bg-indigo-600 hover:bg-indigo-500 text-foreground">
                                         Cerrar
                                     </Button>
                                 </div>

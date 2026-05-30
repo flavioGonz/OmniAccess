@@ -283,35 +283,35 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
-                className="max-w-3xl h-[85vh] p-0 flex flex-col border-neutral-800 bg-[#0a0a0a] overflow-hidden shadow-2xl rounded-xl"
+                className="max-w-3xl h-[85vh] p-0 flex flex-col border-border bg-[#0a0a0a] overflow-hidden shadow-2xl rounded-xl"
                 onPointerDownOutside={(e) => e.preventDefault()}
             >
                 {/* Fixed Header */}
-                <DialogHeader className="p-6 pb-4 border-b border-neutral-900 bg-neutral-950/50 shrink-0">
+                <DialogHeader className="p-6 pb-4 border-b border-border bg-background/50 shrink-0">
                     <div className="flex items-center justify-between gap-4">
                         <div className="flex items-center gap-4">
-                            <div className="p-2.5 bg-neutral-900 rounded-lg border border-white/5 shadow-inner">
+                            <div className="p-2.5 bg-card rounded-lg border border-border shadow-inner">
                                 <Car className="w-6 h-6 text-indigo-500" />
                             </div>
                             <div>
-                                <DialogTitle className="text-xl font-black text-neutral-100 uppercase tracking-tight leading-none mb-1">Listas Internas de Hardware</DialogTitle>
-                                <DialogTitle className="text-lg font-black text-neutral-100 uppercase tracking-tight leading-none mb-1">Listas Internas de Hardware</DialogTitle>
-                                <DialogDescription className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest">
+                                <DialogTitle className="text-xl font-black text-foreground uppercase tracking-tight leading-none mb-1">Listas Internas de Hardware</DialogTitle>
+                                <DialogTitle className="text-lg font-black text-foreground uppercase tracking-tight leading-none mb-1">Listas Internas de Hardware</DialogTitle>
+                                <DialogDescription className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
                                     {device?.name} • {device?.ip}
                                 </DialogDescription>
                             </div>
                         </div>
 
                         {/* Comparing Counters at Top - Redesigned */}
-                        <div className="flex items-center gap-0 bg-neutral-900 border border-neutral-800 rounded-lg overflow-hidden h-10">
+                        <div className="flex items-center gap-0 bg-card border border-border rounded-lg overflow-hidden h-10">
                             <TooltipProvider>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <div className="flex items-center gap-3 px-4 h-full hover:bg-white/5 transition-colors cursor-help border-r border-neutral-800">
+                                        <div className="flex items-center gap-3 px-4 h-full hover:bg-accent transition-colors cursor-help border-r border-border">
                                             <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
                                             <div className="flex flex-col leading-none">
-                                                <span className="text-[10px] font-bold text-neutral-400 uppercase">Cámara</span>
-                                                <span className="text-xs font-black font-mono text-white">{totalMatches || plates.length}</span>
+                                                <span className="text-[10px] font-bold text-muted-foreground uppercase">Cámara</span>
+                                                <span className="text-xs font-black font-mono text-foreground">{totalMatches || plates.length}</span>
                                             </div>
                                         </div>
                                     </TooltipTrigger>
@@ -322,11 +322,11 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                             <TooltipProvider>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <div className="flex items-center gap-3 px-4 h-full hover:bg-white/5 transition-colors cursor-help">
+                                        <div className="flex items-center gap-3 px-4 h-full hover:bg-accent transition-colors cursor-help">
                                             <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
                                             <div className="flex flex-col leading-none">
-                                                <span className="text-[10px] font-bold text-neutral-400 uppercase">Sistema</span>
-                                                <span className="text-xs font-black font-mono text-white">{localPlates.length}</span>
+                                                <span className="text-[10px] font-bold text-muted-foreground uppercase">Sistema</span>
+                                                <span className="text-xs font-black font-mono text-foreground">{localPlates.length}</span>
                                             </div>
                                         </div>
                                     </TooltipTrigger>
@@ -345,7 +345,7 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                                 </span>
                                 <span>{isSyncingToCamera ? syncProgress : fetchProgress}%</span>
                             </div>
-                            <Progress value={isSyncingToCamera ? syncProgress : fetchProgress} className="h-1 bg-neutral-900" indicatorClassName="bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
+                            <Progress value={isSyncingToCamera ? syncProgress : fetchProgress} className="h-1 bg-card" indicatorClassName="bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
                         </div>
                     )}
 
@@ -368,19 +368,19 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                         {/* Add Plate Bar */}
                         <div className="flex items-center gap-2">
                             <div className="relative flex-1">
-                                <Plus className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-700 w-4 h-4" />
+                                <Plus className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
                                 <Input
                                     placeholder="Añadir nueva matrícula (ej. AB123CD)..."
                                     value={newPlate}
                                     onChange={(e) => setNewPlate(e.target.value)}
-                                    className="h-10 border-neutral-800 bg-neutral-900/60 rounded-lg font-mono text-xs pl-10 focus:ring-1 focus:ring-indigo-500/50"
+                                    className="h-10 border-border bg-card/60 rounded-lg font-mono text-xs pl-10 focus:ring-1 focus:ring-indigo-500/50"
                                     onKeyDown={(e) => e.key === 'Enter' && handleAddPlate()}
                                 />
                             </div>
                             <Button
                                 onClick={handleAddPlate}
                                 disabled={isAdding || !newPlate}
-                                className="bg-indigo-600 hover:bg-indigo-500 text-white h-10 w-10 rounded-lg shrink-0 shadow-lg shadow-indigo-900/20"
+                                className="bg-indigo-600 hover:bg-indigo-500 text-foreground h-10 w-10 rounded-lg shrink-0 shadow-lg shadow-indigo-900/20"
                                 size="icon"
                             >
                                 {isAdding ? <Loader2 className="animate-spin w-4 h-4" /> : <Plus className="w-4 h-4" />}
@@ -390,7 +390,7 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                         <div className="flex gap-2">
                             {/* Search */}
                             <div className="relative flex-1">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600 w-4 h-4" />
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
                                 <Input
                                     placeholder="Buscar en la lista..."
                                     value={searchTerm}
@@ -398,7 +398,7 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                                         setSearchTerm(e.target.value);
                                         setCurrentPage(1);
                                     }}
-                                    className="pl-10 h-10 border-neutral-800 bg-neutral-900/60 text-xs font-bold rounded-lg focus:ring-1 focus:ring-white/10"
+                                    className="pl-10 h-10 border-border bg-card/60 text-xs font-bold rounded-lg focus:ring-1 focus:ring-border"
                                 />
                             </div>
 
@@ -416,7 +416,7 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                                                 }}
                                                 className={cn(
                                                     "h-10 w-10 rounded-lg transition-all",
-                                                    filterOnlyMissing ? "bg-orange-600 hover:bg-orange-500 text-white border-transparent" : "border-neutral-800 bg-neutral-900 text-neutral-400 hover:bg-white/5"
+                                                    filterOnlyMissing ? "bg-orange-600 hover:bg-orange-500 text-foreground border-transparent" : "border-border bg-card text-muted-foreground hover:bg-accent"
                                                 )}
                                             >
                                                 <Filter className="w-4 h-4" />
@@ -434,7 +434,7 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                                                 size="icon"
                                                 onClick={loadPlates}
                                                 disabled={loading}
-                                                className="h-10 w-10 rounded-lg border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-white hover:bg-white/5"
+                                                className="h-10 w-10 rounded-lg border-border bg-card text-muted-foreground hover:text-foreground hover:bg-accent"
                                             >
                                                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlayCircle className="w-4 h-4" />}
                                             </Button>
@@ -447,7 +447,7 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                                     size="sm"
                                     onClick={() => setShowImportPreview(true)}
                                     disabled={loading || plates.length === 0}
-                                    className="bg-blue-600 hover:bg-blue-500 text-white font-black text-[9px] uppercase tracking-widest rounded-lg h-10 px-4 shadow-lg shadow-blue-900/20"
+                                    className="bg-blue-600 hover:bg-blue-500 text-foreground font-black text-[9px] uppercase tracking-widest rounded-lg h-10 px-4 shadow-lg shadow-blue-900/20"
                                 >
                                     Bajar
                                 </Button>
@@ -455,7 +455,7 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                                     size="sm"
                                     onClick={handleSyncClick}
                                     disabled={loading || isSyncingToCamera}
-                                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[9px] uppercase tracking-widest rounded-lg h-10 px-4 shadow-lg shadow-emerald-900/20"
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-foreground font-black text-[9px] uppercase tracking-widest rounded-lg h-10 px-4 shadow-lg shadow-emerald-900/20"
                                 >
                                     {isSyncingToCamera ? <Loader2 className="w-3 h-3 animate-spin" /> : <UploadCloud className="w-3 h-3 mr-2" />}
                                     Sync
@@ -465,10 +465,10 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                     </div>
 
                     {/* Matrix View - Refined */}
-                    <div className="flex-1 min-h-0 overflow-hidden flex flex-col bg-neutral-900/30 rounded-lg border border-neutral-800/50">
+                    <div className="flex-1 min-h-0 overflow-hidden flex flex-col bg-card/30 rounded-lg border border-border/50">
                         <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
                             {paginatedPlates.length === 0 ? (
-                                <div className="h-full flex flex-col items-center justify-center text-neutral-800 opacity-30">
+                                <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-30">
                                     <Database className="w-16 h-16 mb-4" />
                                     <p className="text-xs font-black uppercase tracking-widest">Sin registros disponibles</p>
                                 </div>
@@ -480,7 +480,7 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                                             {/* Vehicle Background Decoration */}
                                             {localDetailMap[plate]?.hasVehicle && (
                                                 <div className="absolute right-[-10%] bottom-[-20%] opacity-[0.03] group-hover:opacity-[0.06] transition-opacity pointer-events-none rotate-[-10deg]">
-                                                    <Car className="w-24 h-24 text-white" />
+                                                    <Car className="w-24 h-24 text-foreground" />
                                                 </div>
                                             )}
 
@@ -492,7 +492,7 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                                                                 <TooltipTrigger asChild>
                                                                     <div className={cn(
                                                                         "w-2 h-2 rounded-full",
-                                                                        inLocal ? "bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]" : "bg-neutral-800 border border-neutral-700"
+                                                                        inLocal ? "bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]" : "bg-muted border border-border"
                                                                     )} />
                                                                 </TooltipTrigger>
                                                                 <TooltipContent className="text-[10px] font-black uppercase">
@@ -506,7 +506,7 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                                                                 <TooltipTrigger asChild>
                                                                     <div className={cn(
                                                                         "w-2 h-2 rounded-full",
-                                                                        inCamera ? "bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,0.5)]" : "bg-neutral-800 border border-neutral-700"
+                                                                        inCamera ? "bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,0.5)]" : "bg-muted border border-border"
                                                                     )} />
                                                                 </TooltipTrigger>
                                                                 <TooltipContent className="text-[10px] font-black uppercase">
@@ -521,7 +521,7 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                                                             <Tooltip>
                                                                 <TooltipTrigger asChild>
                                                                     <button
-                                                                        className="text-neutral-700 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                                                                        className="text-muted-foreground hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
                                                                         onClick={(e) => { e.stopPropagation(); handleDelete(plate); }}
                                                                     >
                                                                         <Trash2 className="w-3.5 h-3.5" />
@@ -532,21 +532,21 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                                                         </TooltipProvider>
                                                     )}
                                                 </div>
-                                                <div className="text-xl font-black font-mono text-neutral-200 tracking-wider leading-none uppercase select-all group-hover:text-white transition-colors">
+                                                <div className="text-xl font-black font-mono text-foreground tracking-wider leading-none uppercase select-all group-hover:text-foreground transition-colors">
                                                     {plate}
                                                 </div>
                                             </div>
 
                                             <div className="relative z-10">
-                                                <div className="text-[10px] font-black text-neutral-500 group-hover:text-neutral-400 truncate uppercase tracking-tight mb-0.5">
+                                                <div className="text-[10px] font-black text-muted-foreground group-hover:text-muted-foreground truncate uppercase tracking-tight mb-0.5">
                                                     {residentName || "NO ASIGNADO"}
                                                 </div>
                                                 <div className="flex gap-2 text-[9px] font-medium uppercase tracking-wide">
-                                                    <span className={cn("font-bold", brand && brand !== 'Unknown' ? "text-indigo-400" : "text-neutral-600")}>
+                                                    <span className={cn("font-bold", brand && brand !== 'Unknown' ? "text-indigo-400" : "text-muted-foreground")}>
                                                         {brand && brand !== 'Unknown' ? brand : "---"}
                                                     </span>
-                                                    <span className="text-neutral-700">|</span>
-                                                    <span className={cn(color && color !== 'Unknown' ? "text-neutral-400" : "text-neutral-600")}>
+                                                    <span className="text-muted-foreground">|</span>
+                                                    <span className={cn(color && color !== 'Unknown' ? "text-muted-foreground" : "text-muted-foreground")}>
                                                         {color && color !== 'Unknown' ? color : "---"}
                                                     </span>
                                                 </div>
@@ -559,27 +559,27 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
 
                         {/* Pagination Bar */}
                         {allFilteredPlates.length > ITEMS_PER_PAGE && (
-                            <div className="p-3 border-t border-neutral-800 bg-neutral-900/50 flex items-center justify-center gap-6 shrink-0">
+                            <div className="p-3 border-t border-border bg-card/50 flex items-center justify-center gap-6 shrink-0">
                                 <Button
                                     variant="ghost"
                                     size="icon"
                                     disabled={currentPage === 1}
                                     onClick={() => setCurrentPage(p => p - 1)}
-                                    className="w-8 h-8 rounded-lg text-neutral-500 hover:text-white"
+                                    className="w-8 h-8 rounded-lg text-muted-foreground hover:text-foreground"
                                 >
                                     <ChevronLeft className="w-5 h-5" />
                                 </Button>
                                 <div className="flex items-center gap-2">
-                                    <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">Pág</span>
-                                    <span className="text-[10px] font-black text-white bg-white/5 w-6 h-6 flex items-center justify-center rounded border border-white/5">{currentPage}</span>
-                                    <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">de {totalPages}</span>
+                                    <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Pág</span>
+                                    <span className="text-[10px] font-black text-foreground bg-foreground/10 w-6 h-6 flex items-center justify-center rounded border border-border">{currentPage}</span>
+                                    <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">de {totalPages}</span>
                                 </div>
                                 <Button
                                     variant="ghost"
                                     size="icon"
                                     disabled={currentPage === totalPages}
                                     onClick={() => setCurrentPage(p => p + 1)}
-                                    className="w-8 h-8 rounded-lg text-neutral-500 hover:text-white"
+                                    className="w-8 h-8 rounded-lg text-muted-foreground hover:text-foreground"
                                 >
                                     <ChevronRight className="w-5 h-5" />
                                 </Button>
@@ -589,8 +589,8 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                 </div>
 
                 {/* Status Footer - Concise */}
-                <div className="px-6 py-3 border-t border-neutral-900 bg-neutral-950 flex justify-between items-center shrink-0">
-                    <div className="flex gap-6 text-[9px] font-black uppercase tracking-widest text-neutral-600">
+                <div className="px-6 py-3 border-t border-border bg-background flex justify-between items-center shrink-0">
+                    <div className="flex gap-6 text-[9px] font-black uppercase tracking-widest text-muted-foreground">
                         <div className="flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_6px_rgba(59,130,246,0.4)]" />
                             <span>En Cámara</span>
@@ -600,7 +600,7 @@ export function DevicePlateListDialog({ device, open, onOpenChange }: DevicePlat
                             <span>En App</span>
                         </div>
                     </div>
-                    <div className="text-[9px] font-mono text-neutral-700 uppercase">
+                    <div className="text-[9px] font-mono text-muted-foreground uppercase">
                         Total Mostrado: {allFilteredPlates.length}
                     </div>
                 </div>

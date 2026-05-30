@@ -1,85 +1,43 @@
-import { IDeviceDriver } from "./IDeviceDriver";
+import { IDeviceDriver, IFaceDriver, IRfidDriver, ILogDriver, IStatsDriver } from "./IDeviceDriver";
 import { Device, Credential, AuthType } from "@prisma/client";
 import axios from "axios";
-import * as https from "https";
-import * as crypto from "crypto";
 import * as fs from "fs";
+import * as crypto from "crypto";
 import * as path from "path";
+import {
+    authenticatedRequest,
+    getBasicAuthHeader,
+    httpsAgent,
+    DigestAuthDevice
+} from "../digest-auth";
 
-const httpsAgent = new https.Agent({
-    rejectUnauthorized: false,
-});
+/**
+ * Lista canónica de modelos Android de Akuvox.
+ * Usada por AkuvoxDriver y server.js para determinar comportamiento específico.
+ */
+export const AKUVOX_ANDROID_MODELS = ["R29", "X915", "X916", "E16", "E18", "A05", "A095"];
 
-export class AkuvoxDriver implements IDeviceDriver {
+export class AkuvoxDriver implements IFaceDriver, IRfidDriver, ILogDriver, IStatsDriver {
 
     private async request(method: "GET" | "POST", path: string, data: any, device: Device, timeout: number = 30000): Promise<any> {
-        const url = `${this.getBaseUrl(device)}${path}`;
-        const headers: any = { 'Content-Type': 'application/json' };
+        const authDevice: DigestAuthDevice = {
+            ip: device.ip,
+            username: device.username,
+            password: device.password,
+            authType: device.authType,
+        };
 
-        if (device.authType === 'BASIC') {
-            Object.assign(headers, this.getAuthHeader(device));
-        }
-
-        try {
-            const response = await axios.request({
-                method,
-                url,
-                data,
-                headers,
-                httpsAgent,
-                timeout
-            });
-            return response.data;
-        } catch (error: any) {
-            if (device.authType === 'DIGEST' && error.response?.status === 401) {
-                const authHeader = error.response.headers["www-authenticate"];
-                if (!authHeader) throw error;
-
-                const getVal = (key: string) => {
-                    const match = authHeader.match(new RegExp(`${key}="?([^",]+)"?`));
-                    return match ? match[1] : null;
-                };
-
-                const realm = getVal("realm");
-                const nonce = getVal("nonce");
-                const qop = getVal("qop");
-                const opaque = getVal("opaque");
-                const algorithm = getVal("algorithm") || "MD5";
-
-                const ha1 = crypto.createHash("md5").update(`${device.username}:${realm}:${device.password}`).digest("hex");
-                const ha2 = crypto.createHash("md5").update(`${method}:${path}`).digest("hex");
-                const nc = "00000001";
-                const cnonce = crypto.randomBytes(8).toString("hex");
-
-                let responseStr;
-                if (qop) {
-                    responseStr = crypto.createHash("md5").update(`${ha1}:${nonce}:${nc}:${cnonce}:${qop}:${ha2}`).digest("hex");
-                } else {
-                    responseStr = crypto.createHash("md5").update(`${ha1}:${nonce}:${ha2}`).digest("hex");
-                }
-
-                const authString = `Digest username="${device.username}", realm="${realm}", nonce="${nonce}", uri="${path}", qop="${qop || ''}", nc=${nc}, cnonce="${cnonce}", response="${responseStr}", opaque="${opaque || ''}", algorithm="${algorithm}"`;
-
-                const retryResponse = await axios.request({
-                    method,
-                    url,
-                    data,
-                    headers: { ...headers, Authorization: authString },
-                    httpsAgent,
-                    timeout
-                });
-                return retryResponse.data;
-            }
-            throw error;
-        }
+        return authenticatedRequest(method, path, authDevice, {
+            data,
+            timeout,
+        });
     }
 
-    public getAuthHeader(device: Device) {
+    public getAuthHeader(device: Device): Record<string, string> {
         if (!device.username || !device.password || device.authType === 'NONE') {
             return {};
         }
-        const token = Buffer.from(`${device.username}:${device.password}`).toString('base64');
-        return { Authorization: `Basic ${token}` };
+        return getBasicAuthHeader(device.username, device.password);
     }
 
     public getBaseUrl(device: Device): string {
@@ -102,8 +60,7 @@ export class AkuvoxDriver implements IDeviceDriver {
 
     public isAndroidModel(model: string | null): boolean {
         if (!model) return false;
-        const androidModels = ["R29", "X915", "X916", "E16", "E18", "A05", "A095"];
-        return androidModels.some(m => model.toUpperCase().includes(m));
+        return AKUVOX_ANDROID_MODELS.some(m => model.toUpperCase().includes(m));
     }
 
     public getLiveStreamURL(device: Device): string {
@@ -160,32 +117,29 @@ export class AkuvoxDriver implements IDeviceDriver {
     }
 
     async upsertCredential(credential: Credential, device: Device): Promise<void> {
-        console.log(`[Akuvox] Syncing credential ${credential.value} to ${device.ip}`);
 
         if (credential.type === 'TAG') {
             await this.syncRfKey(credential, device);
         } else if (credential.type === 'FACE') {
             // Deprecated path, now using syncUserWithFace
-            console.log(`[Akuvox] FACE credential sync is deprecated, use syncUserWithFace`);
         } else {
-            console.log(`[Akuvox] Skipping credential type ${credential.type}`);
         }
     }
 
     // Generar un ID numérico determinista basado en el ID de la base de datos (string)
+    // Usa FNV-1a hash con 9 dígitos (999,999,999 valores) para minimizar colisiones
     private getNumericId(stringId: string): string {
-        let hash = 0;
+        // FNV-1a 32-bit hash — much better distribution than djb2
+        let hash = 0x811c9dc5; // FNV offset basis
         for (let i = 0; i < stringId.length; i++) {
-            const char = stringId.charCodeAt(i);
-            hash = ((hash << 5) - hash) + char;
-            hash = hash & hash; // Convert to 32bit integer
+            hash ^= stringId.charCodeAt(i);
+            hash = Math.imul(hash, 0x01000193); // FNV prime
         }
-        // Retornamos un número positivo de 6 dígitos máximo para compatibilidad
-        return Math.abs(hash % 1000000).toString();
+        // 9 dígitos: 999M valores posibles (colisión ~0.05% con 10K usuarios)
+        return Math.abs(hash % 999999999).toString().padStart(9, '0');
     }
 
     async syncUserWithFace(user: any, device: Device) {
-        console.log(`[Akuvox] Deterministic Sync User + Face: ${user.name} -> ${device.ip}`);
 
         const akuvoxId = this.getNumericId(user.id);
 
@@ -231,14 +185,12 @@ export class AkuvoxDriver implements IDeviceDriver {
                         const base64 = imageBuffer.toString('base64');
                         userPayload["Image"] = base64; // Linux AC specific field
                         userPayload["FaceImage"] = base64; // Alternative field name
-                        console.log(`[Akuvox] Embedded face image in user payload for Linux AC compatibility`);
                     }
                 } catch (e: any) {
                     console.warn(`[Akuvox] Could not embed face in user payload: ${e.message}`);
                 }
             }
 
-            console.log(`[Akuvox] Sending User Payload (ID: ${akuvoxId}):`, JSON.stringify({ ...userPayload, Image: userPayload.Image ? '(Base64...)' : null }));
 
             try {
                 await this.request("POST", "/api/user/add", {
@@ -246,15 +198,12 @@ export class AkuvoxDriver implements IDeviceDriver {
                     "action": "add",
                     "data": { "item": [userPayload] }
                 }, device);
-                console.log(`[Akuvox] User ${user.name} added successfully`);
             } catch (addError: any) {
-                console.log(`[Akuvox] user/add failed, trying user/set fallback for ${user.name}...`);
                 await this.request("POST", "/api/user/set", {
                     "target": "user",
                     "action": "set",
                     "data": { "item": [userPayload] }
                 }, device);
-                console.log(`[Akuvox] User ${user.name} updated successfully via set`);
             }
 
         } catch (error: any) {
@@ -283,13 +232,11 @@ export class AkuvoxDriver implements IDeviceDriver {
                             "data": { "ID": akuvoxId, "Image": base64, "UserID": akuvoxId }
                         }, device);
                     } catch (e) {
-                        console.log(`[Akuvox] /face/add failed, trying /face/set...`);
-                        await this.request("POST", "/api/face/add", { // Note: Action inside payload is what matters
+                        await this.request("POST", "/api/face/set", {
                             "target": "face", "action": "set",
                             "data": { "ID": akuvoxId, "Image": base64, "UserID": akuvoxId }
                         }, device);
                     }
-                    console.log(`[Akuvox] Face image synced via face module for ${user.name}`);
                 }
             } catch (error: any) {
                 console.warn(`[Akuvox] Warning: Face Sync via module failed: ${error.message}`);
@@ -299,7 +246,8 @@ export class AkuvoxDriver implements IDeviceDriver {
 
     async syncRfKey(credential: Credential, device: Device) {
         const path = "/api/rfkey/add";
-        const internalId = Math.floor(Math.random() * 100000).toString();
+        // ID determinístico basado en credential.id para evitar duplicados en cada sync
+        const internalId = this.getNumericId(credential.id);
 
         const payload = {
             "target": "rfkey",
@@ -322,7 +270,6 @@ export class AkuvoxDriver implements IDeviceDriver {
         try {
             const response = await this.request("POST", path, payload, device);
             if (response && response.retcode === 0) {
-                console.log(`[Akuvox] RFKey synced successfully: ${credential.value}`);
             } else {
                 console.warn(`[Akuvox] RFKey sync failed: ${JSON.stringify(response)}`);
             }
@@ -339,7 +286,6 @@ export class AkuvoxDriver implements IDeviceDriver {
             const relayPass = "Api*2011";
             const doorNum = "1"; // Default to Relay A
 
-            console.log(`[Akuvox] Sending Trigger Relay command to ${device.ip} (Relay ${doorNum})...`);
 
             // Strategy 1: Unified JSON API (Android/Linux)
             try {
@@ -355,7 +301,6 @@ export class AkuvoxDriver implements IDeviceDriver {
                 }, device);
 
                 if (response?.retcode === 0) {
-                    console.log(`[Akuvox] Unified Trigger Success`);
                     return;
                 }
             } catch (e: any) {
@@ -366,14 +311,12 @@ export class AkuvoxDriver implements IDeviceDriver {
             const path1 = `/fcgi/do?action=OpenDoor&UserName=${relayUser}&Password=${relayPass}&DoorNum=${doorNum}`;
             try {
                 const response = await this.request("GET", path1, null, device);
-                console.log(`[Akuvox] CGI OpenDoor response:`, response);
                 return;
             } catch (error: any) {
                 console.warn(`[Akuvox] Standard OpenDoor failed, trying High Security URL...`);
                 // Method 2: High Security (Basic Auth in URL)
                 const highSecurityUrl = `http://${relayUser}:${relayPass}@${device.ip}/fcgi/OpenDoor?action=OpenDoor&DoorNum=${doorNum}`;
                 const response = await axios.get(highSecurityUrl, { timeout: 5000 }).then(r => r.data);
-                console.log(`[Akuvox] High Security OpenDoor response:`, response);
             }
 
         } catch (error: any) {
@@ -383,10 +326,13 @@ export class AkuvoxDriver implements IDeviceDriver {
     }
 
     async syncAllFromDevice(device: Device): Promise<any[]> {
-        console.log(`[Akuvox] Syncing all credentials from device ${device.ip}`);
         // This method will fetch all users (faces and tags) from the device
         // and return them in a unified format.
         return this.getFaceList(device); // getFaceList now handles both faces and tags via user module
+    }
+
+    async getFacesFromCamera(device: Device): Promise<any[]> {
+        return this.getFaceList(device);
     }
 
     async getFaceList(device: Device): Promise<any[]> {
@@ -407,7 +353,6 @@ export class AkuvoxDriver implements IDeviceDriver {
 
                 if (data && data.retcode === 0) {
                     users = data.data.item || [];
-                    console.log(`[Akuvox] Retrieved ${users.length} users from device`);
                 }
             } catch (error) {
                 console.warn(`[Akuvox] Warning: Could not fetch users (Device might be offline or busy). Returning empty list.`);
@@ -430,7 +375,6 @@ export class AkuvoxDriver implements IDeviceDriver {
                         if (f.ID) faceInternalIds.add(String(f.ID).trim());
                         if (f.UserID) faceUserIds.add(String(f.UserID).trim());
                     });
-                    console.log(`[Akuvox] Retrieved ${items.length} faces from device`);
                 }
             } catch (error) {
                 console.error(`[Akuvox] Error fetching face list:`, error);
@@ -482,7 +426,6 @@ export class AkuvoxDriver implements IDeviceDriver {
                     if (!url.startsWith("/")) url = "/" + url;
                     url = `${this.getBaseUrl(device)}${url}`;
                 }
-                console.log(`[Akuvox] Trying specific path: ${url}`);
                 try {
                     const response = await axios.get(url, {
                         responseType: 'arraybuffer',
@@ -510,7 +453,6 @@ export class AkuvoxDriver implements IDeviceDriver {
             for (const idValue of idsToTry) {
                 for (const paramName of paramNames) {
                     const url = `${this.getBaseUrl(device)}/api/face/get?${paramName}=${idValue}`;
-                    console.log(`[Akuvox] Attempting to fetch face image with: ${url}`);
 
                     const response = await axios.get(url, {
                         responseType: 'arraybuffer',
@@ -617,7 +559,6 @@ export class AkuvoxDriver implements IDeviceDriver {
 
 
     async deleteFace(device: Device, faceId: string, userId?: string, userCode?: string): Promise<boolean> {
-        console.log(`[Akuvox] Deleting face ID:${faceId} UserID:${userId} Code:${userCode} from ${device.ip}`);
 
         const tryAction = async (data: any, strategyName: string) => {
             // Try standard "delete"
@@ -629,14 +570,12 @@ export class AkuvoxDriver implements IDeviceDriver {
 
                 // If unsupport action, try "del"
                 if (res && (res.message?.includes("unsupport") || res.retcode === -1)) {
-                    console.log(`[Akuvox] 'delete' unsupported, trying 'del' for ${strategyName}...`);
                     const resDel = await this.request("POST", "/api/user/delete", {
                         "target": "user", "action": "del", "data": data
                     }, device);
                     if (resDel && resDel.retcode === 0) return true;
 
                     // Try "remove"
-                    console.log(`[Akuvox] 'del' unsupported, trying 'remove' for ${strategyName}...`);
                     const resRemove = await this.request("POST", "/api/user/delete", {
                         "target": "user", "action": "remove", "data": data
                     }, device);
@@ -651,7 +590,6 @@ export class AkuvoxDriver implements IDeviceDriver {
         const tryLegacyCGI = async (urlParams: string) => {
             const url = `${this.getBaseUrl(device)}/fcgi/do?action=DeleteUser&${urlParams}`;
             try {
-                console.log(`[Akuvox] Trying Legacy CGI: ${url}`);
                 const response = await axios.get(url, {
                     headers: this.getAuthHeader(device),
                     httpsAgent,
@@ -659,7 +597,6 @@ export class AkuvoxDriver implements IDeviceDriver {
                     validateStatus: () => true
                 });
                 if (response.status === 200 && (response.data?.includes("success") || response.data?.retcode === 0)) {
-                    console.log(`[Akuvox] CGI Success`);
                     return true;
                 }
             } catch (e: any) {
@@ -709,7 +646,6 @@ export class AkuvoxDriver implements IDeviceDriver {
             };
 
             try {
-                // console.log(`[Akuvox] Fetching ${api} from ${device.ip}...`);
                 const response = await this.request("POST", `/api/${api}/get`, payload, device);
 
                 if (response && response.retcode === 0 && response.data?.item) {
@@ -775,7 +711,6 @@ export class AkuvoxDriver implements IDeviceDriver {
         };
 
         try {
-            // console.log(`[Akuvox] Fetching calllog from ${device.ip}...`);
             const response = await this.request("POST", "/api/calllog/get", payload, device);
 
             if (response && response.retcode === 0 && response.data?.item) {
@@ -790,7 +725,6 @@ export class AkuvoxDriver implements IDeviceDriver {
 
             // Fallback: Some versions might use GET
             if (!response || response.retcode !== 0) {
-                console.log(`[Akuvox] POST calllog failed or empty, trying GET fallback...`);
                 const getResponse = await this.request("GET", `/api/calllog/get?num=${num}&offset=${offset}`, null, device);
                 if (getResponse && getResponse.retcode === 0) {
                     return getResponse.data?.item || [];

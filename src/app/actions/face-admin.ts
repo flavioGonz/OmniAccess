@@ -10,7 +10,7 @@ async function getCompareFaceConfig() {
     ]);
     return {
         url: urlSet?.value || process.env.COMPARE_FACE_URL || "https://compareface.infratec.com.uy",
-        apiKey: keySet?.value || "a0986800-8c5b-4583-9146-49281cf02e53"
+        apiKey: keySet?.value || process.env.COMPAREFACE_API_KEY || ""
     };
 }
 
@@ -62,7 +62,7 @@ export async function deleteCompareFaceSubject(subject: string) {
 export async function clearAllVisitorFaces() {
     const targets = [
         { url: (await getCompareFaceConfig()).url, key: "d7bdb468-26af-4306-b35d-499e5373ac4a" },
-        { url: "http://192.168.99.57:8000", key: "1f78ca0c-8c83-48ad-bc80-e6bfcb136d8d" }
+        ...(process.env.FACE_ENGINE_2_URL ? [{ url: process.env.FACE_ENGINE_2_URL, key: process.env.FACE_ENGINE_2_KEY || "" }] : [])
     ];
 
     let totalDeleted = 0;
@@ -70,14 +70,12 @@ export async function clearAllVisitorFaces() {
 
     for (const target of targets) {
         try {
-            console.log(`Checking visitor faces at ${target.url}...`);
             const response = await axios.get(`${target.url}/api/v1/recognition/subjects`, {
                 headers: { "x-api-key": target.key },
                 timeout: 5000
             });
 
             const subjects = response.data.subjects || [];
-            console.log(`Found ${subjects.length} subjects at ${target.url}`);
 
             if (subjects.length > 0) {
                 const chunkSize = 5;

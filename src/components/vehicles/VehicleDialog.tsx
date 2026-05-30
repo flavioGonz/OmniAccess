@@ -80,16 +80,16 @@ export function VehicleDialog({ users, vehicle, trigger, onSuccess }: VehicleDia
                     </Button>
                 )}
             </DialogTrigger>
-            <DialogContent className="max-w-4xl p-0 bg-neutral-950 border-neutral-800 overflow-hidden rounded-2xl">
-                <DialogHeader className="p-6 bg-neutral-900/50 border-b border-white/5 flex flex-row items-center gap-4">
+            <DialogContent className="max-w-4xl p-0 bg-background border-border overflow-hidden rounded-2xl">
+                <DialogHeader className="p-6 bg-card/50 border-b border-border flex flex-row items-center gap-4">
                     <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500">
                         <Car size={24} />
                     </div>
                     <div>
-                        <DialogTitle className="text-xl font-black text-white uppercase tracking-tight">
+                        <DialogTitle className="text-xl font-black text-foreground uppercase tracking-tight">
                             {isEdit ? "Editar Vehículo" : "Nuevo Vehículo"}
                         </DialogTitle>
-                        <DialogDescription className="text-neutral-500 text-xs">
+                        <DialogDescription className="text-muted-foreground text-xs">
                             Información del parque automotor y propietarios
                         </DialogDescription>
                     </div>
@@ -100,18 +100,18 @@ export function VehicleDialog({ users, vehicle, trigger, onSuccess }: VehicleDia
                         {/* Plate & User */}
                         <div className="space-y-4">
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-neutral-500 tracking-widest">Matrícula</Label>
+                                <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Matrícula</Label>
                                 <Input
                                     value={formData.plate}
                                     onChange={(e) => setFormData({ ...formData, plate: e.target.value.toUpperCase() })}
-                                    className="bg-neutral-900 border-neutral-800 h-12 font-mono text-lg font-bold"
+                                    className="bg-card border-border h-12 font-mono text-lg font-bold"
                                     required
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-neutral-500 tracking-widest">Titular</Label>
+                                <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Titular</Label>
                                 <Select value={formData.userId} onValueChange={(val) => setFormData({ ...formData, userId: val })}>
-                                    <SelectTrigger className="bg-neutral-900 border-neutral-800 h-12">
+                                    <SelectTrigger className="bg-card border-border h-12">
                                         <SelectValue placeholder="Seleccionar..." />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -126,15 +126,15 @@ export function VehicleDialog({ users, vehicle, trigger, onSuccess }: VehicleDia
                         {/* Brand & Model */}
                         <div className="space-y-4">
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-neutral-500 tracking-widest">Marca</Label>
+                                <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Marca</Label>
                                 <Popover open={openBrand} onOpenChange={setOpenBrand}>
                                     <PopoverTrigger asChild>
-                                        <Button variant="outline" className="w-full justify-between bg-neutral-900 border-neutral-800 h-12">
+                                        <Button variant="outline" className="w-full justify-between bg-card border-border h-12">
                                             {formData.brand || "Elegir..."}
                                             <ChevronDown size={14} className="opacity-50" />
                                         </Button>
                                     </PopoverTrigger>
-                                    <PopoverContent className="w-[200px] p-0 bg-neutral-900 border-neutral-800">
+                                    <PopoverContent className="w-[200px] p-0 bg-card border-border">
                                         <Command>
                                             <CommandInput placeholder="Buscar..." />
                                             <CommandList>
@@ -158,11 +158,11 @@ export function VehicleDialog({ users, vehicle, trigger, onSuccess }: VehicleDia
                                 </Popover>
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-neutral-500 tracking-widest">Modelo</Label>
+                                <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Modelo</Label>
                                 <Input
                                     value={formData.model}
                                     onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                                    className="bg-neutral-900 border-neutral-800 h-12"
+                                    className="bg-card border-border h-12"
                                 />
                             </div>
                         </div>
@@ -172,9 +172,9 @@ export function VehicleDialog({ users, vehicle, trigger, onSuccess }: VehicleDia
                         {/* Type & Color */}
                         <div className="space-y-4">
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-neutral-500 tracking-widest">Tipo</Label>
+                                <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Tipo</Label>
                                 <Select value={formData.type} onValueChange={(v) => setFormData({ ...formData, type: v })}>
-                                    <SelectTrigger className="bg-neutral-900 border-neutral-800 h-12">
+                                    <SelectTrigger className="bg-card border-border h-12">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -187,7 +187,7 @@ export function VehicleDialog({ users, vehicle, trigger, onSuccess }: VehicleDia
                                 </Select>
                             </div>
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-neutral-500 tracking-widest">Color</Label>
+                                <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Color</Label>
                                 <div className="flex flex-wrap gap-2">
                                     {PRESET_COLORS.map(c => (
                                         <button
@@ -195,7 +195,7 @@ export function VehicleDialog({ users, vehicle, trigger, onSuccess }: VehicleDia
                                             type="button"
                                             onClick={() => setFormData({ ...formData, color: c.name })}
                                             className={cn(
-                                                "w-8 h-8 rounded-full border border-white/10 transition-all",
+                                                "w-8 h-8 rounded-full border border-border transition-all",
                                                 formData.color === c.name && "ring-2 ring-emerald-500 ring-offset-2 ring-offset-neutral-950"
                                             )}
                                             style={{ backgroundColor: c.value }}
@@ -207,16 +207,16 @@ export function VehicleDialog({ users, vehicle, trigger, onSuccess }: VehicleDia
 
                         {/* Notes */}
                         <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-neutral-500 tracking-widest">Observaciones</Label>
+                            <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Observaciones</Label>
                             <Textarea
                                 value={formData.notes}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                className="bg-neutral-900 border-neutral-800 h-[104px] resize-none"
+                                className="bg-card border-border h-[104px] resize-none"
                             />
                         </div>
                     </div>
 
-                    <DialogFooter className="pt-4 border-t border-white/5">
+                    <DialogFooter className="pt-4 border-t border-border">
                         <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
                         <Button type="submit" disabled={loading} className="bg-emerald-600 hover:bg-emerald-500 min-w-[150px]">
                             {loading ? <Loader2 className="animate-spin" /> : "Guardar Cambios"}

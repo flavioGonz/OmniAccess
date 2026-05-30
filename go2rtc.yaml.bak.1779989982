@@ -1,0 +1,14 @@
+streams:
+  bosch_main:
+    - rtsp://admin:admin@172.26.20.199:554/?stream=video
+  bosch_172_26_20_199:
+    - rtsp://admin:admin@172.26.20.199:554/?stream=video2
+  bosch_172_26_20_199_hd:
+    - rtsp://admin:admin@172.26.20.199:554/?stream=video
+
+api:
+  listen: ":1984"
+  origin: "*"
+
+webrtc:
+  listen: ":8555"

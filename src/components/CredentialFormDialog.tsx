@@ -80,12 +80,12 @@ export function CredentialFormDialog({ children, credential, users, onSuccess }:
             <DialogTrigger asChild>
                 {children}
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px] bg-neutral-900 border-neutral-800 text-neutral-100">
+            <DialogContent className="sm:max-w-[500px] bg-card border-border text-foreground">
                 <DialogHeader>
                     <DialogTitle className="text-xl font-black uppercase tracking-tight">
                         {credential ? "Editar Credencial" : "Nueva Credencial"}
                     </DialogTitle>
-                    <DialogDescription className="text-neutral-400">
+                    <DialogDescription className="text-muted-foreground">
                         {credential ? "Modifique los datos de la credencial existente." : "Asocie una nueva credencial a un usuario del sistema."}
                     </DialogDescription>
                 </DialogHeader>
@@ -94,7 +94,7 @@ export function CredentialFormDialog({ children, credential, users, onSuccess }:
                     <div className="space-y-4">
                         {/* User Selection */}
                         <div className="space-y-2">
-                            <Label htmlFor="user" className="text-xs font-bold uppercase tracking-wider text-neutral-400">Usuario Asignado</Label>
+                            <Label htmlFor="user" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Usuario Asignado</Label>
                             <Select
                                 value={formData.userId}
                                 onValueChange={(val) => setFormData({ ...formData, userId: val })}
@@ -103,7 +103,7 @@ export function CredentialFormDialog({ children, credential, users, onSuccess }:
                                 <SelectTrigger id="user" className="bg-black/40 border-neutral-800 h-10 font-medium">
                                     <SelectValue placeholder="Seleccione un usuario..." />
                                 </SelectTrigger>
-                                <SelectContent className="bg-neutral-900 border-neutral-800 text-neutral-200">
+                                <SelectContent className="bg-card border-border text-foreground">
                                     {users.map((u) => (
                                         <SelectItem key={u.id} value={u.id}>
                                             {u.name}
@@ -115,7 +115,7 @@ export function CredentialFormDialog({ children, credential, users, onSuccess }:
 
                         {/* Credential Type */}
                         <div className="space-y-2">
-                            <Label htmlFor="type" className="text-xs font-bold uppercase tracking-wider text-neutral-400">Tipo de Credencial</Label>
+                            <Label htmlFor="type" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Tipo de Credencial</Label>
                             <Select
                                 value={formData.type}
                                 onValueChange={(val) => setFormData({ ...formData, type: val })}
@@ -124,7 +124,7 @@ export function CredentialFormDialog({ children, credential, users, onSuccess }:
                                 <SelectTrigger id="type" className="bg-black/40 border-neutral-800 h-10 font-medium">
                                     <SelectValue placeholder="Tipo" />
                                 </SelectTrigger>
-                                <SelectContent className="bg-neutral-900 border-neutral-800 text-neutral-200">
+                                <SelectContent className="bg-card border-border text-foreground">
                                     <SelectItem value="PLATE">LPR / Patente</SelectItem>
                                     <SelectItem value="TAG">Tarjeta RFID / Tag</SelectItem>
                                     <SelectItem value="FACE">Reconocimiento Facial</SelectItem>
@@ -134,7 +134,7 @@ export function CredentialFormDialog({ children, credential, users, onSuccess }:
 
                         {/* Value Input */}
                         <div className="space-y-2">
-                            <Label htmlFor="value" className="text-xs font-bold uppercase tracking-wider text-neutral-400">
+                            <Label htmlFor="value" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                                 {formData.type === 'PLATE' ? 'Número de Patente' : formData.type === 'TAG' ? 'Código RFID' : 'Hash / Valor Facial'}
                             </Label>
                             <Input
@@ -149,13 +149,13 @@ export function CredentialFormDialog({ children, credential, users, onSuccess }:
                     </div>
 
                     <DialogFooter>
-                        <Button type="button" variant="ghost" onClick={() => setOpen(false)} className="hover:bg-neutral-800 text-neutral-400 block mt-2 sm:mt-0">
+                        <Button type="button" variant="ghost" onClick={() => setOpen(false)} className="hover:bg-muted text-muted-foreground block mt-2 sm:mt-0">
                             Cancelar
                         </Button>
                         <Button
                             type="submit"
                             disabled={isLoading}
-                            className="bg-orange-600 hover:bg-orange-700 text-white font-bold"
+                            className="bg-orange-600 hover:bg-orange-700 text-foreground font-bold"
                         >
                             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                             {credential ? "Guardar Cambios" : "Crear Credencial"}

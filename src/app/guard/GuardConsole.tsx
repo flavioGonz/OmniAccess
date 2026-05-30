@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
     Camera,
     Loader2,
@@ -132,7 +132,7 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
     const [lprEntries, setLprEntries] = useState<any[]>([]);
     const [isLprLoading, setIsLprLoading] = useState(false);
     const [lprSearch, setLprSearch] = useState("");
-    const [lprDate, setLprDate] = useState(new Date().toISOString().split('T')[0]);
+    const [lprDate, setLprDate] = useState("");
     const [lprDirection, setLprDirection] = useState<"ALL" | "ENTRY" | "EXIT">("ALL");
 
     // Alerts History state
@@ -805,9 +805,12 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
             playTactileSound();
             toast.success({ title: `Bienvenido, ${guard.name}` });
 
+            setShowIdentityOverlay(false);
+
             // Reset form
             setLoginUser("");
             setLoginPass("");
+
         } else {
             playTactileSound();
             toast.error({ title: "Credenciales incorrectas" });
@@ -924,20 +927,31 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
             if (activeTab === "lpr") {
                 setIsLprLoading(true);
                 try {
-                    const from = new Date(lprDate);
-                    from.setHours(0, 0, 0, 0);
-                    const to = new Date(lprDate);
-                    to.setHours(23, 59, 59, 999);
+                    let from = undefined;
+                    let to = undefined;
+                    if (lprDate) {
+                        try {
+                            from = new Date(lprDate);
+                            from.setHours(0, 0, 0, 0);
+                            to = new Date(lprDate);
+                            to.setHours(23, 59, 59, 999);
+                        } catch (e) { }
+                    }
 
                     const { events } = await getAccessEvents({
                         type: 'PLATE',
-                        take: 50,
+                        take: 100, // Pull more for better context
                         search: lprSearch,
                         direction: lprDirection !== "ALL" ? lprDirection : undefined,
                         from,
                         to
                     });
-                    setLprEntries(events);
+                    
+                    // Explicit client-side sort by timestamp desc
+                    const sortedEvents = (events || []).sort((a: any, b: any) => 
+                        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+                    );
+                    setLprEntries(sortedEvents);
                 } catch (error) {
                     console.error("LPR fetch error:", error);
                 } finally {
@@ -950,9 +964,16 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
     }, [activeTab, lprSearch, lprDate, lprDirection]);
 
     // TACTILE SOUND UTILITY
-    const playTactileSound = () => {
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const playTactileSound = useCallback(() => {
         try {
-            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            if (!audioContextRef.current) {
+                audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+            }
+            const ctx = audioContextRef.current;
+            if (ctx.state === 'suspended') {
+                ctx.resume();
+            }
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
             osc.type = "sine";
@@ -964,7 +985,7 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
             osc.start();
             osc.stop(ctx.currentTime + 0.1);
         } catch (e) { }
-    };
+    }, []);
 
     // PLATE MATCH DETECTION
     useEffect(() => {
@@ -1775,6 +1796,7 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                                                 <TactilePlateInput
                                                                     value={plate}
                                                                     onChange={setPlate}
+                                                                    playTactileSound={playTactileSound}
                                                                     onCameraClick={() => { setIsOCRActive(true); playTactileSound(); }}
                                                                 />
                                                             </div>
@@ -2668,6 +2690,11 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                     }}
                                 >
                                     <button
+                                        onMouseDown={isAlertMode ? startDeactivateHold : startPanicHold}
+                                        onMouseUp={isAlertMode ? cancelDeactivateHold : cancelPanicHold}
+                                        onMouseLeave={isAlertMode ? cancelDeactivateHold : cancelPanicHold}
+                                        onTouchStart={isAlertMode ? startDeactivateHold : startPanicHold}
+                                        onTouchEnd={isAlertMode ? cancelDeactivateHold : cancelPanicHold}
                                         onClick={() => {
                                             if (!isAlertMode) handleTabChange("alerts");
                                             playTactileSound();
@@ -2679,6 +2706,7 @@ export default function GuardConsole({ initialEntries, logo, headerColor, initia
                                             : "bg-white text-red-600 border-slate-100 hover:border-red-100"
                                     )}
                                 >
+
                                     <Siren size={32} className={cn("md:w-8 md:h-8 relative z-10")} />
                                 </button>
                                 {!isAlertMode && (
@@ -4369,39 +4397,49 @@ function RollingCharacter({ char, isFocused }: { char: string, isFocused: boolea
     );
 }
 
-function TactilePlateInput({ value, onChange, onCameraClick }: { value: string, onChange: (v: string) => void, onCameraClick?: () => void }) {
+function TactilePlateInput({ value, onChange, onCameraClick, playTactileSound }: { value: string, onChange: (v: string) => void, onCameraClick?: () => void, playTactileSound?: () => void }) {
     const chars = value.padEnd(7, " ").substring(0, 7).split("");
     const inputRef = useRef<HTMLInputElement>(null);
 
+    // Force cursor to end whenever value changes (critical for mobile keyboards)
+    useEffect(() => {
+        if (inputRef.current) {
+            const len = value.length;
+            if (inputRef.current.selectionStart !== len) {
+                inputRef.current.setSelectionRange(len, len);
+            }
+        }
+    }, [value]);
+
     return (
-        <div className="w-full flex flex-col gap-4 items-center">
+        <div className="w-full flex flex-col gap-4 items-center relative">
             <input
                 ref={inputRef}
                 type="text"
                 value={value}
                 onKeyDown={() => {
-                    try {
-                        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-                        const osc = ctx.createOscillator();
-                        const gain = ctx.createGain();
-                        osc.frequency.setValueAtTime(600, ctx.currentTime);
-                        gain.gain.setValueAtTime(0.02, ctx.currentTime);
-                        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.05);
-                        osc.connect(gain);
-                        gain.connect(ctx.destination);
-                        osc.start();
-                        osc.stop(ctx.currentTime + 0.05);
-                    } catch (e) { }
+                    if (playTactileSound) playTactileSound();
                 }}
-                onChange={(e) => onChange(e.target.value.toUpperCase().substring(0, 7))}
-                className="absolute opacity-0 pointer-events-none h-0 w-0"
+                onFocus={(e) => {
+                    const len = value.length;
+                    e.target.setSelectionRange(len, len);
+                }}
+                onChange={(e) => {
+                    // Sanitize input: Alphanumeric only, limit to 7 chars
+                    const sanitized = (e.target.value.replace(/[^A-Za-z0-9]/g, '')).toUpperCase().substring(0, 7);
+                    onChange(sanitized);
+                }}
+                // Make the hidden input cover the entire visual area for better tablet focus reliability
+                className="absolute inset-0 opacity-0 z-20 cursor-pointer"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                autoCapitalize="characters"
+                inputMode="text"
                 autoFocus
             />
 
-            <div
-                className="flex gap-1 sm:gap-2 items-center cursor-pointer perspective-[1000px]"
-                onClick={() => inputRef.current?.focus()}
-            >
+            <div className="flex gap-1 sm:gap-2 items-center relative z-10 perspective-[1000px]">
                 {chars.map((char, i) => (
                     <RollingCharacter
                         key={i}

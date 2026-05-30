@@ -111,13 +111,13 @@ export function LprImportPreviewDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-2xl p-0 gap-0 border-neutral-800 bg-[#09090b] overflow-hidden shadow-2xl rounded-lg">
+            <DialogContent className="max-w-2xl p-0 gap-0 border-border bg-[#09090b] overflow-hidden shadow-2xl rounded-lg">
 
                 {/* Header Premium */}
-                <div className="relative overflow-hidden bg-neutral-900 border-b border-white/5 p-8 pb-10">
+                <div className="relative overflow-hidden bg-card border-b border-border p-8 pb-10">
                     <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600"></div>
                     <div className="absolute top-0 right-0 p-4 opacity-10">
-                        <Database size={120} className="text-white transform rotate-12 translate-x-8 -translate-y-8" />
+                        <Database size={120} className="text-foreground transform rotate-12 translate-x-8 -translate-y-8" />
                     </div>
 
                     <div className="relative z-10 flex items-start justify-between">
@@ -126,18 +126,18 @@ export function LprImportPreviewDialog({
                                 <ArrowDownToLine size={12} />
                                 <span>Import Wizard</span>
                             </div>
-                            <DialogTitle className="text-3xl font-black text-white tracking-tight">Sincronización LPR</DialogTitle>
-                            <DialogDescription className="text-neutral-400 font-medium max-w-sm leading-relaxed">
+                            <DialogTitle className="text-3xl font-black text-foreground tracking-tight">Sincronización LPR</DialogTitle>
+                            <DialogDescription className="text-muted-foreground font-medium max-w-sm leading-relaxed">
                                 Se importarán los datos desde el dispositivo físico hacia la base de datos de la App.
                             </DialogDescription>
                         </div>
                         <div className="text-right">
-                            <p className="text-[10px] font-black text-neutral-500 uppercase tracking-widest mb-1">Dispositivo Origen</p>
-                            <div className="flex items-center justify-end gap-2 text-white font-bold">
-                                <HardDrive size={16} className="text-neutral-400" />
+                            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Dispositivo Origen</p>
+                            <div className="flex items-center justify-end gap-2 text-foreground font-bold">
+                                <HardDrive size={16} className="text-muted-foreground" />
                                 {device?.name}
                             </div>
-                            <p className="text-[10px] font-mono text-neutral-600 mt-0.5">{device?.ip}</p>
+                            <p className="text-[10px] font-mono text-muted-foreground mt-0.5">{device?.ip}</p>
                         </div>
                     </div>
 
@@ -149,7 +149,7 @@ export function LprImportPreviewDialog({
                                 </span>
                                 <span>{importProgress}% Completado</span>
                             </div>
-                            <Progress value={importProgress} className="h-1.5 bg-neutral-800" indicatorClassName="bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]" />
+                            <Progress value={importProgress} className="h-1.5 bg-muted" indicatorClassName="bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]" />
                         </div>
                     )}
                 </div>
@@ -157,12 +157,12 @@ export function LprImportPreviewDialog({
                 {/* Stats Grid */}
                 <div className="p-8 bg-black/20">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="p-5 rounded-md bg-neutral-900/50 border border-white/5 flex flex-col items-center justify-center text-center group hover:bg-neutral-900 transition-colors">
-                            <div className="mb-3 p-2 rounded-full bg-neutral-800 text-neutral-400 group-hover:text-white transition-colors">
+                        <div className="p-5 rounded-md bg-card/50 border border-border flex flex-col items-center justify-center text-center group hover:bg-card transition-colors">
+                            <div className="mb-3 p-2 rounded-full bg-muted text-muted-foreground group-hover:text-foreground transition-colors">
                                 <Database size={20} />
                             </div>
-                            <span className="text-2xl font-black text-white font-mono tracking-tighter mb-1">{uniqueCameraPlates.length}</span>
-                            <span className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">Total en Cámara</span>
+                            <span className="text-2xl font-black text-foreground font-mono tracking-tighter mb-1">{uniqueCameraPlates.length}</span>
+                            <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Total en Cámara</span>
                         </div>
 
                         <div className="p-5 rounded-md bg-indigo-500/5 border border-indigo-500/10 flex flex-col items-center justify-center text-center group hover:bg-indigo-500/10 transition-colors">
@@ -194,20 +194,20 @@ export function LprImportPreviewDialog({
                 {/* Data Preview */}
                 <div className="px-8 pb-8 space-y-4">
                     <div className="flex items-center justify-between">
-                        <h4 className="text-[10px] font-black text-neutral-500 uppercase tracking-widest flex items-center gap-2">
+                        <h4 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
                             <ShieldCheck size={12} />
                             Vista Previa de Importación
                         </h4>
-                        <span className="text-[9px] text-neutral-600 font-mono">Mostrando max 50</span>
+                        <span className="text-[9px] text-muted-foreground font-mono">Mostrando max 50</span>
                     </div>
 
-                    <div className="bg-neutral-900/50 rounded-md border border-white/5 p-4 min-h-[120px]">
+                    <div className="bg-card/50 rounded-md border border-border p-4 min-h-[120px]">
                         {platesToProcess.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-full py-8 opacity-50 space-y-3">
                                 <CheckCircle2 size={32} className="text-emerald-500" />
                                 <div className="text-center">
-                                    <p className="text-sm font-bold text-white mb-1">¡Todo Sincronizado!</p>
-                                    <p className="text-[10px] text-neutral-500 uppercase tracking-wider">No hay nuevos datos para importar</p>
+                                    <p className="text-sm font-bold text-foreground mb-1">¡Todo Sincronizado!</p>
+                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">No hay nuevos datos para importar</p>
                                 </div>
                             </div>
                         ) : (
@@ -223,7 +223,7 @@ export function LprImportPreviewDialog({
                                                     "h-7 px-2.5 text-[10px] font-mono border-0",
                                                     isNewUser
                                                         ? "bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20"
-                                                        : "bg-neutral-800 text-neutral-400"
+                                                        : "bg-muted text-muted-foreground"
                                                 )}
                                             >
                                                 {plate}
@@ -232,7 +232,7 @@ export function LprImportPreviewDialog({
                                         );
                                     })}
                                     {platesToProcess.length > 50 && (
-                                        <div className="h-7 px-3 flex items-center justify-center rounded-sm bg-neutral-900 text-[9px] font-bold text-neutral-500 uppercase border border-white/5">
+                                        <div className="h-7 px-3 flex items-center justify-center rounded-sm bg-card text-[9px] font-bold text-muted-foreground uppercase border border-border">
                                             +{platesToProcess.length - 50} más...
                                         </div>
                                     )}
@@ -241,21 +241,21 @@ export function LprImportPreviewDialog({
                         )}
                     </div>
 
-                    <div className="flex items-center gap-2 p-3 rounded-md bg-neutral-900 border border-white/5">
-                        <Info size={14} className="text-neutral-500 shrink-0" />
-                        <p className="text-[10px] text-neutral-400 leading-snug">
-                            <span className="text-indigo-400 font-bold">Nota:</span> Por cada matrícula nueva detectada, el sistema generará automáticamente un <span className="text-white font-bold">Usuario</span> y una <span className="text-white font-bold">Ficha de Vehículo</span> correspondientes en la sección administrativa.
+                    <div className="flex items-center gap-2 p-3 rounded-md bg-card border border-border">
+                        <Info size={14} className="text-muted-foreground shrink-0" />
+                        <p className="text-[10px] text-muted-foreground leading-snug">
+                            <span className="text-indigo-400 font-bold">Nota:</span> Por cada matrícula nueva detectada, el sistema generará automáticamente un <span className="text-foreground font-bold">Usuario</span> y una <span className="text-foreground font-bold">Ficha de Vehículo</span> correspondientes en la sección administrativa.
                         </p>
                     </div>
                 </div>
 
                 {/* Footer Controls */}
-                <div className="p-6 bg-neutral-900 border-t border-white/5 flex gap-4">
+                <div className="p-6 bg-card border-t border-border flex gap-4">
                     <Button
                         variant="ghost"
                         onClick={() => onOpenChange(false)}
                         disabled={isImporting}
-                        className="flex-1 text-neutral-500 hover:text-white hover:bg-white/5 font-bold text-xs uppercase tracking-wider h-12 rounded-md transition-all"
+                        className="flex-1 text-muted-foreground hover:text-foreground hover:bg-accent font-bold text-xs uppercase tracking-wider h-12 rounded-md transition-all"
                     >
                         <X size={16} className="mr-2" />
                         Cancelar Opveración
@@ -264,9 +264,9 @@ export function LprImportPreviewDialog({
                         onClick={handleConfirmImport}
                         disabled={isImporting || totalToSync === 0}
                         className={cn(
-                            "flex-[2] text-white font-black text-xs uppercase tracking-wider h-12 rounded-md shadow-xl transition-all",
+                            "flex-[2] text-foreground font-black text-xs uppercase tracking-wider h-12 rounded-md shadow-xl transition-all",
                             totalToSync === 0
-                                ? "bg-neutral-800 text-neutral-500 cursor-not-allowed"
+                                ? "bg-muted text-muted-foreground cursor-not-allowed"
                                 : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 hover:scale-[1.02] shadow-blue-900/20"
                         )}
                     >

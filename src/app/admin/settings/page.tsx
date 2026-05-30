@@ -36,8 +36,14 @@ import {
     Plus,
     Pencil,
     User as UserIcon,
-    Loader2
+    Loader2,
+    Palette,
+    Layers
 } from "lucide-react";
+import BrandingSection from "./BrandingSection";
+import AuditPage from "@/app/admin/audit/page";
+import WebhookDebugPage from "@/app/admin/debug/page";
+import StorageBrowser from "@/components/settings/StorageBrowser";
 import { Button } from "@/components/ui/button";
 import SystemFlow from "@/components/dashboard/SystemFlow";
 import { Input } from "@/components/ui/input";
@@ -50,6 +56,8 @@ import { clearAllVisitorFaces } from "@/app/actions/face-admin";
 import { getAdminsList as getAdmins, saveAdmin as saveAdminAction, deleteAdmin as deleteAdminAction } from "@/app/actions/users";
 import { useEffect, useTransition } from "react";
 import { sileo as toast } from "sileo";
+import { getEnabledModules, toggleModule, setExclusiveMode } from "@/app/actions/modules";
+import { MODULE_DEFINITIONS, type ModuleId } from "@/lib/module-definitions";
 import { Switch } from "@/components/ui/switch";
 import {
     Dialog,
@@ -69,6 +77,13 @@ import {
 
 const SETTINGS_SECTIONS = [
     {
+        id: "branding",
+        icon: Palette,
+        label: "Branding",
+        description: "Logo, fondo y nombre del login",
+        color: "fuchsia"
+    },
+    {
         id: "system_status",
         icon: Activity,
         label: "Estado del Sistema",
@@ -76,18 +91,11 @@ const SETTINGS_SECTIONS = [
         color: "indigo"
     },
     {
-        id: "mode_face",
-        icon: ScanFace,
-        label: "Modo Face",
-        description: "Comportamiento Rec. Facial",
-        color: "teal"
-    },
-    {
-        id: "mode_lpr",
-        icon: ScanLine,
-        label: "Modo LPR",
-        description: "Lógica de Matrículas",
-        color: "amber"
+        id: "modo",
+        icon: Layers,
+        label: "Modo",
+        description: "Activar y configurar LPR / Face / Cola",
+        color: "violet"
     },
     {
         id: "drivers",
@@ -104,10 +112,17 @@ const SETTINGS_SECTIONS = [
         color: "purple"
     },
     {
-        id: "notifications",
-        icon: Bell,
-        label: "Notificaciones",
-        description: "Alertas y eventos del sistema",
+        id: "audit",
+        icon: ShieldCheck,
+        label: "Auditoría Hardware",
+        description: "Auditoría de dispositivos",
+        color: "emerald"
+    },
+    {
+        id: "webhooks",
+        icon: Activity,
+        label: "Webhooks",
+        description: "Debug de webhooks entrantes",
         color: "amber"
     },
     {
@@ -138,6 +153,7 @@ const DRIVERS = [
     { brand: "Hikvision", tech: "ISAPI/Event", active: true, color: "red", logo: "/logos/hikvision.png" },
     { brand: "Akuvox", tech: "HTTP/Webhook", active: true, color: "blue", logo: "/logos/akuvox.png" },
     { brand: "Avicam", tech: "HTTP/Webhook", active: true, color: "rose", logo: "https://avicam.com.br/wp-content/uploads/2019/11/logo_avicam.png" },
+    { brand: "Bosch", tech: "HTTP/Webhook", active: true, color: "blue" },
     { brand: "Dahua", tech: "CGI/HTTP", active: false, color: "red" },
     { brand: "ZKTeco", tech: "Push HTTP", active: false, color: "blue" },
     { brand: "Axis", tech: "Vapix API", active: false, color: "orange" },
@@ -148,16 +164,23 @@ const DRIVERS = [
 
 export default function SettingsPage() {
     const [activeSection, setActiveSection] = useState("system_status");
+    const [storageTab, setStorageTab] = useState("explorador");
     const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
     const [modelSearch, setModelSearch] = useState("");
+    const [modeSubTab, setModeSubTab] = useState<string>("mode_lpr");
+    const [enabledModules, setEnabledModules] = useState<Record<string, boolean>>({});
+    const [pendingMode, setPendingMode] = useState<{ moduleId: string; label: string } | null>(null);
+    const [switchingTo, setSwitchingTo] = useState<string | null>(null);
+    useEffect(() => { getEnabledModules().then((m: any) => { setEnabledModules(m); const act = m.MODULE_LPR ? "mode_lpr" : m.MODULE_FACE ? "mode_face" : m.MODULE_QUEUE ? "mode_queue" : "mode_lpr"; setModeSubTab(act); }).catch(() => {}); }, []);
+    const confirmSwitch = async () => { if (!pendingMode) return; const { moduleId, label } = pendingMode; setPendingMode(null); setSwitchingTo(label); try { await setExclusiveMode(moduleId as ModuleId); } catch {} setTimeout(() => window.location.reload(), 1800); };
 
     return (
-        <div className="h-full overflow-y-auto p-6 space-y-8 animate-in fade-in duration-700 custom-scrollbar">
+        <div className="h-full overflow-y-auto px-6 pb-6 pt-0 space-y-6 animate-in fade-in duration-700 custom-scrollbar">
 
 
             {/* Tabs Navigation */}
-            <div className="sticky top-0 z-40 bg-[#09090b]/80 backdrop-blur-md border-b border-white/5 mb-8 -mx-6 px-6 pt-2">
-                <div className="flex items-center justify-center gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden">
+            <div className="sticky top-0 z-50 bg-card/95 backdrop-blur-xl border-b border-border mb-6 -mx-6 px-4 py-3 shadow-md shadow-black/20">
+                <div className="flex items-center gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden">
                     {SETTINGS_SECTIONS.map((section) => {
                         const Icon = section.icon;
                         const isActive = activeSection === section.id;
@@ -165,26 +188,19 @@ export default function SettingsPage() {
                             <button
                                 key={section.id}
                                 onClick={() => setActiveSection(section.id)}
+                                title={section.description}
                                 className={cn(
-                                    "flex items-center gap-2 px-4 py-3 text-sm font-medium transition-all relative whitespace-nowrap rounded-lg",
+                                    "group flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium transition-all whitespace-nowrap rounded-lg border",
                                     isActive
-                                        ? "text-white"
-                                        : "text-neutral-500 hover:text-neutral-300 hover:bg-white/5"
+                                        ? "bg-accent text-foreground border-border shadow-sm"
+                                        : "text-muted-foreground border-transparent hover:text-foreground hover:bg-accent/50"
                                 )}
                             >
-                                <Icon size={16} className={cn(
-                                    "transition-colors",
-                                    isActive ? `text-${section.color}-400` : "text-neutral-600 group-hover:text-neutral-400"
+                                <Icon size={15} className={cn(
+                                    "transition-colors shrink-0",
+                                    isActive ? `text-${section.color}-400` : "text-muted-foreground group-hover:text-foreground"
                                 )} />
                                 {section.label}
-
-                                {/* Active Indicator line */}
-                                {isActive && (
-                                    <div className={cn(
-                                        "absolute bottom-0 left-0 right-0 h-[2px] rounded-t-full shadow-[0_-2px_10px_rgba(0,0,0,0.5)]",
-                                        `bg-${section.color}-500 shadow-${section.color}-500/50`
-                                    )} />
-                                )}
                             </button>
                         );
                     })}
@@ -195,45 +211,129 @@ export default function SettingsPage() {
             <div className="w-full space-y-6">
                 <div key={activeSection} className="animate-in fade-in slide-in-from-bottom-2 duration-500 ease-out">
                     {/* Mode Face Section */}
-                    {activeSection === "mode_face" && (
-                        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                            <ModeConfiguration
-                                title="Modo Face"
-                                description="Define cómo se comporta el sistema ante eventos de reconocimiento facial"
-                                settingKey="MODE_FACE"
-                                options={[
-                                    { id: "BLACKLIST", label: "Lista Negra", desc: "Las capturas identificadas serán DENEGADAS automáticamente.", icon: ShieldAlert, color: "red" },
-                                    { id: "WHITELIST", label: "Lista Blanca", desc: "Las capturas identificadas serán PERMITIDAS automáticamente.", icon: ShieldCheck, color: "emerald" },
-                                    { id: "LEARNING", label: "Aprendizaje", desc: "Modo en desarrollo. Captura rostros para entrenamiento.", icon: Cpu, color: "amber", disabled: true }
-                                ]}
-                            />
+                    {activeSection === "audit" && <AuditPage />}
+
+                    {activeSection === "webhooks" && <WebhookDebugPage />}
+
+                    {activeSection === "branding" && <BrandingSection />}
 
 
+                    {activeSection === "modo" && (
+                        <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                            {/* Sub-tabs de modo */}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                                {[
+                                    { k: "mode_lpr", label: "Modo LPR", moduleId: "MODULE_LPR", Icon: ScanLine, color: "amber" },
+                                    { k: "mode_face", label: "Modo Face", moduleId: "MODULE_FACE", Icon: ScanFace, color: "teal" },
+                                    { k: "mode_queue", label: "Modo Cola", moduleId: "MODULE_QUEUE", Icon: Users, color: "violet" },
+                                ].map((t) => {
+                                    const sel = modeSubTab === t.k;
+                                    const isOn = enabledModules[t.moduleId];
+                                    const Ic = t.Icon;
+                                    return (
+                                        <button key={t.k} onClick={() => setModeSubTab(t.k)}
+                                            className={cn("flex items-center gap-2 px-3.5 py-2 rounded-lg border text-sm font-semibold transition",
+                                                sel ? "bg-accent border-border text-foreground" : "border-transparent text-muted-foreground hover:text-foreground hover:bg-accent/50")}>
+                                            <Ic size={15} className={sel ? `text-${t.color}-400` : "text-muted-foreground"} />
+                                            {t.label}
+                                            {isOn && <span className="ml-1 inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Activo</span>}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Banner activar */}
+                            {(() => {
+                                const meta = ({ mode_lpr: { moduleId: "MODULE_LPR", label: "Modo LPR" }, mode_face: { moduleId: "MODULE_FACE", label: "Modo Face" }, mode_queue: { moduleId: "MODULE_QUEUE", label: "Modo Cola" } } as any)[modeSubTab];
+                                const isOn = enabledModules[meta.moduleId];
+                                return (
+                                    <div className={cn("flex items-center justify-between gap-3 rounded-xl border p-4", isOn ? "border-emerald-500/30 bg-emerald-500/[0.06]" : "border-border bg-card")}>
+                                        <div>
+                                            <div className="text-sm font-bold text-foreground">{isOn ? "Este modo está activo" : "Activar este modo"}</div>
+                                            <p className="text-xs text-muted-foreground mt-0.5">Cambiar de modo recarga la aplicación con la interfaz del nuevo modo.</p>
+                                        </div>
+                                        <button disabled={isOn} onClick={() => setPendingMode(meta)}
+                                            className={cn("px-4 py-2 rounded-lg text-sm font-bold transition shrink-0", isOn ? "bg-muted text-muted-foreground cursor-default" : "bg-violet-600 hover:bg-violet-500 text-white")}>
+                                            {isOn ? "Activo" : "Activar"}
+                                        </button>
+                                    </div>
+                                );
+                            })()}
+
+                            {/* Configuración del modo seleccionado */}
+                            {modeSubTab === "mode_face" && (
+                                <ModeConfiguration
+                                    title="Modo Face"
+                                    description="Define cómo se comporta el sistema ante eventos de reconocimiento facial"
+                                    settingKey="MODE_FACE"
+                                    options={[
+                                        { id: "BLACKLIST", label: "Lista Negra", desc: "Las capturas identificadas serán DENEGADAS automáticamente.", icon: ShieldAlert, color: "red" },
+                                        { id: "WHITELIST", label: "Lista Blanca", desc: "Las capturas identificadas serán PERMITIDAS automáticamente.", icon: ShieldCheck, color: "emerald" },
+                                        { id: "LEARNING", label: "Aprendizaje", desc: "Modo en desarrollo. Captura rostros para entrenamiento.", icon: Cpu, color: "amber", disabled: true }
+                                    ]}
+                                />
+                            )}
+                            {modeSubTab === "mode_lpr" && (
+                                <ModeConfiguration
+                                    title="Modo LPR"
+                                    description="Define la lógica de control para matrículas detectadas"
+                                    settingKey="MODE_LPR"
+                                    options={[
+                                        { id: "BLACKLIST", label: "Lista Negra", desc: "Las matrículas identificadas en lista serán DENEGADAS.", icon: ShieldAlert, color: "red" },
+                                        { id: "WHITELIST", label: "Lista Blanca", desc: "Las matrículas identificadas en lista serán PERMITIDAS.", icon: ShieldCheck, color: "emerald" },
+                                        { id: "LEARNING", label: "Aprendizaje", desc: "Agrega matrículas desconocidas a la base de datos.", icon: Activity, color: "blue" }
+                                    ]}
+                                />
+                            )}
+                            {modeSubTab === "mode_queue" && (
+                                <ModeConfiguration
+                                    title="Modo Filas"
+                                    description="Define la lógica de control para el sistema de filas y turnos"
+                                    settingKey="MODE_QUEUE"
+                                    options={[
+                                        { id: "COUNTER", label: "Contador", desc: "Cuenta personas en fila. Alerta cuando supera el umbral.", icon: Activity, color: "blue" },
+                                        { id: "TICKET", label: "Turnos", desc: "Sistema de turnos con ticket virtual y notificación.", icon: Bell, color: "violet" },
+                                        { id: "LEARNING", label: "Aprendizaje", desc: "Modo en desarrollo. Aprende patrones de flujo.", icon: Cpu, color: "amber", disabled: true }
+                                    ]}
+                                />
+                            )}
+
+                            {/* Modal de confirmación */}
+                            {pendingMode && (
+                                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setPendingMode(null)}>
+                                    <div className="bg-card border border-border rounded-2xl shadow-2xl max-w-sm w-full p-6" onClick={(e) => e.stopPropagation()}>
+                                        <div className="w-12 h-12 rounded-xl bg-violet-500/15 flex items-center justify-center mb-4"><Layers size={22} className="text-violet-400" /></div>
+                                        <h3 className="text-lg font-bold text-foreground">¿Cambiar a {pendingMode.label}?</h3>
+                                        <p className="text-sm text-muted-foreground mt-1.5">La aplicación se recargará en el nuevo modo. Las demás modalidades quedarán desactivadas.</p>
+                                        <div className="flex items-center gap-2 mt-5">
+                                            <button onClick={confirmSwitch} className="flex-1 px-4 py-2.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-bold transition">Sí, cambiar</button>
+                                            <button onClick={() => setPendingMode(null)} className="flex-1 px-4 py-2.5 rounded-lg bg-muted hover:bg-accent text-foreground text-sm font-bold transition">Cancelar</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Splashscreen */}
+                            {switchingTo && (
+                                <div className="fixed inset-0 z-[110] flex flex-col items-center justify-center gap-5 bg-background">
+                                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center shadow-2xl shadow-violet-900/40 animate-pulse"><Layers size={30} className="text-white" /></div>
+                                    <div className="text-center">
+                                        <div className="text-xl font-black text-foreground">Cambiando a {switchingTo}</div>
+                                        <div className="text-sm text-muted-foreground mt-1 flex items-center justify-center gap-2"><Loader2 size={14} className="animate-spin" /> Recargando la interfaz…</div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                    )}
-
-                    {/* Mode LPR Section */}
-                    {activeSection === "mode_lpr" && (
-                        <ModeConfiguration
-                            title="Modo LPR"
-                            description="Define la lógica de control para matrículas detectadas"
-                            settingKey="MODE_LPR"
-                            options={[
-                                { id: "BLACKLIST", label: "Lista Negra", desc: "Las matrículas identificadas en lista serán DENEGADAS.", icon: ShieldAlert, color: "red" },
-                                { id: "WHITELIST", label: "Lista Blanca", desc: "Las matrículas identificadas en lista serán PERMITIDAS.", icon: ShieldCheck, color: "emerald" },
-                                { id: "LEARNING", label: "Aprendizaje", desc: "Agrega matrículas desconocidas a la base de datos.", icon: Activity, color: "blue" }
-                            ]}
-                        />
                     )}
 
                     {/* Drivers Section */}
                     {activeSection === "drivers" && (
                         <div className="space-y-6">
-                            <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-8">
+                            <div className="bg-card/50 backdrop-blur-xl border border-border rounded-2xl p-8">
                                 <div className="flex items-center justify-between mb-6">
                                     <div>
-                                        <h2 className="text-2xl font-black text-white">Drivers & Protocolos</h2>
-                                        <p className="text-sm text-neutral-500 mt-1">Gestiona los controladores de dispositivos compatibles</p>
+                                        <h2 className="text-2xl font-black text-foreground">Drivers & Protocolos</h2>
+                                        <p className="text-sm text-muted-foreground mt-1">Gestiona los controladores de dispositivos compatibles</p>
                                     </div>
                                     <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
                                         <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -250,8 +350,8 @@ export default function SettingsPage() {
                                             className={cn(
                                                 "relative p-6 rounded-xl border transition-all group",
                                                 driver.active
-                                                    ? "bg-neutral-950/50 border-white/10 hover:border-blue-500/50 hover:bg-neutral-950 cursor-pointer hover:scale-105"
-                                                    : "bg-neutral-950/20 border-white/5 opacity-40 cursor-not-allowed"
+                                                    ? "bg-background/50 border-border hover:border-blue-500/50 hover:bg-background cursor-pointer hover:scale-105"
+                                                    : "bg-background/20 border-border opacity-40 cursor-not-allowed"
                                             )}
                                         >
                                             {driver.active && (
@@ -263,19 +363,19 @@ export default function SettingsPage() {
                                             <div className="flex flex-col items-center gap-3">
                                                 <div className={cn(
                                                     "w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden transition-all",
-                                                    (driver as { logo?: string }).logo ? "bg-white p-1" : (driver.active ? "bg-blue-500/10" : "bg-neutral-800/50")
+                                                    (driver as { logo?: string }).logo ? "bg-white p-1" : (driver.active ? "bg-blue-500/10" : "bg-muted/50")
                                                 )}>
                                                     {(driver as { logo?: string }).logo ? (
                                                         <img src={(driver as { logo?: string }).logo} alt={driver.brand} className="w-full h-full object-contain" />
                                                     ) : (
-                                                        <Camera size={24} className={driver.active ? "text-blue-400" : "text-neutral-600"} />
+                                                        <Camera size={24} className={driver.active ? "text-blue-400" : "text-muted-foreground"} />
                                                     )}
                                                 </div>
 
                                                 <div className="text-center">
-                                                    <p className="font-black text-sm text-white mb-1">{driver.brand}</p>
-                                                    <div className="px-2 py-1 bg-neutral-900/80 rounded-md">
-                                                        <p className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">{driver.tech}</p>
+                                                    <p className="font-black text-sm text-foreground mb-1">{driver.brand}</p>
+                                                    <div className="px-2 py-1 bg-card/80 rounded-md">
+                                                        <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">{driver.tech}</p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -299,34 +399,38 @@ export default function SettingsPage() {
                         <AdminsSection />
                     )}
 
-                    {/* Notifications Section */}
-                    {activeSection === "notifications" && (
-                        <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-8">
-                            <h2 className="text-2xl font-black text-white mb-4">Notificaciones & Alertas</h2>
-                            <p className="text-neutral-500">Configuración de notificaciones próximamente...</p>
-                        </div>
-                    )}
                     {activeSection === "database" && (
                         /* ... existing database code ... */
                         <DatabaseSection />
                     )}
 
                     {activeSection === "storage" && (
-                        <StorageSection />
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border w-fit">
+                                {[{ k: "explorador", l: "Explorador · MinIO/S3" }, { k: "config", l: "Configuración & Retención" }].map((t) => (
+                                    <button key={t.k} onClick={() => setStorageTab(t.k)}
+                                        className={cn("px-3.5 py-2 rounded-lg text-[13px] font-semibold transition whitespace-nowrap", storageTab === t.k ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                                        {t.l}
+                                    </button>
+                                ))}
+                            </div>
+                            {storageTab === "explorador" && <StorageBrowser />}
+                            {storageTab === "config" && <StorageSection />}
+                        </div>
                     )}
 
                     {activeSection === "system_status" && (
                         <div className="space-y-6 animate-in zoom-in-95 duration-500">
                             <div className="flex items-center justify-between mb-6">
                                 <div>
-                                    <h2 className="text-2xl font-black text-white tracking-tight">Topología de Red</h2>
-                                    <p className="text-sm text-neutral-500 mt-1">Mapa interactivo de conexión entre cámaras, servidor y base de datos</p>
+                                    <h2 className="text-2xl font-black text-foreground tracking-tight">Topología de Red</h2>
+                                    <p className="text-sm text-muted-foreground mt-1">Mapa interactivo de conexión entre cámaras, servidor y base de datos</p>
                                 </div>
                                 <div className="p-2 bg-indigo-500/10 rounded-xl border border-indigo-500/20">
                                     <Activity className="text-indigo-400" size={24} />
                                 </div>
                             </div>
-                            <div className="h-[calc(100vh-220px)] rounded-xl overflow-hidden border border-white/5 bg-neutral-900/50 backdrop-blur-3xl shadow-2xl relative group">
+                            <div className="h-[calc(100vh-220px)] rounded-xl overflow-hidden border border-border bg-card/50 backdrop-blur-3xl shadow-2xl relative group">
                                 <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none" />
                                 <SystemFlow />
                             </div>
@@ -572,17 +676,17 @@ function DatabaseSection() {
 
     return (
         <div className="space-y-6">
-            <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-8">
+            <div className="bg-card/50 backdrop-blur-xl border border-border rounded-2xl p-8">
                 <div className="flex items-center justify-between mb-8">
                     <div>
-                        <h2 className="text-2xl font-black text-white tracking-tight">PostgreSQL Database</h2>
-                        <p className="text-sm text-neutral-500 mt-1">Gestión avanzada y salud del motor de datos</p>
+                        <h2 className="text-2xl font-black text-foreground tracking-tight">PostgreSQL Database</h2>
+                        <p className="text-sm text-muted-foreground mt-1">Gestión avanzada y salud del motor de datos</p>
                     </div>
                     <div className="flex items-center gap-4">
                         <Button
                             onClick={() => setShowSwitchDb(!showSwitchDb)}
                             variant="outline"
-                            className="bg-neutral-950 border-white/5 text-neutral-400 hover:text-white hover:bg-white/5"
+                            className="bg-background border-border text-muted-foreground hover:text-foreground hover:bg-accent"
                         >
                             <Settings size={16} className="mr-2" />
                             {showSwitchDb ? "Cerrar Config" : "Cambiar Base de Datos"}
@@ -591,7 +695,7 @@ function DatabaseSection() {
                             <div className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg mb-1">
                                 <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Peso Total DB</span>
                             </div>
-                            <span className="text-xl font-mono font-black text-white">
+                            <span className="text-xl font-mono font-black text-foreground">
                                 {loadingStats ? "..." : stats?.totalSize || "N/A"}
                             </span>
                         </div>
@@ -605,15 +709,15 @@ function DatabaseSection() {
                                 <Database className="text-blue-400" size={20} />
                             </div>
                             <div>
-                                <h3 className="text-sm font-black text-white uppercase tracking-tight">Configurar Nueva Conexión</h3>
-                                <p className="text-[10px] text-neutral-500 uppercase font-bold">Cambia la base de datos sin afectar la actual</p>
+                                <h3 className="text-sm font-black text-foreground uppercase tracking-tight">Configurar Nueva Conexión</h3>
+                                <p className="text-[10px] text-muted-foreground uppercase font-bold">Cambia la base de datos sin afectar la actual</p>
                             </div>
                         </div>
 
                         <div className="space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                 <div className="md:col-span-3">
-                                    <Label className="text-[10px] uppercase font-black text-neutral-500 mb-2 block">String de Conexión (DATABASE_URL)</Label>
+                                    <Label className="text-[10px] uppercase font-black text-muted-foreground mb-2 block">String de Conexión (DATABASE_URL)</Label>
                                     <Input
                                         value={newDbUrl}
                                         onChange={(e) => setNewDbUrl(e.target.value)}
@@ -625,7 +729,7 @@ function DatabaseSection() {
                                     <Button
                                         onClick={handleTestExternal}
                                         disabled={testingExternal || !newDbUrl}
-                                        className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black h-10 text-[10px] uppercase tracking-widest"
+                                        className="w-full bg-blue-600 hover:bg-blue-500 text-foreground font-black h-10 text-[10px] uppercase tracking-widest"
                                     >
                                         {testingExternal ? <RefreshCcw className="animate-spin mr-2" size={12} /> : <Activity className="mr-2" size={12} />}
                                         Testear
@@ -644,7 +748,7 @@ function DatabaseSection() {
                                             <p className={cn("text-xs font-bold", externalStatus.success ? "text-emerald-400" : "text-red-400")}>
                                                 {externalStatus.success ? "Conexión Exitosa" : "Error de Conexión"}
                                             </p>
-                                            <p className="text-[10px] text-neutral-500">{externalStatus.message}</p>
+                                            <p className="text-[10px] text-muted-foreground">{externalStatus.message}</p>
                                         </div>
                                     </div>
 
@@ -654,7 +758,7 @@ function DatabaseSection() {
                                                 <Button
                                                     onClick={handleRunMigrations}
                                                     disabled={migrating}
-                                                    className="bg-amber-600 hover:bg-amber-500 text-white font-black h-8 text-[9px] uppercase tracking-widest"
+                                                    className="bg-amber-600 hover:bg-amber-500 text-foreground font-black h-8 text-[9px] uppercase tracking-widest"
                                                 >
                                                     {migrating ? <RefreshCcw className="animate-spin mr-2" size={10} /> : <FileText className="mr-2" size={10} />}
                                                     Poblar Tablas (Prisma)
@@ -662,7 +766,7 @@ function DatabaseSection() {
                                             )}
                                             <Button
                                                 onClick={handleApplyExternal}
-                                                className="bg-emerald-600 hover:bg-emerald-500 text-white font-black h-8 text-[9px] uppercase tracking-widest"
+                                                className="bg-emerald-600 hover:bg-emerald-500 text-foreground font-black h-8 text-[9px] uppercase tracking-widest"
                                             >
                                                 Aplicar Cambio
                                             </Button>
@@ -677,21 +781,21 @@ function DatabaseSection() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Connection Health */}
                     <div className="lg:col-span-1 space-y-4">
-                        <div className="bg-neutral-950/50 border border-white/5 rounded-xl p-6 h-full flex flex-col justify-between">
+                        <div className="bg-background/50 border border-border rounded-xl p-6 h-full flex flex-col justify-between">
                             <div>
                                 <div className="flex items-center gap-3 mb-4">
                                     <div className="p-2 bg-blue-500/10 rounded-lg">
                                         <Activity className="text-blue-400" size={20} />
                                     </div>
-                                    <h3 className="font-bold text-white text-sm uppercase tracking-tight">Estado de Red</h3>
+                                    <h3 className="font-bold text-foreground text-sm uppercase tracking-tight">Estado de Red</h3>
                                 </div>
                                 <div className="space-y-3 mb-6">
-                                    <p className="text-xs text-neutral-500 leading-relaxed">
+                                    <p className="text-xs text-muted-foreground leading-relaxed">
                                         Asegura que el microservicio Prisma pueda comunicarse con la instancia de Postgres.
                                     </p>
                                     {!loadingStats && stats?.host && (
                                         <div className="p-3 bg-black/40 rounded-lg border border-white/5">
-                                            <p className="text-[9px] font-black text-neutral-600 uppercase mb-1">Endpoint Actual</p>
+                                            <p className="text-[9px] font-black text-muted-foreground uppercase mb-1">Endpoint Actual</p>
                                             <p className="text-xs font-mono font-black text-blue-400">{stats.host}:{stats.port}</p>
                                         </div>
                                     )}
@@ -700,7 +804,7 @@ function DatabaseSection() {
                             <Button
                                 onClick={handleTestDb}
                                 disabled={testing}
-                                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black h-11 text-[10px] uppercase tracking-widest transition-all"
+                                className="w-full bg-blue-600 hover:bg-blue-500 text-foreground font-black h-11 text-[10px] uppercase tracking-widest transition-all"
                             >
                                 {testing ? <RefreshCcw className="animate-spin mr-2" size={14} /> : <Activity className="mr-2" size={14} />}
                                 TESTEAR CONEXIÓN
@@ -710,31 +814,31 @@ function DatabaseSection() {
 
                     {/* Tables Stats */}
                     <div className="lg:col-span-2">
-                        <div className="bg-neutral-950/50 border border-white/5 rounded-xl p-6">
+                        <div className="bg-background/50 border border-border rounded-xl p-6">
                             <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 bg-purple-500/10 rounded-lg">
                                         <TableIcon className="text-purple-400" size={20} />
                                     </div>
-                                    <h3 className="font-bold text-white text-sm uppercase tracking-tight">Esquema & Tablas</h3>
+                                    <h3 className="font-bold text-foreground text-sm uppercase tracking-tight">Esquema & Tablas</h3>
                                 </div>
-                                <button onClick={loadStats} className="text-neutral-500 hover:text-white transition-colors">
+                                <button onClick={loadStats} className="text-muted-foreground hover:text-foreground transition-colors">
                                     <RefreshCcw size={14} className={loadingStats ? "animate-spin" : ""} />
                                 </button>
                             </div>
 
                             <div className="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
                                 {loadingStats ? (
-                                    <p className="text-[10px] text-neutral-600 animate-pulse font-black uppercase">Obteniendo esquema...</p>
+                                    <p className="text-[10px] text-muted-foreground animate-pulse font-black uppercase">Obteniendo esquema...</p>
                                 ) : stats?.tables.map((table, i) => (
-                                    <div key={i} className="flex items-center justify-between p-3 bg-white/[0.02] border border-white/5 rounded-lg hover:bg-white/5 transition-all group">
+                                    <div key={i} className="flex items-center justify-between p-3 bg-foreground/[0.04] border border-border rounded-lg hover:bg-accent transition-all group">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-neutral-700 group-hover:bg-purple-500 transition-colors" />
-                                            <span className="text-[10px] font-black text-neutral-400 uppercase tracking-tight">{table.table_name}</span>
+                                            <div className="w-1.5 h-1.5 rounded-full bg-muted group-hover:bg-purple-500 transition-colors" />
+                                            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-tight">{table.table_name}</span>
                                         </div>
                                         <div className="flex items-center gap-4 font-mono text-[10px]">
-                                            <span className="text-neutral-600">{table.row_count} rows</span>
-                                            <span className="text-neutral-400 font-bold">{table.total_size}</span>
+                                            <span className="text-muted-foreground">{table.row_count} rows</span>
+                                            <span className="text-muted-foreground font-bold">{table.total_size}</span>
                                         </div>
                                     </div>
                                 ))}
@@ -744,21 +848,21 @@ function DatabaseSection() {
                 </div>
 
                 {/* Backup & Import Section */}
-                <div className="mt-8 pt-8 border-t border-white/5 grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-neutral-900 border border-white/5 p-6 rounded-xl flex items-center justify-between group">
+                <div className="mt-8 pt-8 border-t border-border grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-card border border-border p-6 rounded-xl flex items-center justify-between group">
                         <div className="flex items-center gap-4">
                             <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500 border border-amber-500/20">
                                 <Download size={24} />
                             </div>
                             <div>
-                                <p className="text-white font-black uppercase tracking-tight text-xs">Respaldo Integral</p>
-                                <p className="text-[10px] text-neutral-500 font-medium">Exportar toda la configuración y registros a JSON</p>
+                                <p className="text-foreground font-black uppercase tracking-tight text-xs">Respaldo Integral</p>
+                                <p className="text-[10px] text-muted-foreground font-medium">Exportar toda la configuración y registros a JSON</p>
                             </div>
                         </div>
                         <Button
                             onClick={handleBackup}
                             disabled={backingUp}
-                            className="bg-neutral-800 hover:bg-amber-600 text-neutral-300 hover:text-white font-black text-[9px] uppercase tracking-widest px-4 h-9 transition-all"
+                            className="bg-muted hover:bg-amber-600 text-muted-foreground hover:text-foreground font-black text-[9px] uppercase tracking-widest px-4 h-9 transition-all"
                         >
                             {backingUp ? <RefreshCcw className="animate-spin mr-2" size={12} /> : <Download size={12} className="mr-2" />}
                             EXPORTAR
@@ -768,31 +872,31 @@ function DatabaseSection() {
                     {/* Database Actions Grid */}
                     <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
                         {/* Backup */}
-                        <div className="bg-neutral-900 border border-white/5 p-5 rounded-xl flex flex-col justify-between group h-full">
+                        <div className="bg-card border border-border p-5 rounded-xl flex flex-col justify-between group h-full">
                             <div className="mb-4">
                                 <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-500 mb-3 border border-amber-500/10">
                                     <Download size={20} />
                                 </div>
-                                <h3 className="text-white font-black uppercase text-xs mb-1">Respaldo</h3>
-                                <p className="text-[10px] text-neutral-500">Descargar copia completa JSON</p>
+                                <h3 className="text-foreground font-black uppercase text-xs mb-1">Respaldo</h3>
+                                <p className="text-[10px] text-muted-foreground">Descargar copia completa JSON</p>
                             </div>
                             <Button
                                 onClick={handleBackup}
                                 disabled={backingUp}
-                                className="w-full bg-neutral-800 hover:bg-amber-600 text-neutral-300 hover:text-white font-black text-[9px] uppercase tracking-widest h-8"
+                                className="w-full bg-muted hover:bg-amber-600 text-muted-foreground hover:text-foreground font-black text-[9px] uppercase tracking-widest h-8"
                             >
                                 {backingUp ? "Exportando..." : "Exportar"}
                             </Button>
                         </div>
 
                         {/* Import */}
-                        <div className="bg-neutral-900 border border-white/5 p-5 rounded-xl flex flex-col justify-between group h-full">
+                        <div className="bg-card border border-border p-5 rounded-xl flex flex-col justify-between group h-full">
                             <div className="mb-4">
                                 <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 mb-3 border border-blue-500/10">
                                     <Upload size={20} />
                                 </div>
-                                <h3 className="text-white font-black uppercase text-xs mb-1">Restaurar</h3>
-                                <p className="text-[10px] text-neutral-500">Importar backup existente</p>
+                                <h3 className="text-foreground font-black uppercase text-xs mb-1">Restaurar</h3>
+                                <p className="text-[10px] text-muted-foreground">Importar backup existente</p>
                             </div>
                             <div className="relative">
                                 <input
@@ -805,7 +909,7 @@ function DatabaseSection() {
                                 <Button
                                     onClick={triggerImport}
                                     disabled={importing}
-                                    className="w-full bg-neutral-800 hover:bg-blue-600 text-neutral-400 hover:text-white font-black text-[9px] uppercase tracking-widest h-8 border border-white/5"
+                                    className="w-full bg-muted hover:bg-blue-600 text-muted-foreground hover:text-foreground font-black text-[9px] uppercase tracking-widest h-8 border border-border"
                                 >
                                     {importing ? "Restaurando..." : "Seleccionar Archivo"}
                                 </Button>
@@ -813,18 +917,18 @@ function DatabaseSection() {
                         </div>
 
                         {/* Populate / Init */}
-                        <div className="bg-neutral-900 border border-white/5 p-5 rounded-xl flex flex-col justify-between group h-full">
+                        <div className="bg-card border border-border p-5 rounded-xl flex flex-col justify-between group h-full">
                             <div className="mb-4">
                                 <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500 mb-3 border border-purple-500/10">
                                     <Database size={20} />
                                 </div>
-                                <h3 className="text-white font-black uppercase text-xs mb-1">Inicializar</h3>
-                                <p className="text-[10px] text-neutral-500">Poblar nueva DB o Resetear</p>
+                                <h3 className="text-foreground font-black uppercase text-xs mb-1">Inicializar</h3>
+                                <p className="text-[10px] text-muted-foreground">Poblar nueva DB o Resetear</p>
                             </div>
                             <Button
                                 onClick={() => setPendingAction({ type: 'POPULATE' })}
                                 disabled={populating}
-                                className="w-full bg-neutral-800 hover:bg-purple-600 text-neutral-400 hover:text-white font-black text-[9px] uppercase tracking-widest h-8 border border-white/5"
+                                className="w-full bg-muted hover:bg-purple-600 text-muted-foreground hover:text-foreground font-black text-[9px] uppercase tracking-widest h-8 border border-border"
                             >
                                 {populating ? "Poblando..." : "Poblar Datos"}
                             </Button>
@@ -837,33 +941,33 @@ function DatabaseSection() {
             {/* Confirmation Modal for Database Actions */}
             {pendingAction && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setPendingAction(null)}>
-                    <div className="bg-neutral-900 border border-white/10 rounded-xl max-w-lg w-full mx-4 overflow-hidden shadow-2xl p-6" onClick={(e) => e.stopPropagation()}>
+                    <div className="bg-card border border-border rounded-xl max-w-lg w-full mx-4 overflow-hidden shadow-2xl p-6" onClick={(e) => e.stopPropagation()}>
                         <div className="text-center mb-6">
                             <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto mb-4 border border-red-500/20">
                                 <ShieldAlert size={32} />
                             </div>
-                            <h3 className="text-lg font-black text-white mb-2">
+                            <h3 className="text-lg font-black text-foreground mb-2">
                                 {pendingAction.type === 'IMPORT' ? 'Análisis de Restauración' : '¿Reiniciar Base de Datos?'}
                             </h3>
 
                             {pendingAction.type === 'IMPORT' && pendingAction.analysis ? (
                                 <div className="text-left mt-4 mb-6">
-                                    <div className="flex items-center justify-center gap-4 mb-6 bg-neutral-950 p-3 rounded-lg border border-white/5">
-                                        <span className={cn("text-xs font-bold", !mergeMode ? "text-red-400" : "text-neutral-500")}>REEMPLAZAR TODO</span>
+                                    <div className="flex items-center justify-center gap-4 mb-6 bg-background p-3 rounded-lg border border-border">
+                                        <span className={cn("text-xs font-bold", !mergeMode ? "text-red-400" : "text-muted-foreground")}>REEMPLAZAR TODO</span>
                                         <Switch checked={mergeMode} onCheckedChange={setMergeMode} />
-                                        <span className={cn("text-xs font-bold", mergeMode ? "text-blue-400" : "text-neutral-500")}>FUSIONAR (MERGE)</span>
+                                        <span className={cn("text-xs font-bold", mergeMode ? "text-blue-400" : "text-muted-foreground")}>FUSIONAR (MERGE)</span>
                                     </div>
 
-                                    <div className="bg-neutral-950 rounded-lg border border-white/5 overflow-hidden">
+                                    <div className="bg-background rounded-lg border border-border overflow-hidden">
                                         <table className="w-full text-[10px]">
-                                            <thead className="bg-white/5 text-neutral-400 font-bold uppercase tracking-wider">
+                                            <thead className="bg-foreground/10 text-muted-foreground font-bold uppercase tracking-wider">
                                                 <tr>
                                                     <th className="px-3 py-2 text-left">Tabla</th>
                                                     <th className="px-3 py-2 text-center">Datos Nuevos</th>
-                                                    <th className="px-3 py-2 text-center text-white">Acción</th>
+                                                    <th className="px-3 py-2 text-center text-foreground">Acción</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-white/5 text-neutral-300">
+                                            <tbody className="divide-y divide-white/5 text-muted-foreground">
                                                 {[
                                                     { label: "Usuarios", count: pendingAction.analysis.users },
                                                     { label: "Vehículos", count: pendingAction.analysis.vehicles },
@@ -886,23 +990,23 @@ function DatabaseSection() {
                                             </tbody>
                                         </table>
                                     </div>
-                                    <p className="text-[10px] text-neutral-500 mt-4 text-center">
+                                    <p className="text-[10px] text-muted-foreground mt-4 text-center">
                                         {mergeMode
                                             ? "Se agregarán los registros nuevos. Los existentes se mantendrán."
                                             : "ADVERTENCIA: Se BORRARÁN todos los datos actuales antes de importar."}
                                     </p>
                                 </div>
                             ) : (
-                                <p className="text-xs text-neutral-400 leading-relaxed">
+                                <p className="text-xs text-muted-foreground leading-relaxed">
                                     Esta acción borrará los datos actuales y poblará la base de datos con información inicial/de prueba. ¿Estás seguro?
                                 </p>
                             )}
                         </div>
                         <div className="grid grid-cols-2 gap-3">
-                            <Button onClick={() => setPendingAction(null)} variant="ghost" className="h-10 text-neutral-400 hover:bg-white/5 hover:text-white font-bold rounded-lg border border-white/5">
+                            <Button onClick={() => setPendingAction(null)} variant="ghost" className="h-10 text-muted-foreground hover:bg-accent hover:text-foreground font-bold rounded-lg border border-border">
                                 Cancelar
                             </Button>
-                            <Button onClick={confirmAction} className={cn("h-10 text-white font-black rounded-lg", mergeMode ? "bg-blue-600 hover:bg-blue-500" : "bg-red-600 hover:bg-red-500")}>
+                            <Button onClick={confirmAction} className={cn("h-10 text-foreground font-black rounded-lg", mergeMode ? "bg-blue-600 hover:bg-blue-500" : "bg-red-600 hover:bg-red-500")}>
                                 {pendingAction.type === 'IMPORT' ? (mergeMode ? 'Confirmar Fusión' : 'Confirmar Reemplazo') : 'Sí, Inicializar'}
                             </Button>
                         </div>
@@ -1132,7 +1236,7 @@ function StorageSection() {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center h-64 bg-neutral-900/50 rounded-2xl border border-white/5">
+            <div className="flex items-center justify-center h-64 bg-card/50 rounded-2xl border border-border">
                 <RefreshCcw className="animate-spin text-blue-500" />
             </div>
         );
@@ -1140,18 +1244,18 @@ function StorageSection() {
 
     return (
         <div className="space-y-6">
-            <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-8">
+            <div className="bg-card/50 backdrop-blur-xl border border-border rounded-2xl p-8">
                 <div className="flex items-center justify-between mb-8">
                     <div>
-                        <h2 className="text-2xl font-black text-white tracking-tight">Almacenamiento (Lifecycle & S3)</h2>
-                        <p className="text-sm text-neutral-500 mt-1">Gestión de retención de datos y conexión con Object Storage</p>
+                        <h2 className="text-2xl font-black text-foreground tracking-tight">Almacenamiento (Lifecycle & S3)</h2>
+                        <p className="text-sm text-muted-foreground mt-1">Gestión de retención de datos y conexión con Object Storage</p>
                     </div>
-                    <div className="flex bg-neutral-900 border border-white/10 rounded-lg p-1">
-                        <Button onClick={handleExportConfig} variant="ghost" size="sm" className="h-8 text-[10px] font-bold text-neutral-400 hover:text-white hover:bg-white/5 uppercase">
+                    <div className="flex bg-card border border-border rounded-lg p-1">
+                        <Button onClick={handleExportConfig} variant="ghost" size="sm" className="h-8 text-[10px] font-bold text-muted-foreground hover:text-foreground hover:bg-accent uppercase">
                             <Download size={14} className="mr-2" />
                             Exportar Config
                         </Button>
-                        <div className="w-px bg-white/10 my-1 mx-1"></div>
+                        <div className="w-px bg-foreground/10 my-1 mx-1"></div>
                         <input
                             type="file"
                             ref={configFileRef}
@@ -1159,7 +1263,7 @@ function StorageSection() {
                             className="hidden"
                             accept=".json"
                         />
-                        <Button onClick={triggerImportConfig} disabled={importingConfig} variant="ghost" size="sm" className="h-8 text-[10px] font-bold text-neutral-400 hover:text-white hover:bg-white/5 uppercase">
+                        <Button onClick={triggerImportConfig} disabled={importingConfig} variant="ghost" size="sm" className="h-8 text-[10px] font-bold text-muted-foreground hover:text-foreground hover:bg-accent uppercase">
                             {importingConfig ? <RefreshCcw size={14} className="animate-spin mr-2" /> : <Upload size={14} className="mr-2" />}
                             Importar Config
                         </Button>
@@ -1171,13 +1275,13 @@ function StorageSection() {
                     <div className="lg:col-span-5 space-y-6">
                         <div className="flex items-center gap-2 mb-4">
                             <Activity size={18} className="text-amber-400" />
-                            <h3 className="text-lg font-bold text-white">Políticas de Retención</h3>
+                            <h3 className="text-lg font-bold text-foreground">Políticas de Retención</h3>
                         </div>
 
                         {/* LPR Retention */}
-                        <div className="bg-neutral-950/40 border border-white/5 rounded-xl p-5 relative overflow-hidden group">
+                        <div className="bg-background/40 border border-border rounded-xl p-5 relative overflow-hidden group">
                             <div className="flex items-center justify-between mb-3">
-                                <Label className="text-xs font-black text-white uppercase tracking-tight">Bucket LPR</Label>
+                                <Label className="text-xs font-black text-foreground uppercase tracking-tight">Bucket LPR</Label>
                                 <div className="px-2 py-0.5 bg-blue-500/10 rounded text-[10px] font-bold text-blue-400">
                                     {lifecycles.lpr === 0 ? "INFINITO" : `${lifecycles.lpr} DÍAS`}
                                 </div>
@@ -1189,20 +1293,20 @@ function StorageSection() {
                                     onChange={e => setLifecycles({ ...lifecycles, lpr: parseInt(e.target.value) || 0 })}
                                     className="bg-black/60 border-white/10 h-9 w-20 text-center font-bold text-blue-400 text-sm"
                                 />
-                                <span className="text-[10px] text-neutral-400 leading-tight">Días de retención antes de borrar. (0 = nunca)</span>
+                                <span className="text-[10px] text-muted-foreground leading-tight">Días de retención antes de borrar. (0 = nunca)</span>
                             </div>
 
                             {/* Stats Mini */}
-                            <div className="pt-3 border-t border-white/5 flex justify-between items-center text-[10px] text-neutral-500 font-mono">
+                            <div className="pt-3 border-t border-border flex justify-between items-center text-[10px] text-muted-foreground font-mono">
                                 <span>{stats.lpr.loading ? "..." : stats.lpr.count.toLocaleString()} archivos</span>
                                 <span>{stats.lpr.loading ? "..." : formatSize(stats.lpr.size)}</span>
                             </div>
                         </div>
 
                         {/* FACE Retention */}
-                        <div className="bg-neutral-950/40 border border-white/5 rounded-xl p-5 relative overflow-hidden group">
+                        <div className="bg-background/40 border border-border rounded-xl p-5 relative overflow-hidden group">
                             <div className="flex items-center justify-between mb-3">
-                                <Label className="text-xs font-black text-white uppercase tracking-tight">Bucket FACE</Label>
+                                <Label className="text-xs font-black text-foreground uppercase tracking-tight">Bucket FACE</Label>
                                 <div className="px-2 py-0.5 bg-purple-500/10 rounded text-[10px] font-bold text-purple-400">
                                     {lifecycles.face === 0 ? "INFINITO" : `${lifecycles.face} DÍAS`}
                                 </div>
@@ -1214,11 +1318,11 @@ function StorageSection() {
                                     onChange={e => setLifecycles({ ...lifecycles, face: parseInt(e.target.value) || 0 })}
                                     className="bg-black/60 border-white/10 h-9 w-20 text-center font-bold text-purple-400 text-sm"
                                 />
-                                <span className="text-[10px] text-neutral-400 leading-tight">Días de retención antes de borrar. (0 = nunca)</span>
+                                <span className="text-[10px] text-muted-foreground leading-tight">Días de retención antes de borrar. (0 = nunca)</span>
                             </div>
 
                             {/* Stats Mini */}
-                            <div className="pt-3 border-t border-white/5 flex justify-between items-center text-[10px] text-neutral-500 font-mono">
+                            <div className="pt-3 border-t border-border flex justify-between items-center text-[10px] text-muted-foreground font-mono">
                                 <span>{stats.face.loading ? "..." : stats.face.count.toLocaleString()} archivos</span>
                                 <span>{stats.face.loading ? "..." : formatSize(stats.face.size)}</span>
                             </div>
@@ -1227,7 +1331,7 @@ function StorageSection() {
                         <Button
                             onClick={handleSaveLifecycle}
                             disabled={savingLifecycle || loading}
-                            className="w-full bg-amber-600/10 hover:bg-amber-600 text-amber-500 hover:text-white font-black text-[10px] uppercase tracking-widest h-10 border border-amber-600/20"
+                            className="w-full bg-amber-600/10 hover:bg-amber-600 text-amber-500 hover:text-foreground font-black text-[10px] uppercase tracking-widest h-10 border border-amber-600/20"
                         >
                             {savingLifecycle ? <RefreshCcw className="animate-spin mr-2" size={12} /> : <Save className="mr-2" size={12} />}
                             GUARDAR POLÍTICAS
@@ -1238,12 +1342,12 @@ function StorageSection() {
                     <div className="lg:col-span-7 space-y-6">
                         <div className="flex items-center gap-2 mb-4">
                             <Cloud size={18} className="text-blue-400" />
-                            <h3 className="text-lg font-bold text-white">Configuración S3 / MinIO</h3>
+                            <h3 className="text-lg font-bold text-foreground">Configuración S3 / MinIO</h3>
                         </div>
 
-                        <div className="bg-neutral-950/20 rounded-xl p-6 border border-white/5 space-y-4">
+                        <div className="bg-background/20 rounded-xl p-6 border border-border space-y-4">
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-neutral-500 ml-1">Endpoint (API)</Label>
+                                <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Endpoint (API)</Label>
                                 <Input
                                     placeholder="http://192.168.99.108:9000"
                                     value={config.endpoint}
@@ -1253,7 +1357,7 @@ function StorageSection() {
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <Label className="text-[10px] font-black uppercase text-neutral-500 ml-1">Access Key</Label>
+                                    <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Access Key</Label>
                                     <Input
                                         placeholder="root"
                                         value={config.accessKey}
@@ -1262,7 +1366,7 @@ function StorageSection() {
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label className="text-[10px] font-black uppercase text-neutral-500 ml-1">Secret Key</Label>
+                                    <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Secret Key</Label>
                                     <Input
                                         type="password"
                                         placeholder="••••••••"
@@ -1274,7 +1378,7 @@ function StorageSection() {
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <Label className="text-[10px] font-black uppercase text-neutral-500 ml-1">Bucket LPR</Label>
+                                    <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Bucket LPR</Label>
                                     <Input
                                         placeholder="lpr"
                                         value={config.bucketLpr}
@@ -1283,7 +1387,7 @@ function StorageSection() {
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label className="text-[10px] font-black uppercase text-neutral-500 ml-1">Bucket Face</Label>
+                                    <Label className="text-[10px] font-black uppercase text-muted-foreground ml-1">Bucket Face</Label>
                                     <Input
                                         placeholder="face"
                                         value={config.bucketFace}
@@ -1298,7 +1402,7 @@ function StorageSection() {
                                     variant="ghost"
                                     onClick={handleTest}
                                     disabled={testing || saving}
-                                    className="flex-1 text-neutral-400 hover:text-white hover:bg-white/5 font-bold h-10 border border-white/5 text-[10px] uppercase"
+                                    className="flex-1 text-muted-foreground hover:text-foreground hover:bg-accent font-bold h-10 border border-border text-[10px] uppercase"
                                 >
                                     {testing ? <RefreshCcw className="animate-spin mr-2" size={12} /> : <Activity className="mr-2" size={12} />}
                                     PROBAR CONEXIÓN
@@ -1306,7 +1410,7 @@ function StorageSection() {
                                 <Button
                                     onClick={handleSave}
                                     disabled={saving || testing}
-                                    className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-black h-10 text-[10px] uppercase shadow-lg shadow-blue-600/20"
+                                    className="flex-1 bg-blue-600 hover:bg-blue-500 text-foreground font-black h-10 text-[10px] uppercase shadow-lg shadow-blue-600/20"
                                 >
                                     {saving ? <RefreshCcw className="animate-spin mr-2" size={12} /> : <Save className="mr-2" size={12} />}
                                     GUARDAR
@@ -1483,11 +1587,11 @@ function ModeConfiguration({ title, description, settingKey, options }: {
 
     return (
         <>
-            <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-8 space-y-8 animate-in slide-in-from-bottom-5 duration-500">
+            <div className="bg-card/50 backdrop-blur-xl border border-border rounded-2xl p-8 space-y-8 animate-in slide-in-from-bottom-5 duration-500">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h2 className="text-2xl font-black text-white">{title}</h2>
-                        <p className="text-sm text-neutral-500 mt-1">{description}</p>
+                        <h2 className="text-2xl font-black text-foreground">{title}</h2>
+                        <p className="text-sm text-muted-foreground mt-1">{description}</p>
                     </div>
                 </div>
 
@@ -1509,24 +1613,24 @@ function ModeConfiguration({ title, description, settingKey, options }: {
                                         isSelected
                                             ? `bg-${option.color}-500/10 border-${option.color}-500/50 shadow-lg shadow-${option.color}-900/10`
                                             : isDisabled
-                                                ? "bg-neutral-900/20 border-white/5 opacity-50 cursor-not-allowed"
-                                                : "bg-neutral-900/40 border-white/5 hover:bg-neutral-900/60 hover:border-white/10"
+                                                ? "bg-card/20 border-border opacity-50 cursor-not-allowed"
+                                                : "bg-card/40 border-border hover:bg-card/60 hover:border-border"
                                     )}
                                 >
                                     <div className={cn(
                                         "w-10 h-10 rounded-lg flex items-center justify-center transition-colors shrink-0",
-                                        isSelected ? `bg-${option.color}-500/20 text-${option.color}-400` : "bg-white/5 text-neutral-500 group-hover:bg-white/10 group-hover:text-neutral-300"
+                                        isSelected ? `bg-${option.color}-500/20 text-${option.color}-400` : "bg-foreground/10 text-muted-foreground group-hover:bg-accent group-hover:text-muted-foreground"
                                     )}>
                                         <Icon size={20} />
                                     </div>
                                     <div>
                                         <h3 className={cn(
                                             "font-black text-sm",
-                                            isSelected ? "text-white" : "text-neutral-300"
+                                            isSelected ? "text-foreground" : "text-muted-foreground"
                                         )}>
                                             {option.label}
                                         </h3>
-                                        <p className="text-[10px] text-neutral-500 font-medium leading-tight mt-0.5">
+                                        <p className="text-[10px] text-muted-foreground font-medium leading-tight mt-0.5">
                                             {option.desc}
                                         </p>
                                     </div>
@@ -1540,10 +1644,10 @@ function ModeConfiguration({ title, description, settingKey, options }: {
 
                     {/* Right: Explanation */}
                     <div className="lg:col-span-7">
-                        <div className="bg-neutral-950/30 border border-white/5 rounded-xl p-6 h-full">
+                        <div className="bg-background/30 border border-border rounded-xl p-6 h-full">
                             <div className="flex items-center gap-2 mb-4">
-                                <Info size={16} className="text-neutral-400" />
-                                <h3 className="text-xs font-black text-white uppercase tracking-widest">¿CÓMO FUNCIONA ESTE MODO?</h3>
+                                <Info size={16} className="text-muted-foreground" />
+                                <h3 className="text-xs font-black text-foreground uppercase tracking-widest">¿CÓMO FUNCIONA ESTE MODO?</h3>
                             </div>
 
                             <div className="space-y-4">
@@ -1554,12 +1658,12 @@ function ModeConfiguration({ title, description, settingKey, options }: {
                                         </div>
                                         <div>
                                             <h4 className={`text-xs font-black text-${item.color}-400 mb-1 uppercase`}>{item.title}</h4>
-                                            <p className="text-[11px] text-neutral-400 leading-relaxed">{item.text}</p>
+                                            <p className="text-[11px] text-muted-foreground leading-relaxed">{item.text}</p>
                                         </div>
                                     </div>
                                 ))}
                                 {loadModeExplanation(currentMode, isFaceMode).length === 0 && (
-                                    <p className="text-xs text-neutral-500 italic">Selecciona un modo para ver los detalles.</p>
+                                    <p className="text-xs text-muted-foreground italic">Selecciona un modo para ver los detalles.</p>
                                 )}
                             </div>
                         </div>
@@ -1568,15 +1672,15 @@ function ModeConfiguration({ title, description, settingKey, options }: {
 
                 {/* Learned Plates Information */}
                 {currentMode === 'LEARNING' && isLprMode && (
-                    <div className="mt-8 pt-8 border-t border-white/5 space-y-6">
+                    <div className="mt-8 pt-8 border-t border-border space-y-6">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-blue-500/10 rounded-lg">
                                     <Activity className="text-blue-400" size={20} />
                                 </div>
                                 <div>
-                                    <h3 className="text-sm font-black text-white uppercase tracking-tight">Matrículas Aprendidas</h3>
-                                    <p className="text-[10px] text-neutral-500 uppercase font-bold">Estas matrículas se han agregado automáticamente</p>
+                                    <h3 className="text-sm font-black text-foreground uppercase tracking-tight">Matrículas Aprendidas</h3>
+                                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Estas matrículas se han agregado automáticamente</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -1605,12 +1709,12 @@ function ModeConfiguration({ title, description, settingKey, options }: {
                         <div className="bg-black/40 border border-white/5 rounded-xl overflow-hidden">
                             <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
                                 <Table>
-                                    <TableHeader className="bg-white/5">
-                                        <TableRow className="border-white/5 hover:bg-transparent">
-                                            <TableHead className="text-[10px] font-black text-neutral-500 uppercase">Matrícula</TableHead>
-                                            <TableHead className="text-[10px] font-black text-neutral-500 uppercase w-[100px]">Captura</TableHead>
-                                            <TableHead className="text-[10px] font-black text-neutral-500 uppercase">Fecha y Hora de Captura</TableHead>
-                                            <TableHead className="text-[10px] font-black text-neutral-500 uppercase text-right">Estado</TableHead>
+                                    <TableHeader className="bg-foreground/10">
+                                        <TableRow className="border-border hover:bg-transparent">
+                                            <TableHead className="text-[10px] font-black text-muted-foreground uppercase">Matrícula</TableHead>
+                                            <TableHead className="text-[10px] font-black text-muted-foreground uppercase w-[100px]">Captura</TableHead>
+                                            <TableHead className="text-[10px] font-black text-muted-foreground uppercase">Fecha y Hora de Captura</TableHead>
+                                            <TableHead className="text-[10px] font-black text-muted-foreground uppercase text-right">Estado</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -1619,7 +1723,7 @@ function ModeConfiguration({ title, description, settingKey, options }: {
                                                 <TableCell colSpan={3} className="h-24 text-center">
                                                     <div className="flex flex-col items-center gap-2">
                                                         <RefreshCcw className="animate-spin text-blue-500" size={20} />
-                                                        <p className="text-[10px] font-bold text-neutral-500 uppercase">Cargando datos...</p>
+                                                        <p className="text-[10px] font-bold text-muted-foreground uppercase">Cargando datos...</p>
                                                     </div>
                                                 </TableCell>
                                             </TableRow>
@@ -1627,24 +1731,24 @@ function ModeConfiguration({ title, description, settingKey, options }: {
                                             <TableRow>
                                                 <TableCell colSpan={3} className="h-24 text-center">
                                                     <div className="flex flex-col items-center gap-2">
-                                                        <Info className="text-neutral-700" size={20} />
-                                                        <p className="text-[10px] font-bold text-neutral-500 uppercase">No hay matrículas aprendidas en esta sesión</p>
+                                                        <Info className="text-muted-foreground" size={20} />
+                                                        <p className="text-[10px] font-bold text-muted-foreground uppercase">No hay matrículas aprendidas en esta sesión</p>
                                                     </div>
                                                 </TableCell>
                                             </TableRow>
                                         ) : learnedPlates.map((item) => (
-                                            <TableRow key={item.id} className="border-white/5 hover:bg-white/5 group transition-colors">
+                                            <TableRow key={item.id} className="border-border hover:bg-accent group transition-colors">
                                                 <TableCell>
                                                     <div className="flex items-center gap-3">
                                                         <div className="w-8 h-8 rounded bg-blue-500/10 flex items-center justify-center border border-blue-500/20">
                                                             <Car className="text-blue-400" size={14} />
                                                         </div>
-                                                        <span className="font-mono font-black text-white">{item.plate}</span>
+                                                        <span className="font-mono font-black text-foreground">{item.plate}</span>
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
                                                     {item.snapshot ? (
-                                                        <div className="w-16 h-10 rounded overflow-hidden border border-white/10 bg-neutral-900 group-hover:scale-110 transition-transform cursor-pointer">
+                                                        <div className="w-16 h-10 rounded overflow-hidden border border-border bg-card group-hover:scale-110 transition-transform cursor-pointer">
                                                             <img
                                                                 src={item.snapshot}
                                                                 alt={item.plate}
@@ -1653,14 +1757,14 @@ function ModeConfiguration({ title, description, settingKey, options }: {
                                                             />
                                                         </div>
                                                     ) : (
-                                                        <div className="w-16 h-10 rounded bg-neutral-900 border border-white/5 flex items-center justify-center">
-                                                            <Eye size={12} className="text-neutral-700" />
+                                                        <div className="w-16 h-10 rounded bg-card border border-border flex items-center justify-center">
+                                                            <Eye size={12} className="text-muted-foreground" />
                                                         </div>
                                                     )}
                                                 </TableCell>
                                                 <TableCell>
-                                                    <div className="flex items-center gap-2 text-neutral-400">
-                                                        <Calendar size={12} className="text-neutral-600" />
+                                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                                        <Calendar size={12} className="text-muted-foreground" />
                                                         <span className="text-xs">{new Date(item.timestamp).toLocaleString('es-UY', {
                                                             day: '2-digit',
                                                             month: '2-digit',
@@ -1690,15 +1794,15 @@ function ModeConfiguration({ title, description, settingKey, options }: {
             {pendingMode && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setPendingMode(null)}>
                     <div
-                        className="bg-[#0f0f10] border border-white/10 rounded-xl max-w-sm w-full mx-4 overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300"
+                        className="bg-[#0f0f10] border border-border rounded-xl max-w-sm w-full mx-4 overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="p-6 text-center">
                             <div className="w-16 h-16 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto mb-4 border border-amber-500/20">
                                 <ShieldAlert size={32} />
                             </div>
-                            <h3 className="text-lg font-black text-white mb-2">¿Confirmar Cambio?</h3>
-                            <p className="text-xs text-neutral-400 leading-relaxed mb-6">
+                            <h3 className="text-lg font-black text-foreground mb-2">¿Confirmar Cambio?</h3>
+                            <p className="text-xs text-muted-foreground leading-relaxed mb-6">
                                 Estás a punto de cambiar a
                                 <span className={`font-black text-${getPendingOption()?.color}-400 mx-1`}>
                                     {getPendingOption()?.label}
@@ -1707,10 +1811,10 @@ function ModeConfiguration({ title, description, settingKey, options }: {
                             </p>
 
                             <div className="grid grid-cols-2 gap-3">
-                                <Button onClick={() => setPendingMode(null)} variant="ghost" className="h-10 text-neutral-400 hover:bg-white/5 hover:text-white font-bold rounded-lg border border-white/5">
+                                <Button onClick={() => setPendingMode(null)} variant="ghost" className="h-10 text-muted-foreground hover:bg-accent hover:text-foreground font-bold rounded-lg border border-border">
                                     Cancelar
                                 </Button>
-                                <Button onClick={confirmModeChange} className="h-10 bg-white text-black hover:bg-neutral-200 font-black rounded-lg">
+                                <Button onClick={confirmModeChange} className="h-10 bg-white text-black hover:bg-muted font-black rounded-lg">
                                     {saving ? <RefreshCcw className="animate-spin mr-2" size={14} /> : <Check size={14} className="mr-2" />}
                                     Confirmar
                                 </Button>
@@ -1837,7 +1941,7 @@ function WhatsAppSection() {
 
     if (loading) {
         return (
-            <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-8">
+            <div className="bg-card/50 backdrop-blur-xl border border-border rounded-2xl p-8">
                 <div className="flex items-center justify-center py-12">
                     <RefreshCcw className="animate-spin text-emerald-500" size={32} />
                 </div>
@@ -1854,8 +1958,8 @@ function WhatsAppSection() {
                         <Bot size={24} />
                     </div>
                     <div>
-                        <h2 className="text-xl font-black text-white tracking-tight">Chatbot WhatsApp (WAHA)</h2>
-                        <p className="text-xs text-neutral-400">Asistente IA y Notificaciones</p>
+                        <h2 className="text-xl font-black text-foreground tracking-tight">Chatbot WhatsApp (WAHA)</h2>
+                        <p className="text-xs text-muted-foreground">Asistente IA y Notificaciones</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1870,11 +1974,11 @@ function WhatsAppSection() {
                 {/* Left Column: Config */}
                 <div className="space-y-6">
                     {/* Connection Card */}
-                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-lg p-6 space-y-6">
+                    <div className="bg-card/50 backdrop-blur-xl border border-border rounded-lg p-6 space-y-6">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <Settings className="text-emerald-400" size={18} />
-                                <h3 className="text-sm font-black text-white uppercase tracking-wider">Conexión</h3>
+                                <h3 className="text-sm font-black text-foreground uppercase tracking-wider">Conexión</h3>
                             </div>
                             <div className="flex items-center gap-2 text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded">
                                 <Activity size={12} />
@@ -1884,7 +1988,7 @@ function WhatsAppSection() {
 
                         <div className="space-y-4">
                             <div className="space-y-1.5">
-                                <Label className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">URL del Servidor</Label>
+                                <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">URL del Servidor</Label>
                                 <Input
                                     value={config.url}
                                     onChange={(e) => setConfig({ ...config, url: e.target.value })}
@@ -1893,7 +1997,7 @@ function WhatsAppSection() {
                                 />
                             </div>
                             <div className="space-y-1.5">
-                                <Label className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">API Key</Label>
+                                <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">API Key</Label>
                                 <Input
                                     value={config.apiKey}
                                     onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
@@ -1905,10 +2009,10 @@ function WhatsAppSection() {
                         </div>
 
                         <div className="flex gap-3 pt-2">
-                            <Button onClick={handleTest} disabled={testing} variant="outline" className="flex-1 h-9 text-xs font-bold border-white/10 hover:bg-white/5">
+                            <Button onClick={handleTest} disabled={testing} variant="outline" className="flex-1 h-9 text-xs font-bold border-border hover:bg-accent">
                                 {testing ? "Probando..." : "Probar Conexión"}
                             </Button>
-                            <Button onClick={handleSave} disabled={saving} className="flex-1 h-9 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20">
+                            <Button onClick={handleSave} disabled={saving} className="flex-1 h-9 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-foreground shadow-lg shadow-emerald-900/20">
                                 {saving ? "Guardando..." : "Guardar Cambios"}
                             </Button>
                         </div>
@@ -1928,30 +2032,30 @@ function WhatsAppSection() {
                 {/* Right Column: Commands & History */}
                 <div className="space-y-6">
                     {/* Commands List */}
-                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-lg p-6">
+                    <div className="bg-card/50 backdrop-blur-xl border border-border rounded-lg p-6">
                         <div className="flex items-center gap-2 mb-4">
                             <MessageSquare className="text-purple-400" size={18} />
-                            <h3 className="text-sm font-black text-white uppercase tracking-wider">Comandos Disponibles</h3>
+                            <h3 className="text-sm font-black text-foreground uppercase tracking-wider">Comandos Disponibles</h3>
                         </div>
-                        <div className="border border-white/5 rounded-lg overflow-hidden">
+                        <div className="border border-border rounded-lg overflow-hidden">
                             <Table>
-                                <TableHeader className="bg-white/5">
-                                    <TableRow className="border-white/5 hover:bg-transparent">
-                                        <TableHead className="h-8 text-[9px] font-black text-neutral-400 uppercase tracking-widest">Comando</TableHead>
-                                        <TableHead className="h-8 text-[9px] font-black text-neutral-400 uppercase tracking-widest text-right">Estado</TableHead>
+                                <TableHeader className="bg-foreground/10">
+                                    <TableRow className="border-border hover:bg-transparent">
+                                        <TableHead className="h-8 text-[9px] font-black text-muted-foreground uppercase tracking-widest">Comando</TableHead>
+                                        <TableHead className="h-8 text-[9px] font-black text-muted-foreground uppercase tracking-widest text-right">Estado</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {commands.map((cmd) => (
-                                        <TableRow key={cmd.id} className="border-white/5 hover:bg-white/5">
+                                        <TableRow key={cmd.id} className="border-border hover:bg-accent">
                                             <TableCell className="py-2">
                                                 <div className="flex items-center gap-2">
-                                                    <div className={`p-1.5 rounded bg-neutral-800 text-neutral-400`}>
+                                                    <div className={`p-1.5 rounded bg-muted text-muted-foreground`}>
                                                         <cmd.icon size={12} />
                                                     </div>
                                                     <div>
-                                                        <span className="block text-xs font-mono font-bold text-neutral-300">{cmd.cmd}</span>
-                                                        <span className="block text-[10px] text-neutral-500 truncate max-w-[150px]">{cmd.desc}</span>
+                                                        <span className="block text-xs font-mono font-bold text-muted-foreground">{cmd.cmd}</span>
+                                                        <span className="block text-[10px] text-muted-foreground truncate max-w-[150px]">{cmd.desc}</span>
                                                     </div>
                                                 </div>
                                             </TableCell>
@@ -1966,42 +2070,42 @@ function WhatsAppSection() {
                     </div>
 
                     {/* History */}
-                    <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-lg p-6 max-h-[400px] overflow-hidden flex flex-col">
+                    <div className="bg-card/50 backdrop-blur-xl border border-border rounded-lg p-6 max-h-[400px] overflow-hidden flex flex-col">
                         <div className="flex items-center gap-2 mb-4 shrink-0">
                             <FileText className="text-amber-400" size={18} />
-                            <h3 className="text-sm font-black text-white uppercase tracking-wider">Historial de Consultas</h3>
+                            <h3 className="text-sm font-black text-foreground uppercase tracking-wider">Historial de Consultas</h3>
                         </div>
-                        <div className="border border-white/5 rounded-lg overflow-y-auto custom-scrollbar grow">
+                        <div className="border border-border rounded-lg overflow-y-auto custom-scrollbar grow">
                             <Table>
-                                <TableHeader className="bg-white/5 sticky top-0 z-10 backdrop-blur-md">
-                                    <TableRow className="border-white/5 hover:bg-transparent">
-                                        <TableHead className="h-8 text-[9px] font-black text-neutral-400 uppercase tracking-widest w-24">Usuario</TableHead>
-                                        <TableHead className="h-8 text-[9px] font-black text-neutral-400 uppercase tracking-widest">Interacción</TableHead>
-                                        <TableHead className="h-8 text-[9px] font-black text-neutral-400 uppercase tracking-widest text-right w-24">Hora</TableHead>
+                                <TableHeader className="bg-foreground/10 sticky top-0 z-10 backdrop-blur-md">
+                                    <TableRow className="border-border hover:bg-transparent">
+                                        <TableHead className="h-8 text-[9px] font-black text-muted-foreground uppercase tracking-widest w-24">Usuario</TableHead>
+                                        <TableHead className="h-8 text-[9px] font-black text-muted-foreground uppercase tracking-widest">Interacción</TableHead>
+                                        <TableHead className="h-8 text-[9px] font-black text-muted-foreground uppercase tracking-widest text-right w-24">Hora</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {history.length === 0 ? (
-                                        <TableRow className="border-white/5 hover:bg-transparent">
-                                            <TableCell colSpan={3} className="py-8 text-center text-[10px] text-neutral-500 italic">
+                                        <TableRow className="border-border hover:bg-transparent">
+                                            <TableCell colSpan={3} className="py-8 text-center text-[10px] text-muted-foreground italic">
                                                 Sin registros recientes.
                                             </TableCell>
                                         </TableRow>
                                     ) : (
                                         history.map((h) => (
-                                            <TableRow key={h.id} className="border-white/5 hover:bg-white/5">
+                                            <TableRow key={h.id} className="border-border hover:bg-accent">
                                                 <TableCell className="py-2 align-top">
-                                                    <span className="text-[9px] font-bold text-white bg-white/5 px-1.5 py-0.5 rounded-full whitespace-nowrap overflow-hidden text-ellipsis max-w-full block" title={h.user}>
+                                                    <span className="text-[9px] font-bold text-foreground bg-foreground/10 px-1.5 py-0.5 rounded-full whitespace-nowrap overflow-hidden text-ellipsis max-w-full block" title={h.user}>
                                                         {h.user.split('@')[0]}
                                                     </span>
                                                 </TableCell>
                                                 <TableCell className="py-2 align-top">
                                                     <div className="space-y-1">
                                                         <p className="text-[10px] font-mono text-emerald-400 break-words line-clamp-2" title={h.command}>&gt; {h.command}</p>
-                                                        <p className="text-[9px] text-neutral-400 break-words line-clamp-2" title={h.response}>{h.response}</p>
+                                                        <p className="text-[9px] text-muted-foreground break-words line-clamp-2" title={h.response}>{h.response}</p>
                                                     </div>
                                                 </TableCell>
-                                                <TableCell className="py-2 text-right text-[9px] text-neutral-500 font-mono align-top whitespace-nowrap">
+                                                <TableCell className="py-2 text-right text-[9px] text-muted-foreground font-mono align-top whitespace-nowrap">
                                                     {h.time}
                                                 </TableCell>
                                             </TableRow>
@@ -2103,43 +2207,43 @@ function AdminsSection() {
 
     return (
         <div className="space-y-6">
-            <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 rounded-2xl p-8">
+            <div className="bg-card/50 backdrop-blur-xl border border-border rounded-2xl p-8">
                 <div className="flex items-center justify-between mb-8">
                     <div>
-                        <h2 className="text-2xl font-black text-white tracking-tight">Administradores del Sistema</h2>
-                        <p className="text-sm text-neutral-500 mt-1">Gestión de usuarios con acceso al panel de control</p>
+                        <h2 className="text-2xl font-black text-foreground tracking-tight">Administradores del Sistema</h2>
+                        <p className="text-sm text-muted-foreground mt-1">Gestión de usuarios con acceso al panel de control</p>
                     </div>
                     <Button
                         onClick={openNew}
-                        className="bg-blue-600 hover:bg-blue-500 text-white font-black text-xs uppercase tracking-widest h-10 px-6"
+                        className="bg-blue-600 hover:bg-blue-500 text-foreground font-black text-xs uppercase tracking-widest h-10 px-6"
                     >
                         <Plus size={16} className="mr-2" />
                         Nuevo Admin
                     </Button>
                 </div>
 
-                <div className="bg-neutral-950/30 border border-white/5 rounded-xl overflow-hidden">
+                <div className="bg-background/30 border border-border rounded-xl overflow-hidden">
                     <Table>
-                        <TableHeader className="bg-white/5">
-                            <TableRow className="border-white/5 hover:bg-transparent">
-                                <TableHead className="w-[80px] text-[10px] font-black text-neutral-500 uppercase">Foto</TableHead>
-                                <TableHead className="text-[10px] font-black text-neutral-500 uppercase">Usuario / Nombre</TableHead>
-                                <TableHead className="text-[10px] font-black text-neutral-500 uppercase">Email</TableHead>
-                                <TableHead className="text-[10px] font-black text-neutral-500 uppercase">Rol</TableHead>
-                                <TableHead className="text-[10px] font-black text-neutral-500 uppercase text-right">Acciones</TableHead>
+                        <TableHeader className="bg-foreground/10">
+                            <TableRow className="border-border hover:bg-transparent">
+                                <TableHead className="w-[80px] text-[10px] font-black text-muted-foreground uppercase">Foto</TableHead>
+                                <TableHead className="text-[10px] font-black text-muted-foreground uppercase">Usuario / Nombre</TableHead>
+                                <TableHead className="text-[10px] font-black text-muted-foreground uppercase">Email</TableHead>
+                                <TableHead className="text-[10px] font-black text-muted-foreground uppercase">Rol</TableHead>
+                                <TableHead className="text-[10px] font-black text-muted-foreground uppercase text-right">Acciones</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {loading ? (
                                 <TableRow>
                                     <TableCell colSpan={5} className="h-24 text-center">
-                                        <Loader2 className="animate-spin mx-auto text-neutral-500" />
+                                        <Loader2 className="animate-spin mx-auto text-muted-foreground" />
                                     </TableCell>
                                 </TableRow>
                             ) : admins.map((admin) => (
-                                <TableRow key={admin.id} className="border-white/5 hover:bg-white/5 transition-colors group">
+                                <TableRow key={admin.id} className="border-border hover:bg-accent transition-colors group">
                                     <TableCell>
-                                        <div className="w-10 h-10 rounded-full bg-neutral-800 overflow-hidden relative border border-white/10">
+                                        <div className="w-10 h-10 rounded-full bg-muted overflow-hidden relative border border-border">
                                             {admin.cara ? (
                                                 <img
                                                     src={admin.cara.startsWith('/') ? admin.cara : `/api/files/${admin.cara}`}
@@ -2147,19 +2251,19 @@ function AdminsSection() {
                                                     className="w-full h-full object-cover"
                                                 />
                                             ) : (
-                                                <div className="w-full h-full flex items-center justify-center text-neutral-600">
+                                                <div className="w-full h-full flex items-center justify-center text-muted-foreground">
                                                     <UserIcon size={16} />
                                                 </div>
                                             )}
                                         </div>
                                     </TableCell>
-                                    <TableCell className="font-bold text-white uppercase text-xs">
+                                    <TableCell className="font-bold text-foreground uppercase text-xs">
                                         {admin.name}
                                         {admin.name === 'fgonzalez' && (
                                             <span className="ml-2 text-[9px] bg-amber-500/20 text-amber-500 px-1.5 py-0.5 rounded border border-amber-500/30">Líder</span>
                                         )}
                                     </TableCell>
-                                    <TableCell className="text-neutral-400 font-mono text-xs">{admin.email || "-"}</TableCell>
+                                    <TableCell className="text-muted-foreground font-mono text-xs">{admin.email || "-"}</TableCell>
                                     <TableCell>
                                         <div className="px-2 py-1 rounded bg-purple-500/10 border border-purple-500/20 w-fit">
                                             <span className="text-[9px] font-black text-purple-400 uppercase tracking-wider">{admin.role}</span>
@@ -2169,13 +2273,13 @@ function AdminsSection() {
                                         <div className="flex items-center justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
                                             <button
                                                 onClick={() => openEdit(admin)}
-                                                className="w-8 h-8 rounded-lg bg-blue-500/10 hover:bg-blue-600 text-blue-500 hover:text-white flex items-center justify-center transition-all"
+                                                className="w-8 h-8 rounded-lg bg-blue-500/10 hover:bg-blue-600 text-blue-500 hover:text-foreground flex items-center justify-center transition-all"
                                             >
                                                 <Pencil size={14} />
                                             </button>
                                             <button
                                                 onClick={() => handleDelete(admin.id)}
-                                                className="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-600 text-red-500 hover:text-white flex items-center justify-center transition-all"
+                                                className="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-600 text-red-500 hover:text-foreground flex items-center justify-center transition-all"
                                             >
                                                 <Trash2 size={14} />
                                             </button>
@@ -2185,7 +2289,7 @@ function AdminsSection() {
                             ))}
                             {!loading && admins.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="h-32 text-center text-neutral-500 text-xs font-bold uppercase">
+                                    <TableCell colSpan={5} className="h-32 text-center text-muted-foreground text-xs font-bold uppercase">
                                         No hay administradores registrados
                                     </TableCell>
                                 </TableRow>
@@ -2196,7 +2300,7 @@ function AdminsSection() {
             </div>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="bg-neutral-950 border-neutral-800 text-white sm:max-w-[500px]">
+                <DialogContent className="bg-background border-border text-foreground sm:max-w-[500px]">
                     <DialogHeader>
                         <DialogTitle className="text-xl font-black uppercase tracking-tight">
                             {editingAdmin ? "Editar Administrador" : "Nuevo Administrador"}
@@ -2205,7 +2309,7 @@ function AdminsSection() {
 
                     <div className="grid gap-6 py-4">
                         <div className="flex items-center justify-center gap-4">
-                            <div className="relative w-24 h-24 rounded-full bg-neutral-900 border-2 border-neutral-800 overflow-hidden group cursor-pointer transition-all hover:border-blue-500/50">
+                            <div className="relative w-24 h-24 rounded-full bg-card border-2 border-border overflow-hidden group cursor-pointer transition-all hover:border-blue-500/50">
                                 <input
                                     type="file"
                                     accept="image/*"
@@ -2220,40 +2324,40 @@ function AdminsSection() {
                                 ) : formData.currentPhoto ? (
                                     <img src={formData.currentPhoto.startsWith('/') ? formData.currentPhoto : `/api/files/${formData.currentPhoto}`} className="w-full h-full object-cover" />
                                 ) : (
-                                    <div className="w-full h-full flex flex-col items-center justify-center text-neutral-600 gap-1">
+                                    <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-1">
                                         <Camera size={20} />
                                         <span className="text-[9px] font-bold uppercase">Foto</span>
                                     </div>
                                 )}
                                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
-                                    <Upload className="text-white w-6 h-6" />
+                                    <Upload className="text-foreground w-6 h-6" />
                                 </div>
                             </div>
                         </div>
 
                         <div className="grid gap-4">
                             <div className="grid gap-2">
-                                <Label htmlFor="name" className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Usuario (Login)</Label>
+                                <Label htmlFor="name" className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Usuario (Login)</Label>
                                 <Input
                                     id="name"
                                     value={formData.name}
                                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    className="bg-neutral-900 border-neutral-800 h-10"
+                                    className="bg-card border-border h-10"
                                     placeholder="ej: fgonzalez"
                                 />
                             </div>
                             <div className="grid gap-2">
-                                <Label htmlFor="email" className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Email (Opcional)</Label>
+                                <Label htmlFor="email" className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Email (Opcional)</Label>
                                 <Input
                                     id="email"
                                     value={formData.email}
                                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                    className="bg-neutral-900 border-neutral-800 h-10"
+                                    className="bg-card border-border h-10"
                                     placeholder="ej: usuario@empresa.com"
                                 />
                             </div>
                             <div className="grid gap-2">
-                                <Label htmlFor="password" className="text-xs font-bold text-neutral-500 uppercase tracking-widest">
+                                <Label htmlFor="password" className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
                                     {editingAdmin ? "Nueva Contraseña (Dejar vacío para mantener)" : "Contraseña"}
                                 </Label>
                                 <Input
@@ -2261,7 +2365,7 @@ function AdminsSection() {
                                     type="text"
                                     value={formData.password}
                                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                                    className="bg-neutral-900 border-neutral-800 h-10 font-mono"
+                                    className="bg-card border-border h-10 font-mono"
                                     placeholder="••••••"
                                 />
                             </div>
@@ -2272,13 +2376,13 @@ function AdminsSection() {
                         <Button
                             variant="ghost"
                             onClick={() => setIsDialogOpen(false)}
-                            className="hover:bg-neutral-900 text-neutral-400"
+                            className="hover:bg-card text-muted-foreground"
                         >
                             CANCELAR
                         </Button>
                         <Button
                             onClick={handleSubmit}
-                            className="bg-blue-600 hover:bg-blue-500 text-white font-black uppercase tracking-widest"
+                            className="bg-blue-600 hover:bg-blue-500 text-foreground font-black uppercase tracking-widest"
                         >
                             GUARDAR
                         </Button>
@@ -2289,3 +2393,110 @@ function AdminsSection() {
     );
 }
 
+
+// ─── Modules Section ────────────────────────────────
+function ModulesSection() {
+    const [modules, setModules] = useState<Record<string, boolean>>({});
+    const [loading, setLoading] = useState(true);
+    const [toggling, setToggling] = useState<string | null>(null);
+
+    useEffect(() => {
+        getEnabledModules().then(m => {
+            setModules(m);
+            setLoading(false);
+        });
+    }, []);
+
+    const handleToggle = async (moduleId: string) => {
+        setToggling(moduleId);
+        const newValue = !modules[moduleId];
+        const result = await toggleModule(moduleId as ModuleId, newValue);
+        if (result.success) {
+            setModules(prev => ({ ...prev, [moduleId]: newValue }));
+            toast.success({ title: `Módulo ${newValue ? 'activado' : 'desactivado'}` });
+        }
+        setToggling(null);
+    };
+
+    const iconMap: Record<string, any> = {
+        Car: Car,
+        ScanFace: ScanFace,
+        Users: Users,
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <RefreshCcw className="animate-spin text-muted-foreground" size={24} />
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-6 animate-in zoom-in-95 duration-500">
+            <div className="flex items-center justify-between mb-6">
+                <div>
+                    <h2 className="text-2xl font-black text-foreground tracking-tight">Módulos del Sistema</h2>
+                    <p className="text-sm text-muted-foreground mt-1">Activa o desactiva los módulos de OmniAccess. Los módulos desactivados no aparecen en el menú.</p>
+                </div>
+                <div className="p-2 bg-violet-500/10 rounded-xl border border-violet-500/20">
+                    <Cpu className="text-violet-400" size={24} />
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {MODULE_DEFINITIONS.map((mod) => {
+                    const Icon = iconMap[mod.icon] || Cpu;
+                    const enabled = modules[mod.id] ?? mod.defaultEnabled;
+                    const isToggling = toggling === mod.id;
+
+                    const modColorMap: Record<string, string> = { MODULE_LPR: 'amber', MODULE_FACE: 'teal', MODULE_QUEUE: 'violet' };
+                    const modColor = modColorMap[mod.id] || 'violet';
+                    const colorClasses: Record<string, { bg: string; border: string; text: string; glow: string }> = {
+                        amber: { bg: "bg-amber-500/10", border: "border-amber-500/30", text: "text-amber-400", glow: "shadow-amber-500/20" },
+                        teal: { bg: "bg-teal-500/10", border: "border-teal-500/30", text: "text-teal-400", glow: "shadow-teal-500/20" },
+                        violet: { bg: "bg-violet-500/10", border: "border-violet-500/30", text: "text-violet-400", glow: "shadow-violet-500/20" },
+                    };
+                    const colors = colorClasses[modColor] || colorClasses.violet;
+
+                    return (
+                        <div
+                            key={mod.id}
+                            className={cn(
+                                "relative rounded-2xl border p-6 transition-all duration-300",
+                                enabled
+                                    ? `${colors.bg} ${colors.border} shadow-lg ${colors.glow}`
+                                    : "bg-card/50 border-border/50 opacity-60"
+                            )}
+                        >
+                            <div className="flex items-start justify-between mb-4">
+                                <div className={cn(
+                                    "p-3 rounded-xl",
+                                    enabled ? colors.bg : "bg-muted"
+                                )}>
+                                    <Icon className={enabled ? colors.text : "text-muted-foreground"} size={24} />
+                                </div>
+                                <button
+                                    onClick={() => handleToggle(mod.id)}
+                                    disabled={isToggling}
+                                    className={cn(
+                                        "relative w-12 h-7 rounded-full transition-all duration-300 focus:outline-none",
+                                        enabled ? "bg-emerald-500" : "bg-muted"
+                                    )}
+                                >
+                                    <div className={cn(
+                                        "absolute top-0.5 w-6 h-6 rounded-full bg-white shadow-md transition-all duration-300",
+                                        enabled ? "left-[22px]" : "left-0.5",
+                                        isToggling && "animate-pulse"
+                                    )} />
+                                </button>
+                            </div>
+                            <h3 className="text-lg font-black text-foreground mb-1">{mod.name}</h3>
+                            <p className="text-xs text-muted-foreground leading-relaxed">{mod.description}</p>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}

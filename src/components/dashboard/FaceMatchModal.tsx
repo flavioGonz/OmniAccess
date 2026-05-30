@@ -134,7 +134,7 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
     const titleColor = isAlert ? "text-red-600 drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]" :
         (isBlacklisted && cameraMatchValue === 0) ? "text-amber-500 drop-shadow-[0_0_10px_rgba(245,158,11,0.3)]" :
             isSpecial ? "text-[#2ecc71]" :
-                "text-white";
+                "text-foreground";
 
     const handleResolve = async () => {
         if (isAlert && !comment) {
@@ -268,7 +268,7 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                         transition={{ duration: 0.3 }}
                         className={cn(
                             "relative w-full max-w-[1200px] aspect-video bg-[#0a0a0a]/95 backdrop-blur-2xl rounded-2xl overflow-hidden border",
-                            (isAlert || isBlacklisted || isSuspicious) ? "border-red-500/50 shadow-[0_0_50px_rgba(239,68,68,0.2)]" : "border-white/10"
+                            (isAlert || isBlacklisted || isSuspicious) ? "border-red-500/50 shadow-[0_0_50px_rgba(239,68,68,0.2)]" : "border-border"
                         )}
                     >
                         {isAlert && (
@@ -281,7 +281,7 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                             </div>
                         )}
                         {/* Integrated Tactical View */}
-                        <div className="flex-1 relative bg-neutral-900 overflow-hidden h-full">
+                        <div className="flex-1 relative bg-card overflow-hidden h-full">
                             {/* Tactical Close Button */}
                             <div className="absolute top-6 right-6 z-50 flex items-center gap-3">
                                 {/* Whitelist Button */}
@@ -289,7 +289,7 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                     <button
                                         onClick={() => handleAddToBase('WHITELISTED')}
                                         disabled={isAddingToBase}
-                                        className="w-10 h-10 rounded-full bg-emerald-600/20 hover:bg-emerald-600 text-emerald-500 hover:text-white flex items-center justify-center transition-all backdrop-blur-md border border-emerald-500/30 shadow-lg"
+                                        className="w-10 h-10 rounded-full bg-emerald-600/20 hover:bg-emerald-600 text-emerald-500 hover:text-foreground flex items-center justify-center transition-all backdrop-blur-md border border-emerald-500/30 shadow-lg"
                                         title="Lista Blanca"
                                     >
                                         {isAddingToBase && syncStatus?.includes('WHITELISTED') ? (
@@ -305,7 +305,7 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                     <button
                                         onClick={() => handleAddToBase('BLACKLISTED')}
                                         disabled={isAddingToBase}
-                                        className="w-10 h-10 rounded-full bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white flex items-center justify-center transition-all backdrop-blur-md border border-red-500/30 shadow-lg"
+                                        className="w-10 h-10 rounded-full bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-foreground flex items-center justify-center transition-all backdrop-blur-md border border-red-500/30 shadow-lg"
                                         title="Lista Negra"
                                     >
                                         {isAddingToBase && syncStatus?.includes('BLACKLISTED') ? (
@@ -364,7 +364,7 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                                     isSpecial ? "border-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.3)]" :
                                                         "border-emerald-500"
                                             )}>
-                                                <div className="absolute inset-0 bg-neutral-950 animate-pulse" />
+                                                <div className="absolute inset-0 bg-background animate-pulse" />
                                                 <Image
                                                     src={getImagePath(event.snapshotPath) || "/placeholder.png"}
                                                     alt="Captured"
@@ -373,15 +373,15 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                                 />
                                                 {/* HUD Label */}
                                                 <div className="absolute bottom-3 left-3 bg-black/40 backdrop-blur-md border border-white/10 px-3 py-1.5 z-20">
-                                                    <span className="text-[9px] font-black uppercase tracking-widest text-white/80">LIVE CAPTURE</span>
+                                                    <span className="text-[9px] font-black uppercase tracking-widest text-foreground/70">LIVE CAPTURE</span>
                                                 </div>
                                                 {/* Similarity Overlay */}
                                                 <div className="absolute bottom-2 right-2 bg-black/80 border border-white/10 px-2 py-1 z-20">
                                                     <div className="flex flex-col items-center">
-                                                        <span className="text-[7px] font-black text-white/40 uppercase leading-none mb-0.5">
+                                                        <span className="text-[7px] font-black text-muted-foreground uppercase leading-none mb-0.5">
                                                             {isAlert ? "ALERTA" : "Cámara"}
                                                         </span>
-                                                        <span className={cn("text-xs font-black", isAlert ? "text-red-500" : "text-white")}>
+                                                        <span className={cn("text-xs font-black", isAlert ? "text-red-500" : "text-foreground")}>
                                                             {cameraMatch || similarity}%
                                                         </span>
                                                     </div>
@@ -391,7 +391,7 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
 
                                         {/* Link / Indicator Gap */}
                                         <div className="h-4 flex items-center justify-center relative">
-                                            <div className="w-[1px] h-full bg-white/10" />
+                                            <div className="w-[1px] h-full bg-foreground/10" />
                                         </div>
 
                                         {/* Database Face Box */}
@@ -405,21 +405,21 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                                         className="object-cover"
                                                     />
                                                 ) : (
-                                                    <div className="w-full h-full flex flex-col items-center justify-center bg-neutral-950 gap-2 border border-dashed border-white/5">
-                                                        <User size={24} className="text-neutral-800" />
+                                                    <div className="w-full h-full flex flex-col items-center justify-center bg-background gap-2 border border-dashed border-border">
+                                                        <User size={24} className="text-muted-foreground" />
                                                         <div className="flex flex-col items-center gap-1">
-                                                            <span className="text-[8px] font-black text-neutral-600 uppercase tracking-widest leading-none">Rostro Base</span>
+                                                            <span className="text-[8px] font-black text-muted-foreground uppercase tracking-widest leading-none">Rostro Base</span>
                                                             <span className="text-[10px] font-mono text-blue-400 font-bold uppercase">{verifState?.recognizedAs || "Sin ID"}</span>
                                                         </div>
                                                     </div>
                                                 )}
                                                 {/* HUD Label */}
                                                 <div className="absolute bottom-3 left-3 bg-black/40 backdrop-blur-md border border-white/10 px-3 py-1.5 z-20">
-                                                    <span className="text-[9px] font-black uppercase tracking-widest text-white/80">ROSTRO EN BASE</span>
+                                                    <span className="text-[9px] font-black uppercase tracking-widest text-foreground/70">ROSTRO EN BASE</span>
                                                 </div>
                                                 <div className="absolute bottom-2 right-2 bg-black/80 border border-white/10 px-2 py-1 z-20">
                                                     <div className="flex flex-col items-center">
-                                                        <span className="text-[7px] font-black text-white/40 uppercase leading-none mb-0.5">Neural</span>
+                                                        <span className="text-[7px] font-black text-muted-foreground uppercase leading-none mb-0.5">Neural</span>
                                                         <span className={cn("text-xs font-black", isAlert ? "text-red-500" : "text-emerald-500")}>{similarity}%</span>
                                                     </div>
                                                 </div>
@@ -452,7 +452,7 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                             </h1>
                                             <div className="flex items-center gap-4 pt-4">
                                                 <div className="flex items-center gap-3">
-                                                    <div className={cn("w-3 h-3 rounded-full", isSpecial ? "bg-[#2ecc71]" : isConflict ? "bg-amber-600 animate-pulse" : isAlert ? "bg-red-600 animate-pulse" : isSuspicious ? "bg-amber-500" : isSuccess ? "bg-emerald-500" : "bg-neutral-500")} />
+                                                    <div className={cn("w-3 h-3 rounded-full", isSpecial ? "bg-[#2ecc71]" : isConflict ? "bg-amber-600 animate-pulse" : isAlert ? "bg-red-600 animate-pulse" : isSuspicious ? "bg-amber-500" : isSuccess ? "bg-emerald-500" : "bg-muted")} />
                                                     <p className={cn(
                                                         "text-xs font-black uppercase tracking-[0.2em]",
                                                         isConflict ? "text-amber-600 animate-pulse font-black" :
@@ -460,7 +460,7 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                                                 isSuspicious ? "text-amber-500" :
                                                                     isSpecial ? "text-[#2ecc71]" :
                                                                         isNeuralOnly ? "text-blue-400" :
-                                                                            "text-neutral-400"
+                                                                            "text-muted-foreground"
                                                     )}>
                                                         {isConflict ? "CONFLICTO DE IDENTIDAD - ERROR DE HARDWARE" :
                                                             isAlert ? "SOSPECHOSO - LISTA NEGRA (CONFIRMADO)" :
@@ -472,7 +472,7 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                                                                     "Identidad Confirmada"}
                                                     </p>
                                                 </div>
-                                                <div className="h-4 w-px bg-white/10" />
+                                                <div className="h-4 w-px bg-foreground/10" />
                                                 <p className="text-xs font-mono font-bold text-blue-400/60 uppercase tracking-widest">
                                                     ID: {verifState?.recognizedAs || "Pending"}
                                                     {isNeuralOnly && <span className="ml-2 text-[8px] text-amber-500/50">(Solo Neural)</span>}
@@ -483,12 +483,12 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                         {/* Recognition Analysis */}
                                         <div className="space-y-6">
                                             <div className="flex items-center gap-2">
-                                                <Activity size={18} className="text-neutral-500" />
-                                                <span className="text-xs font-black text-neutral-400 uppercase tracking-widest">Estado de Comparación</span>
+                                                <Activity size={18} className="text-muted-foreground" />
+                                                <span className="text-xs font-black text-muted-foreground uppercase tracking-widest">Estado de Comparación</span>
                                             </div>
                                             <div className="flex items-center gap-16">
                                                 <div className="space-y-1">
-                                                    <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest block">Neural AI</span>
+                                                    <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Neural AI</span>
                                                     <div className="flex items-center gap-3">
                                                         <span className={cn("text-3xl font-black uppercase tracking-tighter", isSpecial ? "text-blue-500" : isSuccess ? "text-emerald-500" : "text-red-500")}>
                                                             {similarity}%
@@ -498,7 +498,7 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                                                 onClick={handlePurge}
                                                                 disabled={isPurging}
                                                                 title="Limpiar perfil (Corregir error de match)"
-                                                                className="p-1.5 rounded-full bg-red-600/10 text-red-500 hover:bg-red-600 hover:text-white transition-all border border-red-500/20"
+                                                                className="p-1.5 rounded-full bg-red-600/10 text-red-500 hover:bg-red-600 hover:text-foreground transition-all border border-red-500/20"
                                                             >
                                                                 {isPurging ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
                                                             </button>
@@ -506,8 +506,8 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                                     </div>
                                                 </div>
                                                 <div className="space-y-1">
-                                                    <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest block">Cámara</span>
-                                                    <span className="text-3xl font-black text-white uppercase tracking-tighter">
+                                                    <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block">Cámara</span>
+                                                    <span className="text-3xl font-black text-foreground uppercase tracking-tighter">
                                                         {cameraMatch || "---"}%
                                                     </span>
                                                 </div>
@@ -531,7 +531,7 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                                     placeholder="Añadir observaciones sobre el sujeto..."
                                                     className={cn(
                                                         "w-full bg-black/40 border p-4 text-[11px] text-white outline-none transition-all rounded-lg placeholder:text-neutral-700 font-bold resize-none h-24",
-                                                        isAlert ? "border-red-600/30 focus:border-red-600" : "border-white/5 focus:border-white/20"
+                                                        isAlert ? "border-red-600/30 focus:border-red-600" : "border-border focus:border-border"
                                                     )}
                                                 />
                                                 <div className="absolute top-2 right-2 opacity-20">
@@ -544,8 +544,8 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                                     disabled={isResolving}
                                                     className={cn(
                                                         "w-full h-11 font-black text-[9px] uppercase tracking-[0.2em] transition-all rounded-lg shadow-xl flex items-center justify-center gap-2",
-                                                        isAlert ? "bg-red-600 text-white hover:bg-red-700" :
-                                                            (isSpecial ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-white text-black hover:bg-neutral-200")
+                                                        isAlert ? "bg-red-600 text-foreground hover:bg-red-700" :
+                                                            (isSpecial ? "bg-blue-600 text-foreground hover:bg-blue-700" : "bg-white text-black hover:bg-muted")
                                                     )}
                                                 >
                                                     {isResolving ? <Loader2 className="animate-spin" size={12} /> : (
@@ -572,15 +572,15 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                     >
                                         <div className="space-y-4 flex-1 overflow-hidden">
                                             <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2 text-neutral-500">
+                                                <div className="flex items-center gap-2 text-muted-foreground">
                                                     <History size={16} />
                                                     <span className="text-[10px] font-black uppercase tracking-[0.2em]">Historial</span>
                                                 </div>
-                                                <div className="h-[1px] flex-1 mx-4 bg-white/5" />
+                                                <div className="h-[1px] flex-1 mx-4 bg-foreground/10" />
                                             </div>
-                                            <div className="space-y-3 overflow-y-auto max-h-[140px] custom-scrollbar pr-4 relative before:absolute before:left-[9px] before:top-2 before:bottom-2 before:w-[px] before:bg-white/5">
+                                            <div className="space-y-3 overflow-y-auto max-h-[140px] custom-scrollbar pr-4 relative before:absolute before:left-[9px] before:top-2 before:bottom-2 before:w-[px] before:bg-foreground/10">
                                                 {loadingHistory ? (
-                                                    <div className="text-[10px] text-neutral-700 uppercase font-black pl-8 italic animate-pulse">Analizando...</div>
+                                                    <div className="text-[10px] text-muted-foreground uppercase font-black pl-8 italic animate-pulse">Analizando...</div>
                                                 ) : history.length > 0 ? history.map((h, i) => (
                                                     <div key={h.id} className="flex gap-4 items-start relative pl-0 opacity-60 hover:opacity-100 transition-opacity">
                                                         <div className={cn(
@@ -588,16 +588,16 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                                             h.decision === 'GRANT' ? "bg-emerald-500" : "bg-red-600"
                                                         )} />
                                                         <div className="min-w-0">
-                                                            <p className="text-[9px] font-black text-white/50 uppercase leading-none truncate">
+                                                            <p className="text-[9px] font-black text-foreground/70 uppercase leading-none truncate">
                                                                 {h.device?.name || "Terminal"}
                                                             </p>
-                                                            <p className="text-[7px] font-bold text-neutral-600 mt-1 uppercase tracking-tighter">
+                                                            <p className="text-[7px] font-bold text-muted-foreground mt-1 uppercase tracking-tighter">
                                                                 {new Date(h.timestamp).toLocaleTimeString()} • {h.decision === 'GRANT' ? 'PASO' : 'DENEGADO'}
                                                             </p>
                                                         </div>
                                                     </div>
                                                 )) : (
-                                                    <div className="text-[10px] text-neutral-600 uppercase font-black pl-8">Sin registros.</div>
+                                                    <div className="text-[10px] text-muted-foreground uppercase font-black pl-8">Sin registros.</div>
                                                 )}
                                             </div>
                                         </div>
@@ -614,8 +614,8 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
                                         exit={{ opacity: 0 }}
                                         className="absolute bottom-8 right-8 text-right space-y-1"
                                     >
-                                        <p className="text-[9px] font-black text-neutral-500 uppercase tracking-widest leading-none">Terminal de Acceso / Origen</p>
-                                        <h4 className="text-xl font-black text-white uppercase tracking-tighter truncate max-w-[300px]">{event.device?.name || "Búsqueda Manual"}</h4>
+                                        <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest leading-none">Terminal de Acceso / Origen</p>
+                                        <h4 className="text-xl font-black text-foreground uppercase tracking-tighter truncate max-w-[300px]">{event.device?.name || "Búsqueda Manual"}</h4>
                                     </motion.div>
                                 )}
                             </AnimatePresence>
@@ -637,12 +637,12 @@ export function FaceMatchModal({ event, verification, isOpen, onClose }: FaceMat
 function IdentityField({ icon, label, value }: { icon: React.ReactNode, label: string, value: string }) {
     return (
         <div className="flex items-start gap-4 group">
-            <div className="w-6 h-6 text-neutral-600 group-hover:text-[#B20D30] transition-colors mt-0.5 shrink-0">
+            <div className="w-6 h-6 text-muted-foreground group-hover:text-[#B20D30] transition-colors mt-0.5 shrink-0">
                 {icon}
             </div>
             <div className="min-w-0">
-                <p className="text-[10px] font-black text-neutral-500 uppercase tracking-widest mb-1.5 leading-none">{label}</p>
-                <p className="text-sm font-black text-white uppercase leading-tight truncate">{value}</p>
+                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1.5 leading-none">{label}</p>
+                <p className="text-sm font-black text-foreground uppercase leading-tight truncate">{value}</p>
             </div>
         </div>
     );

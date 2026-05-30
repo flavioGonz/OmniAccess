@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
     try {
@@ -13,7 +11,6 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: "Plate parameter is required" }, { status: 400 });
         }
 
-        // Fetch events for this plate
         const events = await prisma.accessEvent.findMany({
             where: {
                 plateDetected: plate,

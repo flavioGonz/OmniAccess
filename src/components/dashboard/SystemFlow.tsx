@@ -20,7 +20,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import FloatingEdge from './flow/FloatingEdge';
-import { Database, Server, Smartphone, HardDrive, ShieldCheck, Video, Globe, MessageSquare, Monitor, Webhook, Camera, Copy, Check, Activity, ScanFace } from 'lucide-react';
+import { Database, Server, Smartphone, HardDrive, ShieldCheck, Video, Globe, MessageSquare, Monitor, Webhook, Camera, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import axios from 'axios';
 import { io } from 'socket.io-client';
@@ -35,35 +35,9 @@ const WebhookDriverNode = memo(({ data }: any) => {
 
     const handleCopy = (e: React.MouseEvent) => {
         e.stopPropagation();
-        const textToCopy = data.fullUrl || `http://localhost:10000${data.sub}`;
-
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(textToCopy)
-                .then(() => {
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
-                })
-                .catch(err => console.error('Failed to copy:', err));
-        } else {
-            // Fallback for non-secure contexts
-            const textArea = document.createElement("textarea");
-            textArea.value = textToCopy;
-            textArea.style.position = "fixed";
-            textArea.style.left = "-9999px";
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-
-            try {
-                document.execCommand('copy');
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-            } catch (err) {
-                console.error('Copy fallback failed:', err);
-            }
-
-            document.body.removeChild(textArea);
-        }
+        navigator.clipboard.writeText(data.fullUrl || `http://localhost:10000${data.sub}`);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
     };
 
     return (
@@ -76,8 +50,8 @@ const WebhookDriverNode = memo(({ data }: any) => {
             {/* Header */}
             <div className="flex items-center gap-2 mb-2 pointer-events-none">
                 <div className={cn(
-                    "p-1.5 rounded-lg transition-colors flex items-center justify-center w-8 h-8 overflow-hidden",
-                    ImageSrc ? "bg-white p-0.5" : (isActive ? "bg-blue-500/20 text-blue-400" : "bg-neutral-800 text-neutral-400")
+                    "p-1.5 rounded-lg transition-colors flex items-center justify-center w-8 h-8 bg-muted overflow-hidden",
+                    isActive ? "bg-blue-500/20 text-blue-400" : "text-muted-foreground"
                 )}>
                     {ImageSrc ? (
                         <img src={ImageSrc} alt={data.label} className="w-full h-full object-contain" />
@@ -86,10 +60,10 @@ const WebhookDriverNode = memo(({ data }: any) => {
                     )}
                 </div>
                 <div className="flex flex-col">
-                    <span className="text-[11px] font-black uppercase tracking-tighter text-white">
+                    <span className="text-[11px] font-black uppercase tracking-tighter text-foreground">
                         {data.label}
                     </span>
-                    <span className="text-[9px] font-mono text-neutral-500">
+                    <span className="text-[9px] font-mono text-muted-foreground">
                         Endpoint
                     </span>
                 </div>
@@ -103,23 +77,23 @@ const WebhookDriverNode = memo(({ data }: any) => {
 
             {/* Path Section */}
             <div className="flex items-center justify-between gap-2 p-1.5 bg-black/20 rounded-lg border border-white/5 group relative z-10">
-                <code className="text-[9px] text-neutral-400 font-mono truncate max-w-[120px] pointer-events-auto select-all">
+                <code className="text-[9px] text-muted-foreground font-mono truncate max-w-[120px] pointer-events-auto select-all">
                     {data.sub.toLowerCase()}
                 </code>
                 <button
                     onClick={handleCopy}
-                    className="p-1 hover:bg-white/10 rounded transition-colors cursor-pointer pointer-events-auto"
+                    className="p-1 hover:bg-accent rounded transition-colors cursor-pointer pointer-events-auto"
                     title="Copiar Endpoint"
                     onMouseDown={(e) => e.stopPropagation()}
                 >
-                    {copied ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} className="text-neutral-500 group-hover:text-white" />}
+                    {copied ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} className="text-muted-foreground group-hover:text-foreground" />}
                 </button>
             </div>
 
             {/* Event Info Animation (Bottom Popup) */}
             {isActive && data.eventInfo && (
                 <div className="absolute top-full left-0 right-0 pt-3 animate-in slide-in-from-top-2 fade-in duration-300 pointer-events-none z-50">
-                    <div className="bg-blue-600 text-white text-[10px] p-2 rounded-lg shadow-lg flex flex-col items-center text-center">
+                    <div className="bg-blue-600 text-foreground text-[10px] p-2 rounded-lg shadow-lg flex flex-col items-center text-center">
                         <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-blue-600 rotate-45 transform" />
                         <span className="font-bold relative z-10">{data.eventInfo.title}</span>
                         <span className="opacity-80 font-mono text-[9px] relative z-10">{data.eventInfo.desc}</span>
@@ -131,88 +105,8 @@ const WebhookDriverNode = memo(({ data }: any) => {
 });
 WebhookDriverNode.displayName = 'WebhookDriverNode';
 
-const ConsoleNode = memo(({ data }: any) => {
-    const status = data.status || 'offline';
-    const isActive = status === 'online';
-
-    return (
-        <div className={cn(
-            "relative flex flex-col items-center justify-center p-0.5 transition-all duration-500 custom-drag-handle group/console",
-            isActive ? "scale-105" : "opacity-40 grayscale"
-        )}>
-            {/* Tablet Bezel Reflection */}
-            <div className="absolute inset-0 rounded-[1rem] bg-gradient-to-tr from-white/5 to-transparent pointer-events-none" />
-
-            {/* Screen Area */}
-            <div className={cn(
-                "relative z-10 w-full h-full bg-neutral-900 rounded-[0.6rem] overflow-hidden flex flex-col border border-white/5 shadow-inner",
-                isActive ? "bg-slate-900" : "bg-neutral-800"
-            )}>
-                {/* Status Bar */}
-                <div className="h-4 w-full bg-black/60 flex items-center justify-between px-2 backdrop-blur-sm border-b border-white/5">
-                    <div className="flex items-center gap-1">
-                        <div className={cn("w-1 h-1 rounded-full", isActive ? "bg-emerald-500" : "bg-red-500")} />
-                        <span className="text-[6px] font-mono text-white/70 tracking-tight">{data.ip}</span>
-                    </div>
-                </div>
-
-                {/* Main Screen Content */}
-                <div className="flex-1 flex flex-col items-center justify-center p-2 relative overflow-hidden group-hover/console:bg-white/5 transition-colors">
-                    {/* Dynamic Background */}
-                    {isActive && (
-                        <div className="absolute inset-0 bg-gradient-to-b from-emerald-600/10 via-transparent to-transparent opacity-50" />
-                    )}
-
-                    <div className="relative z-10 flex flex-col items-center gap-2">
-                        <div className="flex items-center gap-3">
-                            {/* Avatar */}
-                            <div className={cn(
-                                "w-9 h-9 rounded-lg flex items-center justify-center text-[10px] font-black shadow-lg ring-2 ring-white/10",
-                                isActive ? "bg-white text-emerald-600" : "bg-neutral-700 text-neutral-500"
-                            )}>
-                                {data.avatar ? <img src={data.avatar} className="w-full h-full object-cover rounded-lg" alt="Avatar" /> : (data.guardName?.[0] || "G")}
-                            </div>
-
-                            {/* Info */}
-                            <div className="flex flex-col text-left">
-                                <span className="text-[10px] font-black text-white uppercase leading-none tracking-tight">{data.guardName?.split(' ')[0] || "Guardia"}</span>
-                                <span className="text-[6px] font-bold text-white/40 uppercase mt-0.5 tracking-tighter truncate max-w-[80px]">
-                                    {data.deviceInfo || data.deviceId || "Tablet"}
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* Connection Status Pill */}
-                        <div className={cn(
-                            "px-2 py-0.5 rounded-full border flex items-center gap-1",
-                            isActive ? "bg-emerald-500/20 border-emerald-500/30" : "bg-neutral-800 border-neutral-700"
-                        )}>
-                            <span className={cn(
-                                "text-[6px] font-black uppercase tracking-widest",
-                                isActive ? "text-emerald-400" : "text-neutral-500"
-                            )}>
-                                {isActive ? "Conectado" : "Offline"}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Home Indicator */}
-                <div className="h-3 w-full flex items-center justify-center bg-black/20 backdrop-blur-sm">
-                    <div className="w-10 h-0.5 bg-white/20 rounded-full" />
-                </div>
-            </div>
-
-            {/* Handle on Top for incoming edge from Server */}
-            <Handle type="target" position={Position.Top} className="!w-2 !h-2 !bg-neutral-600 !border-2 !border-[#121214] !top-[-4px]" />
-        </div>
-    );
-});
-ConsoleNode.displayName = 'ConsoleNode';
-
 const nodeTypes = {
     webhook: WebhookDriverNode,
-    console: ConsoleNode,
 };
 
 const initialNodes: Node[] = [
@@ -244,9 +138,9 @@ const initialNodes: Node[] = [
     },
     {
         id: 'waha',
-        data: { label: 'Chatbot', icon: MessageSquare, sub: 'WAHA Agent', ip: 'internal.gw', port: '3000', status: 'unknown' },
+        data: { label: 'WhatsApp', icon: MessageSquare, sub: 'OpenWA Gateway', ip: '192.168.99.22', port: '2785', status: 'unknown' },
         position: { x: 700, y: 250 },
-        style: { background: '#1e1e24', color: '#fff', border: '2px solid #22c55e', width: 220, borderRadius: 12, padding: 12 },
+        style: { background: '#0b2e1a', color: '#fff', border: '2px solid #25D366', width: 220, borderRadius: 12, padding: 12, boxShadow: '0 0 28px rgba(37, 211, 102, 0.35)' },
     },
     {
         id: 'webhook-api',
@@ -255,20 +149,15 @@ const initialNodes: Node[] = [
         style: { background: '#1e1e24', color: '#fff', border: '2px solid #3b82f6', width: 220, borderRadius: 12, padding: 12 },
         type: 'default',
     },
-    {
-        id: 'compare-face',
-        data: { label: 'AI Face Engine', icon: ScanFace, sub: 'CompareFace API', ip: 'neural.omni', port: '8000', status: 'unknown' },
-        position: { x: 700, y: 450 },
-        style: { background: '#1e1e24', color: '#fff', border: '2px solid #ef4444', width: 220, borderRadius: 12, padding: 12, boxShadow: '0 0 20px rgba(239, 68, 68, 0.2)' },
-    },
 ];
 
 // Dynamic webhook driver nodes with images
 const webhookDrivers = [
     { id: 'webhook-hikvision', label: 'Hikvision', path: '/api/webhooks/hikvision', icon: Camera, color: '#3b82f6', image: '/logos/hikvision.png' },
+    { id: 'webhook-avicam', label: 'Avicam', path: '/api/webhooks/avicam', icon: Camera, color: '#10b981', image: '/logos/avicam.png' },
     { id: 'webhook-akuvox', label: 'Akuvox', path: '/api/webhooks/akuvox', icon: Smartphone, color: '#3b82f6', image: '/logos/akuvox.png' },
-    { id: 'webhook-avicam', label: 'Avicam', path: '/api/webhooks/avicam', icon: Camera, color: '#f43f5e', image: '/logos/avicam.png' },
-    { id: 'webhook-waha', label: 'WAHA Bot', path: '/api/webhooks/whatsapp', icon: MessageSquare, color: '#3b82f6' },
+    { id: 'webhook-bosch', label: 'Bosch ONVIF', path: '/onvif/notification', icon: Video, color: '#f59e0b' },
+    { id: 'webhook-waha', label: 'OpenWA Bot', path: '/api/webhooks/whatsapp', icon: MessageSquare, color: '#25D366' },
 ];
 
 const connectionLineStyle = { stroke: '#fff' };
@@ -280,7 +169,7 @@ const fitViewOptions: FitViewOptions = {
     padding: 0.2,
 };
 
-const SystemFlow = memo(function SystemFlow({ mode = "full" }: { mode?: "full" | "consoles" }) {
+export default function SystemFlow() {
     const [nodes, setNodes] = useState<Node[]>([]);
     const [edges, setEdges] = useState<Edge[]>([]);
     const [webhookActive, setWebhookActive] = useState<string | null>(null);
@@ -291,73 +180,6 @@ const SystemFlow = memo(function SystemFlow({ mode = "full" }: { mode?: "full" |
             try {
                 const res = await axios.get('/api/topology/positions');
                 const savedPositions = res.data;
-
-                if (mode === "consoles") {
-                    const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
-                    const isStandardPort = window.location.port === '' || window.location.port === '80' || window.location.port === '443';
-                    const socketUrl = isStandardPort
-                        ? `${protocol}://${window.location.hostname}`
-                        : `${protocol}://${window.location.hostname}:10000`;
-                    const socket = io(socketUrl);
-                    const serverNode = {
-                        id: 'lpr-node',
-                        data: { label: 'OmniAccess Server', icon: ShieldCheck, sub: 'Central API', ip: 'localhost', port: '10000', status: 'connected' },
-                        position: { x: 400, y: 100 },
-                        style: { background: '#1e1e24', color: '#fff', border: '2px solid #6366f1', width: 220, borderRadius: 16, padding: 15, boxShadow: '0 0 30px rgba(99, 102, 241, 0.4)' },
-                        type: 'default',
-                    };
-
-                    setNodes([serverNode]);
-
-                    socket.on('guard_presence', (data: any) => {
-                        setNodes(currentNodes => {
-                            const tabletId = `tablet-${data.guardName.replace(/\s+/g, '-').toLowerCase()}`;
-                            const existingNode = currentNodes.find(n => n.id === tabletId);
-
-                            if (existingNode) {
-                                return currentNodes.map(n => n.id === tabletId ? {
-                                    ...n,
-                                    data: { ...n.data, status: 'online', lastSeen: new Date(), avatar: data.guardPhoto }
-                                } : n);
-                            }
-
-                            // Add new real tablet node
-                            const newNode = {
-                                id: tabletId,
-                                data: {
-                                    guardName: data.guardName,
-                                    deviceId: 'Tablet Conectada',
-                                    deviceInfo: data.deviceInfo || 'Detectando...',
-                                    ip: data.reportedIp || data.ip || 'Detectando...',
-                                    avatar: data.guardPhoto,
-                                    status: 'online',
-                                    lastSeen: new Date()
-                                },
-                                position: { x: 200 + (currentNodes.length * 250), y: 350 },
-                                type: 'console',
-                                dragHandle: '.custom-drag-handle'
-                            };
-
-                            return [...currentNodes, newNode];
-                        });
-
-                        setEdges(currentEdges => {
-                            const tabletId = `tablet-${data.guardName.replace(/\s+/g, '-').toLowerCase()}`;
-                            if (currentEdges.find(e => e.id === `e-${tabletId}`)) return currentEdges;
-
-                            return [...currentEdges, {
-                                id: `e-${tabletId}`,
-                                source: 'lpr-node',
-                                target: tabletId,
-                                type: 'floating',
-                                animated: true,
-                                style: { stroke: '#10b981', strokeWidth: 2 }
-                            }];
-                        });
-                    });
-
-                    return () => { socket.close(); };
-                }
 
                 // Create driver nodes dynamically
                 const driverNodes = webhookDrivers.map((driver, index) => ({
@@ -392,7 +214,6 @@ const SystemFlow = memo(function SystemFlow({ mode = "full" }: { mode?: "full" |
                     { id: 'e-postgres', source: 'lpr-node', target: 'postgres', type: 'floating', animated: true, data: { latency: 0, status: 'unknown' } },
                     { id: 'e-minio', source: 'lpr-node', target: 'minio', type: 'floating', animated: true, data: { latency: 0, status: 'unknown' } },
                     { id: 'e-waha', source: 'lpr-node', target: 'waha', type: 'floating', animated: true, data: { latency: 0, status: 'unknown' } },
-                    { id: 'e-compare-face', source: 'lpr-node', target: 'compare-face', type: 'floating', animated: true, data: { latency: 0, status: 'unknown' } },
                     { id: 'e-webhook-core', source: 'webhook-api', target: 'lpr-node', type: 'floating', animated: false, data: { latency: 0, status: 'idle' } },
                     ...webhookDrivers.map(driver => ({
                         id: `e-${driver.id}`,
@@ -481,13 +302,9 @@ const SystemFlow = memo(function SystemFlow({ mode = "full" }: { mode?: "full" |
     // Socket.IO for real-time webhook events
     useEffect(() => {
         // Use window.location.hostname to connect to the server on the same IP as the frontend
-        const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
-        const isStandardPort = window.location.port === '' || window.location.port === '80' || window.location.port === '443';
-        const socketUrl = isStandardPort
-            ? `${protocol}://${window.location.hostname}`
-            : `${protocol}://${window.location.hostname}:10000`;
-        const socket = io(socketUrl, {
-            transports: ['websocket', 'polling']
+        const socket = io(window.location.origin, {
+            path: '/io/socket.io',
+            transports: ['polling']
         });
 
         socket.on('webhook-event', (data: any) => {
@@ -502,12 +319,17 @@ const SystemFlow = memo(function SystemFlow({ mode = "full" }: { mode?: "full" |
                 eventInfo = data.type === 'FACE' ? { title: 'Rostro Detectado', desc: 'Hikvision LPR' } :
                     data.type === 'LPR' ? { title: 'LPR Lectura', desc: data.plate || 'Matrícula' } :
                         { title: 'Evento Cámara', desc: 'Detección' };
+            } else if (data.type === 'BOSCH' || data.type === 'QUEUE') {
+                driverNodeId = 'webhook-bosch';
+                const count = data.peopleCount || data.count || 0;
+                const rule = data.channelName || data.ruleName || 'IVA';
+                eventInfo = { title: `${count} Personas`, desc: rule };
+            } else if (data.type === 'AVICAM' || data.model === 'AVICAM') {
+                driverNodeId = 'webhook-avicam';
+                eventInfo = { title: 'Rostro Detectado', desc: data.name || 'Avicam Face' };
             } else if (data.type === 'AKUVOX' || data.model === 'AKUVOX') {
                 driverNodeId = 'webhook-akuvox';
                 eventInfo = { title: 'Evento Akuvox', desc: data.eventType || 'Access Log' };
-            } else if (data.vendor === 'AVICAM' || data.type === 'AVICAM') {
-                driverNodeId = 'webhook-avicam';
-                eventInfo = { title: 'Rostro Avicam', desc: data.eventType || 'Detección' };
             } else if (data.origin === 'WAHA' || data.type === 'CHAT') {
                 driverNodeId = 'webhook-waha';
                 const msgSnippet = data.body ? (data.body.length > 20 ? data.body.substring(0, 17) + "..." : data.body) : "Mensaje WA";
@@ -625,9 +447,6 @@ const SystemFlow = memo(function SystemFlow({ mode = "full" }: { mode?: "full" |
                     } else if (edge.id === 'e-waha' && data.waha) {
                         status = data.waha.status === 'connected' ? 'connected' : 'error';
                         latency = data.waha.latency || 0;
-                    } else if (edge.id === 'e-compare-face') {
-                        status = 'connected';
-                        latency = 45;
                     } else if (edge.id === 'e-frontend') {
                         status = 'connected';
                     } else if (edge.id.startsWith('e-webhook')) {
@@ -669,10 +488,6 @@ const SystemFlow = memo(function SystemFlow({ mode = "full" }: { mode?: "full" |
                             ip = data.primaryDb.details.host || ip;
                             port = data.primaryDb.details.port || port;
                         }
-                    } else if (node.id === 'compare-face') {
-                        nodeStatus = 'connected';
-                        borderColor = '#ef4444';
-                        stats = 'Neural Engine Online';
                     } else if (node.id === 'minio' && data.minio) {
                         nodeStatus = data.minio.status;
                         borderColor = nodeStatus === 'connected' ? '#22c55e' : '#ef4444';
@@ -740,32 +555,32 @@ const SystemFlow = memo(function SystemFlow({ mode = "full" }: { mode?: "full" |
                     )}>
                         <div className="flex items-center gap-2 mb-1 w-full justify-center">
                             {Icon && <Icon className={cn(
-                                node.id === 'lpr-node' ? "text-indigo-400" : "text-white/70",
+                                node.id === 'lpr-node' ? "text-indigo-400" : "text-foreground/70",
                                 status === 'connected' && "text-emerald-400",
                                 status === 'error' && "text-red-400",
                                 status === 'active' && "text-blue-400"
                             )} size={18} />}
                             <div className={cn(
                                 "font-black uppercase tracking-tighter",
-                                node.id === 'lpr-node' ? "text-sm text-white" : "text-[11px] text-neutral-200"
+                                node.id === 'lpr-node' ? "text-sm text-foreground" : "text-[11px] text-foreground"
                             )}>
                                 {node.data.label}
                             </div>
                         </div>
                         {node.data.sub && (
-                            <div className="text-[9px] text-neutral-500 font-mono uppercase tracking-wider">
+                            <div className="text-[9px] text-muted-foreground font-mono uppercase tracking-wider">
                                 {node.data.sub}
                             </div>
                         )}
                         <div className="mt-1 space-y-0.5 w-full">
                             <div className="flex items-center justify-between px-2">
-                                <span className="text-[8px] text-neutral-600 font-bold uppercase">Network</span>
-                                <span className="text-[8px] text-neutral-400 font-mono">{node.data.ip}:{node.data.port}</span>
+                                <span className="text-[8px] text-muted-foreground font-bold uppercase">Network</span>
+                                <span className="text-[8px] text-muted-foreground font-mono">{node.data.ip}:{node.data.port}</span>
                             </div>
                             {node.data.stats && (
                                 <div className="flex items-center justify-between px-2">
-                                    <span className="text-[8px] text-neutral-600 font-bold uppercase">Data</span>
-                                    <span className="text-[8px] text-neutral-400 font-mono">{node.data.stats}</span>
+                                    <span className="text-[8px] text-muted-foreground font-bold uppercase">Data</span>
+                                    <span className="text-[8px] text-muted-foreground font-mono">{node.data.stats}</span>
                                 </div>
                             )}
                         </div>
@@ -776,7 +591,7 @@ const SystemFlow = memo(function SystemFlow({ mode = "full" }: { mode?: "full" |
                                 status === 'error' && "bg-red-500 animate-pulse",
                                 status === 'idle' && "bg-blue-500",
                                 status === 'active' && "bg-blue-500 animate-ping",
-                                status === 'disabled' && "bg-neutral-600"
+                                status === 'disabled' && "bg-muted"
                             )} />
                         )}
                     </div>
@@ -830,6 +645,4 @@ const SystemFlow = memo(function SystemFlow({ mode = "full" }: { mode?: "full" |
             </ReactFlow>
         </div>
     );
-});
-
-export default SystemFlow;
+}

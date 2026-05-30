@@ -10,14 +10,14 @@ import { getImagePath } from "@/lib/image-path";
 export default function SecurityFeed({ events, onEventClick }: { events: any[], onEventClick?: (event: any) => void }) {
     return (
         <div className="flex flex-col h-full bg-black/40 backdrop-blur-3xl border-l border-white/5 p-6 overflow-hidden">
-            <div className="flex items-center justify-between mb-8 border-b border-white/5 pb-4">
+            <div className="flex items-center justify-between mb-8 border-b border-border pb-4">
                 <div>
-                    <h3 className="text-xl font-black text-white uppercase tracking-tighter">Eventos en Vivo</h3>
-                    <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest">OmniAccess Biometric Feed</p>
+                    <h3 className="text-xl font-black text-foreground uppercase tracking-tighter">Eventos en Vivo</h3>
+                    <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">OmniAccess Biometric Feed</p>
                 </div>
                 <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
-                    <span className="text-[10px] font-black text-white uppercase tracking-widest leading-none">Live</span>
+                    <span className="text-[10px] font-black text-foreground uppercase tracking-widest leading-none">Live</span>
                 </div>
             </div>
 
@@ -32,15 +32,15 @@ export default function SecurityFeed({ events, onEventClick }: { events: any[], 
                             exit={{ opacity: 0, x: -20 }}
                             onClick={() => onEventClick?.(event)}
                             className={cn(
-                                "group relative p-4 rounded-2xl border transition-all hover:bg-white/5 cursor-pointer active:scale-95",
+                                "group relative p-4 rounded-2xl border transition-all hover:bg-accent cursor-pointer active:scale-95",
                                 event.user?.role === 'BLACKLISTED' || event.decision === 'DENY'
                                     ? "bg-red-950/20 border-red-500/30 shadow-[0_0_20px_rgba(239,68,68,0.1)]"
-                                    : "bg-white/5 border-white/10"
+                                    : "bg-foreground/10 border-border"
                             )}
                         >
                             <div className="flex items-center gap-4">
                                 {/* Thumbnail */}
-                                <div className="w-16 h-16 rounded-xl overflow-hidden border border-white/10 shrink-0 bg-neutral-900 relative">
+                                <div className="w-16 h-16 rounded-xl overflow-hidden border border-border shrink-0 bg-card relative">
                                     <img
                                         src={getImagePath(event.snapshotPath) || "/placeholder-face.jpg"}
                                         alt=""
@@ -48,11 +48,11 @@ export default function SecurityFeed({ events, onEventClick }: { events: any[], 
                                     />
                                     {event.decision === 'GRANT' ? (
                                         <div className="absolute top-1 right-1 bg-emerald-500 rounded-full p-0.5 border border-black shadow-lg">
-                                            <CheckCircle2 size={10} className="text-white" />
+                                            <CheckCircle2 size={10} className="text-foreground" />
                                         </div>
                                     ) : (
                                         <div className="absolute top-1 right-1 bg-red-600 rounded-full p-0.5 border border-black shadow-lg">
-                                            <XCircle size={10} className="text-white" />
+                                            <XCircle size={10} className="text-foreground" />
                                         </div>
                                     )}
                                 </div>
@@ -62,17 +62,17 @@ export default function SecurityFeed({ events, onEventClick }: { events: any[], 
                                     <div className="flex items-center justify-between mb-1">
                                         <h4 className={cn(
                                             "text-sm font-black uppercase tracking-tight truncate",
-                                            !event.user || event.decision === 'DENY' ? "text-red-500" : "text-white"
+                                            !event.user || event.decision === 'DENY' ? "text-red-500" : "text-foreground"
                                         )}>
                                             {event.user?.name || "DESCONOCIDO"}
                                         </h4>
-                                        <span className="text-[10px] font-mono text-neutral-600">
+                                        <span className="text-[10px] font-mono text-muted-foreground">
                                             {new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                         </span>
                                     </div>
 
                                     <div className="flex items-center gap-2">
-                                        <p className="text-[10px] text-neutral-600 font-bold uppercase truncate">
+                                        <p className="text-[10px] text-muted-foreground font-bold uppercase truncate">
                                             {event.device?.name || "Neural Terminal"}
                                         </p>
                                         {(event.user?.role === 'BLACKLISTED' || event.decision === 'DENY') && (
@@ -83,7 +83,7 @@ export default function SecurityFeed({ events, onEventClick }: { events: any[], 
                                     </div>
                                 </div>
 
-                                <ChevronRight size={16} className="text-neutral-700 group-hover:text-white transition-colors" />
+                                <ChevronRight size={16} className="text-muted-foreground group-hover:text-foreground transition-colors" />
                             </div>
                         </motion.div>
                     ))}

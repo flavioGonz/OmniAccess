@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable */
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Activity, History as HistoryIcon, Map as MapIcon,
@@ -18,6 +18,7 @@ import { io } from "socket.io-client";
 import { getSocketUrl } from "@/lib/socket-config";
 import { sileo as toast } from "sileo";
 import { createBitacoraEntry, searchRecentBitacora } from "@/app/actions/bitacora";
+import { submitRegistrationSuggestion } from "@/app/actions/registrations";
 import { getAccessEvents as getLprHistory, getPlateAnalysis } from "@/app/actions/history";
 import { searchUsers } from "@/app/actions/search";
 import { searchByPhotoAction } from "@/app/actions/face-verify";
@@ -30,7 +31,7 @@ import dynamic from "next/dynamic";
 const LiveGuardMap = dynamic(() => import("@/components/LiveGuardMap"), { ssr: false });
 const OCRScanner = dynamic(() => import("@/components/OCRScannerTF"), { ssr: false });
 
-type TabType = "control" | "history" | "map" | "lpr" | "alerts" | "faces";
+type TabType = "control" | "history" | "registro" | "lpr" | "alerts" | "faces";
 
 interface Unit {
     id: string;
@@ -130,6 +131,16 @@ export default function GuardIphoneConsole({
     const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null);
     const [otherGuards, setOtherGuards] = useState<any[]>([]);
     const [isOCRActive, setIsOCRActive] = useState(false);
+
+    // Registration Suggestion States
+    const [regType, setRegType] = useState<"HOUSE" | "PERSON">("HOUSE");
+    const [regName, setRegName] = useState("");
+    const [regHouseNumber, setRegHouseNumber] = useState("");
+    const [regAddress, setRegAddress] = useState("");
+    const [regDni, setRegDni] = useState("");
+    const [regPhone, setRegPhone] = useState("");
+    const [regUnitId, setRegUnitId] = useState("");
+    const [isSubmittingReg, setIsSubmittingReg] = useState(false);
 
     const socketRef = useRef<any>(null);
     const isFirstAlertStatusReceived = useRef(false);
@@ -375,9 +386,17 @@ export default function GuardIphoneConsole({
         };
     }, []);
 
-    const playTactileSound = () => {
+    // TACTILE SOUND UTILITY
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const playTactileSound = useCallback(() => {
         try {
-            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            if (!audioContextRef.current) {
+                audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+            }
+            const ctx = audioContextRef.current;
+            if (ctx.state === 'suspended') {
+                ctx.resume();
+            }
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
             osc.frequency.setValueAtTime(800, ctx.currentTime);
@@ -388,7 +407,7 @@ export default function GuardIphoneConsole({
             osc.start();
             osc.stop(ctx.currentTime + 0.05);
         } catch (e) { }
-    };
+    }, []);
 
     const formatDuration = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
@@ -775,6 +794,7 @@ export default function GuardIphoneConsole({
                                     <TactilePlateInputMobile
                                         value={plate}
                                         onChange={setPlate}
+                                        playTactileSound={playTactileSound}
                                     />
                                 </div>
 
@@ -1160,48 +1180,137 @@ export default function GuardIphoneConsole({
                         </motion.div>
                     )}
 
-                    {activeTab === "map" && (
+                    {activeTab === "registro" && (
                         <motion.div
-                            key="map"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="h-full w-full relative"
+                            key="registro"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                            className="h-full overflow-y-auto px-5 pt-6 pb-32 custom-scrollbar"
                         >
-                            <LiveGuardMap
-                                myLocation={location}
-                                guards={otherGuards}
-                                socketId={socketRef.current?.id || null}
-                                backupMissions={monitoringMissions.map(m => ({
-                                    ...m,
-                                    responderLocation: m.responderId === socketRef.current?.id
-                                        ? location
-                                        : (otherGuards.find(g => g.socketId === m.responderId) || null)
-                                }))}
-                                onLongPress={(latlng) => {
-                                    setBackupLocation(latlng);
-                                    setShowReportModal(true);
-                                    playTactileSound();
-                                }}
-                                onAlertClick={(mission) => {
-                                    setActiveMission(mission);
-                                    setShowResolutionModal(true);
-                                    playTactileSound();
-                                }}
-                            />
+                            <div className="space-y-6">
+                                <section className="text-center">
+                                    <h2 className="text-xl font-black uppercase text-slate-900">Sugerir Registro</h2>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Registros pendientes de aprobación por admin</p>
+                                </section>
 
-                            {/* Floating Map Actions */}
-                            <div className="absolute top-20 right-4 flex flex-col gap-3">
-                                <button
-                                    onClick={() => { setShowReportModal(true); playTactileSound(); }}
-                                    className="w-16 h-16 rounded-[2rem] bg-[#B20D30] text-white shadow-2xl flex flex-col items-center justify-center active:scale-95 transition-all border-4 border-white"
-                                >
-                                    <AlertTriangle size={24} />
-                                    <span className="text-[7px] font-black uppercase tracking-tighter mt-0.5">Reportar</span>
-                                </button>
+                                <div className="p-1 bg-slate-200/50 rounded-2xl flex gap-1">
+                                    <button
+                                        onClick={() => { setRegType("HOUSE"); playTactileSound(); }}
+                                        className={cn(
+                                            "flex-1 py-3 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase transition-all",
+                                            regType === "HOUSE" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400"
+                                        )}
+                                    >
+                                        <Home size={16} /> Casa / Unidad
+                                    </button>
+                                    <button
+                                        onClick={() => { setRegType("PERSON"); playTactileSound(); }}
+                                        className={cn(
+                                            "flex-1 py-3 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase transition-all",
+                                            regType === "PERSON" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400"
+                                        )}
+                                    >
+                                        <UserIcon size={16} /> Persona
+                                    </button>
+                                </div>
+
+                                <div className="space-y-4 bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
+                                    {regType === "HOUSE" ? (
+                                        <>
+                                            <AppFieldMobile
+                                                label="Identificación / Nro Casa"
+                                                icon={<Home size={14} />}
+                                                value={regHouseNumber}
+                                                onChange={setRegHouseNumber}
+                                                placeholder="Ej: Casa 45 o Unidad B-202"
+                                            />
+                                            <AppFieldMobile
+                                                label="Nombre Descriptivo (Opcional)"
+                                                icon={<Building2 size={14} />}
+                                                value={regName}
+                                                onChange={setRegName}
+                                                placeholder="Ej: Familia Rodriguez"
+                                            />
+                                            <AppFieldMobile
+                                                label="Dirección / Referencia"
+                                                icon={<MapIcon size={14} />}
+                                                value={regAddress}
+                                                onChange={setRegAddress}
+                                                placeholder="Calle y número o lote..."
+                                            />
+                                        </>
+                                    ) : (
+                                        <>
+                                            <AppFieldMobile
+                                                label="Nombre Completo"
+                                                icon={<UserIcon size={14} />}
+                                                value={regName}
+                                                onChange={setRegName}
+                                                placeholder="Nombre de la persona..."
+                                            />
+                                            <AppFieldMobile
+                                                label="Documento (DNI/CI)"
+                                                icon={<FileText size={14} />}
+                                                value={regDni}
+                                                onChange={setRegDni}
+                                                placeholder="Nro de identificación..."
+                                            />
+                                            <AppFieldMobile
+                                                label="Teléfono"
+                                                icon={<Smartphone size={14} />}
+                                                value={regPhone}
+                                                onChange={setRegPhone}
+                                                placeholder="Contacto..."
+                                            />
+                                            <div className="space-y-2">
+                                                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest pl-1">Asociar a Unidad</Label>
+                                                <select
+                                                    value={regUnitId}
+                                                    onChange={(e) => setRegUnitId(e.target.value)}
+                                                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl h-14 px-4 text-sm font-bold text-slate-900 focus:outline-none focus:border-indigo-500/50 appearance-none"
+                                                >
+                                                    <option value="">Seleccione una unidad...</option>
+                                                    {unitsList.map((u) => (
+                                                        <option key={u.id} value={u.id}>{u.name || `Casa ${u.number}`}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    <button
+                                        disabled={isSubmittingReg}
+                                        onClick={async () => {
+                                            setIsSubmittingReg(true);
+                                            playTactileSound();
+                                            const data = regType === "HOUSE" 
+                                                ? { houseNumber: regHouseNumber, name: regName, address: regAddress }
+                                                : { name: regName, dni: regDni, phone: regPhone, unitId: regUnitId };
+                                            
+                                            const res = await submitRegistrationSuggestion(regType, data, guardName);
+                                            setIsSubmittingReg(false);
+                                            if (res.success) {
+                                                toast.success({ title: "Sugerencia enviada correctamente", description: "El administrador revisará el registro." });
+                                                setRegName(""); setRegHouseNumber(""); setRegAddress(""); setRegDni(""); setRegPhone(""); setRegUnitId("");
+                                            } else {
+                                                toast.error({ title: "Error al enviar", description: res.error });
+                                            }
+                                        }}
+                                        className={cn(
+                                            "w-full h-16 rounded-2xl font-black uppercase tracking-[0.2em] shadow-xl transition-all active:scale-[0.98] mt-4 flex items-center justify-center gap-3",
+                                            isSubmittingReg ? "bg-slate-100/50 text-slate-300" : (regType === "HOUSE" ? "bg-indigo-600 shadow-indigo-200" : "bg-emerald-600 shadow-emerald-200") + " text-white"
+                                        )}
+                                    >
+                                        {isSubmittingReg ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={24} />}
+                                        {isSubmittingReg ? "Enviando..." : "Enviar Sugerencia"}
+                                    </button>
+                                </div>
                             </div>
                         </motion.div>
                     )}
+
+                    {/* Map removed in favor of Registro */}
                     {activeTab === "faces" && (
                         <motion.div
                             key="faces"
@@ -1383,12 +1492,18 @@ export default function GuardIphoneConsole({
                             className="relative"
                         >
                             <button
+                                onMouseDown={startPanicHold}
+                                onMouseUp={cancelPanicHold}
+                                onMouseLeave={cancelPanicHold}
+                                onTouchStart={startPanicHold}
+                                onTouchEnd={cancelPanicHold}
                                 onClick={() => { playTactileSound(); }}
                                 className={cn(
                                     "w-16 h-16 rounded-full shadow-2xl flex items-center justify-center transition-all active:scale-95 border-4 border-white overflow-hidden relative group",
                                     isAlertMode ? "bg-red-600 text-white animate-pulse" : "bg-white text-red-600 shadow-red-100"
                                 )}
                             >
+
                                 <motion.div
                                     animate={isAlertMode ? { scale: [1, 1.2, 1] } : {}}
                                     transition={{ repeat: Infinity, duration: 1 }}
@@ -1426,10 +1541,10 @@ export default function GuardIphoneConsole({
                         label="LPR"
                     />
                     <BottomNavItem
-                        icon={<MapIcon size={18} />}
-                        active={activeTab === "map"}
-                        onClick={() => setActiveTab("map")}
-                        label="Mapa"
+                        icon={<Plus size={18} />}
+                        active={activeTab === "registro"}
+                        onClick={() => setActiveTab("registro")}
+                        label="Registro"
                     />
                 </div>
             </footer>
@@ -2326,25 +2441,49 @@ function RollingCharacterMobile({ char, isFocused }: { char: string, isFocused: 
     );
 }
 
-function TactilePlateInputMobile({ value, onChange, onCameraClick }: { value: string, onChange: (v: string) => void, onCameraClick?: () => void }) {
+function TactilePlateInputMobile({ value, onChange, onCameraClick, playTactileSound }: { value: string, onChange: (v: string) => void, onCameraClick?: () => void, playTactileSound?: () => void }) {
     const chars = value.padEnd(7, " ").substring(0, 7).split("");
     const inputRef = useRef<HTMLInputElement>(null);
 
+    // Force cursor to end whenever value changes (critical for mobile keyboards)
+    useEffect(() => {
+        if (inputRef.current) {
+            const len = value.length;
+            if (inputRef.current.selectionStart !== len) {
+                inputRef.current.setSelectionRange(len, len);
+            }
+        }
+    }, [value]);
+
     return (
-        <div className="w-full flex flex-col gap-3 items-center">
+        <div className="w-full flex flex-col gap-3 items-center relative">
             <input
                 ref={inputRef}
                 type="text"
                 value={value}
-                onChange={(e) => onChange(e.target.value.toUpperCase().substring(0, 7))}
-                className="absolute opacity-0 pointer-events-none h-0 w-0"
+                onKeyDown={() => {
+                    if (playTactileSound) playTactileSound();
+                }}
+                onFocus={(e) => {
+                    const len = value.length;
+                    e.target.setSelectionRange(len, len);
+                }}
+                onChange={(e) => {
+                    // Filter: Only alphanumeric, limit to 7 chars
+                    const sanitized = e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().substring(0, 7);
+                    onChange(sanitized);
+                }}
+                // Make the hidden input cover the entire visual area for better tablet focus reliability
+                className="absolute inset-0 opacity-0 z-20 cursor-pointer"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                autoCapitalize="characters"
+                inputMode="text"
                 autoFocus
             />
 
-            <div
-                className="flex gap-1.5 items-center cursor-pointer"
-                onClick={() => inputRef.current?.focus()}
-            >
+            <div className="flex gap-1.5 items-center relative z-10">
                 {chars.map((char, i) => (
                     <RollingCharacterMobile
                         key={i}
@@ -2359,14 +2498,14 @@ function TactilePlateInputMobile({ value, onChange, onCameraClick }: { value: st
                             e.stopPropagation();
                             onCameraClick();
                         }}
-                        className="ml-3 w-10 h-12 md:w-14 md:h-16 rounded-xl bg-[#B20D30] text-white flex items-center justify-center shadow-lg active:scale-90 transition-all z-10 border-none"
+                        className="ml-3 w-10 h-12 md:w-14 md:h-16 rounded-xl bg-[#B20D30] text-white flex items-center justify-center shadow-lg active:scale-90 transition-all z-30 border-none pointer-events-auto"
                     >
                         <Camera size={20} className="md:w-6 md:h-6" />
                     </button>
                 )}
             </div>
 
-            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Toca los cuadros para escribir</p>
+            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest z-10">Toca los cuadros para escribir</p>
         </div>
     );
 }

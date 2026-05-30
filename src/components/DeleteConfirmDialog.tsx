@@ -52,23 +52,23 @@ export function DeleteConfirmDialog({ id, title, description, onDelete, onSucces
             <DialogTrigger asChild>
                 {children}
             </DialogTrigger>
-            <DialogContent className="max-w-[400px] bg-[#0c0c0c] border border-white/5 text-white p-0 gap-0 shadow-2xl backdrop-blur-xl sm:rounded-3xl overflow-hidden">
+            <DialogContent className="max-w-[400px] bg-[#0c0c0c] border border-border text-foreground p-0 gap-0 shadow-2xl backdrop-blur-xl sm:rounded-3xl overflow-hidden">
                 <div className="flex flex-col items-center text-center p-8 pt-10 space-y-6">
                     {/* Icon with subtle red ambient glow */}
                     <div className="relative group">
                         <div className="absolute inset-0 bg-red-600 blur-2xl opacity-20 group-hover:opacity-30 transition-opacity duration-500" />
-                        <div className="relative bg-neutral-900/80 border border-white/5 p-5 rounded-3xl text-red-500 shadow-2xl ring-1 ring-white/5 group-hover:scale-105 transition-transform duration-300">
+                        <div className="relative bg-card/80 border border-border p-5 rounded-3xl text-red-500 shadow-2xl ring-1 ring-border group-hover:scale-105 transition-transform duration-300">
                             <Trash2 size={32} strokeWidth={2} />
                         </div>
                     </div>
 
                     <div className="space-y-2 max-w-[280px] mx-auto">
                         <DialogHeader>
-                            <DialogTitle className="text-xl font-black text-white uppercase tracking-tight text-center">
+                            <DialogTitle className="text-xl font-black text-foreground uppercase tracking-tight text-center">
                                 {title}
                             </DialogTitle>
                         </DialogHeader>
-                        <DialogDescription className="text-sm font-medium text-neutral-400 leading-relaxed">
+                        <DialogDescription className="text-sm font-medium text-muted-foreground leading-relaxed">
                             Esta acción es <span className="text-red-500 font-bold">irreversible</span>.
                             El registro se eliminará permanentemente del sistema.
                         </DialogDescription>
@@ -87,14 +87,14 @@ export function DeleteConfirmDialog({ id, title, description, onDelete, onSucces
                     <Button
                         onClick={handleDelete}
                         disabled={isDeleting}
-                        className="h-12 w-full rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-red-900/20 hover:shadow-red-500/20 transition-all active:scale-[0.98]"
+                        className="h-12 w-full rounded-xl bg-red-600 hover:bg-red-500 text-foreground font-black text-xs uppercase tracking-widest shadow-lg shadow-red-900/20 hover:shadow-red-500/20 transition-all active:scale-[0.98]"
                     >
                         {isDeleting ? "Eliminando..." : "Confirmar Eliminación"}
                     </Button>
                     <Button
                         onClick={() => setOpen(false)}
                         variant="ghost"
-                        className="h-12 w-full rounded-xl text-neutral-500 hover:text-white hover:bg-white/5 font-bold text-xs uppercase tracking-widest transition-all"
+                        className="h-12 w-full rounded-xl text-muted-foreground hover:text-foreground hover:bg-accent font-bold text-xs uppercase tracking-widest transition-all"
                     >
                         Cancelar
                     </Button>

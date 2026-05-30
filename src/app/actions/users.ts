@@ -733,7 +733,6 @@ export async function registerFace(formData: FormData) {
     // Mirror registration to CompereFace if photo exists
     if (photoBuffer) {
         try {
-            console.log(`[Sync] Registering ${name} in CompereFace...`);
             await registerFaceInCompereFace(name, photoBuffer);
         } catch (err) {
             console.error("[Sync] Failed to register in CompereFace:", err);
@@ -771,4 +770,72 @@ export async function searchUsers(query: string) {
         take: 10,
         orderBy: { updatedAt: 'desc' }
     });
+}
+
+
+export async function quickRegisterPlate(plate: string, name: string, unitName?: string) {
+    "use server";
+    
+    if (!plate || !plate.trim()) {
+        return { success: false, error: "Matrícula requerida" };
+    }
+    
+    const normalizedPlate = plate.toUpperCase().trim();
+    
+    // Check if plate already exists
+    const existing = await prisma.vehicle.findUnique({
+        where: { plate: normalizedPlate },
+        include: { user: true }
+    });
+    
+    if (existing) {
+        return { 
+            success: false, 
+            error: `La matrícula ${normalizedPlate} ya está registrada${existing.user ? ` (${existing.user.name})` : ""}` 
+        };
+    }
+    
+    // Find or create unit if provided
+    let unitId: string | undefined;
+    if (unitName && unitName.trim()) {
+        const unit = await prisma.unit.findFirst({
+            where: { name: { equals: unitName.trim(), mode: "insensitive" } }
+        });
+        if (unit) {
+            unitId = unit.id;
+        }
+    }
+    
+    // Create user
+    const user = await prisma.user.create({
+        data: {
+            name: name.trim() || `Propietario ${normalizedPlate}`,
+            role: "RESIDENT",
+            ...(unitId ? { unitId } : {}),
+        }
+    });
+    
+    // Create vehicle
+    await prisma.vehicle.create({
+        data: {
+            plate: normalizedPlate,
+            type: "SEDAN",
+            userId: user.id
+        }
+    });
+    
+    // Create PLATE credential
+    await prisma.credential.create({
+        data: {
+            type: "PLATE",
+            value: normalizedPlate,
+            userId: user.id
+        }
+    });
+    
+    return { 
+        success: true, 
+        user: { id: user.id, name: user.name },
+        plate: normalizedPlate 
+    };
 }

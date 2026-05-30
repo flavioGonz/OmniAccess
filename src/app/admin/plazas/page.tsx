@@ -335,7 +335,7 @@ export default function PlazasPage() {
                             className="absolute inset-0 opacity-0 cursor-pointer"
                             accept="image/*"
                         />
-                        <Button className="bg-blue-600 hover:bg-blue-700 text-white font-black px-6 h-12 rounded-xl flex items-center gap-2 shadow-2xl shadow-blue-500/20 uppercase text-xs tracking-widest">
+                        <Button className="bg-blue-600 hover:bg-blue-700 text-foreground font-black px-6 h-12 rounded-xl flex items-center gap-2 shadow-2xl shadow-blue-500/20 uppercase text-xs tracking-widest">
                             <Upload size={16} /> Cargar Plano
                         </Button>
                     </div>
@@ -344,16 +344,16 @@ export default function PlazasPage() {
                         <Button
                             variant="outline"
                             onClick={() => { setMapImage(null); setSlots([]); setImageDimensions({ width: 0, height: 0 }); }}
-                            className="bg-neutral-900/90 backdrop-blur-xl border-neutral-700 text-neutral-300 hover:bg-red-500/20 hover:text-red-400 h-12 px-6 rounded-xl font-black transition-all text-xs uppercase tracking-widest shadow-2xl"
+                            className="bg-card/90 backdrop-blur-xl border-border text-muted-foreground hover:bg-red-500/20 hover:text-red-400 h-12 px-6 rounded-xl font-black transition-all text-xs uppercase tracking-widest shadow-2xl"
                         >
                             <X size={16} className="mr-2" /> Resetear
                         </Button>
 
                         {currentPoints.length > 0 && (
-                            <div className="bg-neutral-900/90 backdrop-blur-xl border border-blue-500/30 rounded-xl p-4 shadow-2xl">
+                            <div className="bg-card/90 backdrop-blur-xl border border-blue-500/30 rounded-xl p-4 shadow-2xl">
                                 <div className="flex items-center gap-2 mb-3">
                                     <Pentagon size={16} className="text-blue-400" />
-                                    <span className="text-xs font-black text-white uppercase tracking-widest">
+                                    <span className="text-xs font-black text-foreground uppercase tracking-widest">
                                         Dibujando ({currentPoints.length} puntos)
                                     </span>
                                 </div>
@@ -361,14 +361,14 @@ export default function PlazasPage() {
                                     <Button
                                         onClick={finishPolygon}
                                         disabled={currentPoints.length < 3}
-                                        className="bg-emerald-600 hover:bg-emerald-700 text-white h-10 px-4 rounded-lg text-xs font-black uppercase"
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-foreground h-10 px-4 rounded-lg text-xs font-black uppercase"
                                     >
                                         <CheckCircle2 size={14} className="mr-1" /> Finalizar
                                     </Button>
                                     <Button
                                         onClick={cancelDrawing}
                                         variant="outline"
-                                        className="border-neutral-700 bg-neutral-800 text-neutral-300 h-10 px-4 rounded-lg text-xs font-black uppercase"
+                                        className="border-border bg-muted text-muted-foreground h-10 px-4 rounded-lg text-xs font-black uppercase"
                                     >
                                         Cancelar
                                     </Button>
@@ -383,36 +383,36 @@ export default function PlazasPage() {
             {mapImage && (
                 <div className="absolute top-6 right-6 bottom-6 z-20 flex flex-col w-64 gap-4 pointer-events-none">
                     {/* Stats Card */}
-                    <div className="bg-neutral-900/90 backdrop-blur-xl border border-neutral-800 rounded-xl p-4 shadow-2xl pointer-events-auto shrink-0">
+                    <div className="bg-card/90 backdrop-blur-xl border border-border rounded-xl p-4 shadow-2xl pointer-events-auto shrink-0">
                         <div className="flex items-center gap-2 mb-3">
                             <LayoutGrid size={16} className="text-orange-500" />
-                            <span className="text-xs font-black text-white uppercase tracking-widest">Estadísticas</span>
+                            <span className="text-xs font-black text-foreground uppercase tracking-widest">Estadísticas</span>
                         </div>
                         <div className="space-y-2">
                             <div className="flex justify-between text-xs">
-                                <span className="text-neutral-500 font-bold">Total Plazas:</span>
-                                <span className="text-white font-black">{slots.length}</span>
+                                <span className="text-muted-foreground font-bold">Total Plazas:</span>
+                                <span className="text-foreground font-black">{slots.length}</span>
                             </div>
                             <div className="flex justify-between text-xs">
-                                <span className="text-neutral-500 font-bold">Asignadas:</span>
+                                <span className="text-muted-foreground font-bold">Asignadas:</span>
                                 <span className="text-emerald-400 font-black">{slots.filter(s => s.unitId).length}</span>
                             </div>
                             <div className="flex justify-between text-xs">
-                                <span className="text-neutral-500 font-bold">Sin Asignar:</span>
+                                <span className="text-muted-foreground font-bold">Sin Asignar:</span>
                                 <span className="text-red-400 font-black">{slots.filter(s => !s.unitId).length}</span>
                             </div>
                         </div>
                     </div>
 
                     {/* Slots List */}
-                    <div className="flex-1 bg-neutral-900/90 backdrop-blur-xl border border-neutral-800 rounded-xl shadow-2xl overflow-hidden flex flex-col pointer-events-auto min-h-0">
-                        <div className="p-4 border-b border-white/5 bg-white/5 backdrop-blur-sm">
+                    <div className="flex-1 bg-card/90 backdrop-blur-xl border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col pointer-events-auto min-h-0">
+                        <div className="p-4 border-b border-border bg-foreground/10 backdrop-blur-sm">
                             <div className="flex items-center justify-between mb-0">
-                                <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
+                                <h4 className="text-xs font-black text-foreground uppercase tracking-widest flex items-center gap-2">
                                     <Square size={14} className="text-blue-400" />
                                     Lista de Plazas
                                 </h4>
-                                <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded text-neutral-400 font-mono">{slots.length}</span>
+                                <span className="text-[10px] bg-foreground/10 px-1.5 py-0.5 rounded text-muted-foreground font-mono">{slots.length}</span>
                             </div>
                         </div>
 
@@ -434,13 +434,13 @@ export default function PlazasPage() {
                                             "w-full text-left p-2.5 rounded-lg flex items-center justify-between transition-all group border",
                                             selectedSlot === slot.id
                                                 ? "bg-blue-600/20 border-blue-500/50 shadow-[0_0_15px_rgba(37,99,235,0.2)]"
-                                                : (hoveredSlot === slot.id ? "bg-white/10 border-white/20" : "border-transparent hover:bg-white/5 hover:border-white/5")
+                                                : (hoveredSlot === slot.id ? "bg-foreground/10 border-border" : "border-transparent hover:bg-accent hover:border-border")
                                         )}
                                     >
                                         <div className="flex items-center gap-3 overflow-hidden">
                                             {/* User Avatar or Status Dot */}
                                             {slot.unitId && firstUser ? (
-                                                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-[10px] font-black text-white shrink-0 shadow-lg shadow-emerald-500/20">
+                                                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-[10px] font-black text-foreground shrink-0 shadow-lg shadow-emerald-500/20">
                                                     {firstUser.name?.charAt(0) || 'U'}
                                                 </div>
                                             ) : (
@@ -457,12 +457,12 @@ export default function PlazasPage() {
                                             <div className="flex flex-col min-w-0">
                                                 <span className={cn(
                                                     "text-xs font-black uppercase tracking-wider truncate transition-colors",
-                                                    selectedSlot === slot.id ? "text-white" : "text-neutral-400 group-hover:text-neutral-200"
+                                                    selectedSlot === slot.id ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
                                                 )}>
                                                     {slot.label}
                                                 </span>
                                                 {unit && (
-                                                    <span className="text-[9px] text-neutral-500 font-bold truncate">
+                                                    <span className="text-[9px] text-muted-foreground font-bold truncate">
                                                         {unit.number} {firstUser ? `• ${firstUser.name}` : ''}
                                                     </span>
                                                 )}
@@ -470,7 +470,7 @@ export default function PlazasPage() {
                                         </div>
                                         {selectedSlot === slot.id && (
                                             <div
-                                                className="h-6 w-6 flex items-center justify-center rounded-md text-blue-400 hover:text-white hover:bg-blue-500/20 transition-colors"
+                                                className="h-6 w-6 flex items-center justify-center rounded-md text-blue-400 hover:text-foreground hover:bg-blue-500/20 transition-colors"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     setShowUnitSelector(true);
@@ -490,7 +490,7 @@ export default function PlazasPage() {
                             <Button
                                 onClick={handleSave}
                                 disabled={isSaving}
-                                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black h-10 rounded-lg shadow-lg shadow-blue-500/20 uppercase tracking-widest text-[10px]"
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-foreground font-black h-10 rounded-lg shadow-lg shadow-blue-500/20 uppercase tracking-widest text-[10px]"
                             >
                                 <Save size={14} className="mr-2" />
                                 {isSaving ? "Guardando..." : "Guardar"}
@@ -646,25 +646,25 @@ export default function PlazasPage() {
                                                 {/* ... same tooltip content ... */}
                                                 {unit ? (
                                                     <div className="w-64">
-                                                        <div className="bg-gradient-to-r from-emerald-500/20 to-blue-500/20 p-3 border-b border-white/5 flex items-center gap-3">
+                                                        <div className="bg-gradient-to-r from-emerald-500/20 to-blue-500/20 p-3 border-b border-border flex items-center gap-3">
                                                             <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30">
                                                                 <Warehouse size={16} className="text-emerald-400" />
                                                             </div>
                                                             <div>
-                                                                <p className="text-xs font-black text-white uppercase">{unit.number || unit.name}</p>
+                                                                <p className="text-xs font-black text-foreground uppercase">{unit.number || unit.name}</p>
                                                                 <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">Ocupada</p>
                                                             </div>
                                                         </div>
                                                         <div className="p-3 space-y-3">
                                                             {(unit.users && unit.users.length > 0) ? (
                                                                 <div className="space-y-2">
-                                                                    <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest flex items-center gap-2">
+                                                                    <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest flex items-center gap-2">
                                                                         <UserIcon size={10} /> Residentes
                                                                     </p>
                                                                     <div className="space-y-1">
                                                                         {unit.users.slice(0, 3).map((u: any, i: number) => (
-                                                                            <div key={i} className="flex items-center gap-2 text-xs text-neutral-300">
-                                                                                <div className="w-4 h-4 rounded-full bg-neutral-700 flex items-center justify-center text-[8px] font-bold">
+                                                                            <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                                                <div className="w-4 h-4 rounded-full bg-muted flex items-center justify-center text-[8px] font-bold">
                                                                                     {u.name.charAt(0)}
                                                                                 </div>
                                                                                 <span className="truncate">{u.name}</span>
@@ -672,11 +672,11 @@ export default function PlazasPage() {
                                                                         ))}
                                                                     </div>
                                                                 </div>
-                                                            ) : <p className="text-xs text-neutral-500 italic">Sin residentes</p>}
+                                                            ) : <p className="text-xs text-muted-foreground italic">Sin residentes</p>}
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                    <div className="px-3 py-2 text-xs font-bold text-neutral-400 flex items-center gap-2">
+                                                    <div className="px-3 py-2 text-xs font-bold text-muted-foreground flex items-center gap-2">
                                                         <Info size={14} /> Plaza Disponible
                                                     </div>
                                                 )}
@@ -704,10 +704,10 @@ export default function PlazasPage() {
                     </div>
                 ) : (
                     <div className="flex flex-col items-center gap-6">
-                        <div className="w-24 h-24 bg-neutral-900 rounded-2xl border border-neutral-800 flex items-center justify-center">
-                            <Map size={40} className="text-neutral-700" />
+                        <div className="w-24 h-24 bg-card rounded-2xl border border-border flex items-center justify-center">
+                            <Map size={40} className="text-muted-foreground" />
                         </div>
-                        <p className="text-neutral-600 font-black uppercase tracking-widest text-sm">
+                        <p className="text-muted-foreground font-black uppercase tracking-widest text-sm">
                             Carga un plano para comenzar
                         </p>
                     </div>
@@ -717,9 +717,9 @@ export default function PlazasPage() {
             {/* Unit Selector Modal - Enhanced */}
             {showUnitSelector && selectedSlot && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <div className="bg-gradient-to-br from-neutral-900/95 to-neutral-950/95 backdrop-blur-xl border border-white/10 rounded-3xl w-full max-w-lg shadow-2xl shadow-blue-500/10 animate-in zoom-in-95 duration-300">
+                    <div className="bg-gradient-to-br from-neutral-900/95 to-neutral-950/95 backdrop-blur-xl border border-border rounded-3xl w-full max-w-lg shadow-2xl shadow-blue-500/10 animate-in zoom-in-95 duration-300">
                         {/* Header with Gradient */}
-                        <div className="relative p-8 border-b border-white/5 bg-gradient-to-r from-blue-500/5 to-purple-500/5 overflow-hidden">
+                        <div className="relative p-8 border-b border-border bg-gradient-to-r from-blue-500/5 to-purple-500/5 overflow-hidden">
                             <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -mr-16 -mt-16" />
                             <div className="absolute bottom-0 left-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl -ml-16 -mb-16" />
 
@@ -732,7 +732,7 @@ export default function PlazasPage() {
                                         <h3 className="text-xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white to-neutral-300 uppercase tracking-tight">
                                             Gestionar Plaza
                                         </h3>
-                                        <p className="text-xs text-neutral-500 font-bold mt-1 flex items-center gap-2">
+                                        <p className="text-xs text-muted-foreground font-bold mt-1 flex items-center gap-2">
                                             <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
                                             Plaza: {slots.find(s => s.id === selectedSlot)?.label}
                                         </p>
@@ -745,7 +745,7 @@ export default function PlazasPage() {
                                         setShowUnitSelector(false);
                                         setSelectedSlot(null);
                                     }}
-                                    className="text-neutral-500 hover:text-white hover:bg-white/5 rounded-xl transition-all"
+                                    className="text-muted-foreground hover:text-foreground hover:bg-accent rounded-xl transition-all"
                                 >
                                     <X size={20} />
                                 </Button>
@@ -755,7 +755,7 @@ export default function PlazasPage() {
                             <div className="mt-6 space-y-4">
                                 {/* Name Input */}
                                 <div>
-                                    <label className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest mb-1.5 block">Identificador</label>
+                                    <label className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mb-1.5 block">Identificador</label>
                                     <input
                                         type="text"
                                         value={slots.find(s => s.id === selectedSlot)?.label || ''}
@@ -774,7 +774,7 @@ export default function PlazasPage() {
                                                 </div>
                                                 <div>
                                                     <p className="text-xs text-emerald-300 font-bold">Asignado a:</p>
-                                                    <p className="text-sm text-white font-black">
+                                                    <p className="text-sm text-foreground font-black">
                                                         {units.find(u => u.id === slots.find(s => s.id === selectedSlot)?.unitId)?.number ||
                                                             units.find(u => u.id === slots.find(s => s.id === selectedSlot)?.unitId)?.name}
                                                     </p>
@@ -799,11 +799,11 @@ export default function PlazasPage() {
 
                                 {/* Search Bar */}
                                 <div>
-                                    <label className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest mb-1.5 block">
+                                    <label className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mb-1.5 block">
                                         {slots.find(s => s.id === selectedSlot)?.unitId ? 'Cambiar Unidad / Lote' : 'Asignar Unidad / Lote'}
                                     </label>
                                     <div className="relative">
-                                        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+                                        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                                         <input
                                             type="text"
                                             placeholder="Buscar por número o nombre..."
@@ -821,11 +821,11 @@ export default function PlazasPage() {
                         <div className="p-4 max-h-[400px] overflow-y-auto custom-scrollbar space-y-2">
                             {filteredUnits.length === 0 ? (
                                 <div className="py-16 text-center">
-                                    <div className="w-16 h-16 mx-auto mb-4 bg-neutral-800/50 rounded-2xl flex items-center justify-center">
-                                        <Search size={24} className="text-neutral-600" />
+                                    <div className="w-16 h-16 mx-auto mb-4 bg-muted/50 rounded-2xl flex items-center justify-center">
+                                        <Search size={24} className="text-muted-foreground" />
                                     </div>
-                                    <p className="text-neutral-500 text-sm font-bold">No se encontraron unidades</p>
-                                    <p className="text-neutral-700 text-xs mt-1">Intenta con otro término de búsqueda</p>
+                                    <p className="text-muted-foreground text-sm font-bold">No se encontraron unidades</p>
+                                    <p className="text-muted-foreground text-xs mt-1">Intenta con otro término de búsqueda</p>
                                 </div>
                             ) : (
                                 filteredUnits.map((unit: any, index) => {
@@ -838,7 +838,7 @@ export default function PlazasPage() {
                                         <button
                                             key={unit.id}
                                             onClick={() => linkSlotToUnit(selectedSlot, unit.id)}
-                                            className="w-full p-4 bg-gradient-to-r from-neutral-800/50 to-neutral-800/30 hover:from-blue-500/10 hover:to-purple-500/10 border border-white/5 hover:border-blue-500/30 rounded-xl text-left transition-all group relative overflow-hidden animate-in slide-in-from-bottom-2 duration-300"
+                                            className="w-full p-4 bg-gradient-to-r from-neutral-800/50 to-neutral-800/30 hover:from-blue-500/10 hover:to-purple-500/10 border border-border hover:border-blue-500/30 rounded-xl text-left transition-all group relative overflow-hidden animate-in slide-in-from-bottom-2 duration-300"
                                             style={{ animationDelay: (index * 30) + "ms" }}
                                         >
                                             <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 to-purple-500/0 group-hover:from-blue-500/5 group-hover:to-purple-500/5 transition-all duration-500" />
@@ -849,8 +849,8 @@ export default function PlazasPage() {
                                                             <Home size={16} className="text-blue-400" />
                                                         </div>
                                                         <div>
-                                                            <p className="text-sm font-black text-white group-hover:text-blue-300 transition-colors">{unit.number || unit.name}</p>
-                                                            <p className="text-xs text-neutral-500 font-bold mt-0.5">{unit.name}</p>
+                                                            <p className="text-sm font-black text-foreground group-hover:text-blue-300 transition-colors">{unit.number || unit.name}</p>
+                                                            <p className="text-xs text-muted-foreground font-bold mt-0.5">{unit.name}</p>
                                                         </div>
                                                     </div>
                                                     <CheckCircle2 size={18} className="text-emerald-500 opacity-0 group-hover:opacity-100 transition-all scale-0 group-hover:scale-100" />
@@ -858,26 +858,26 @@ export default function PlazasPage() {
 
                                                 {/* Users and Plates Info */}
                                                 {(userCount > 0 || plates.length > 0) && (
-                                                    <div className="pl-13 space-y-1.5 pt-2 border-t border-white/5">
+                                                    <div className="pl-13 space-y-1.5 pt-2 border-t border-border">
                                                         {userCount > 0 && (
                                                             <div className="flex items-center gap-2 text-xs">
-                                                                <UserIcon size={12} className="text-neutral-600" />
-                                                                <span className="text-neutral-500 font-bold">
+                                                                <UserIcon size={12} className="text-muted-foreground" />
+                                                                <span className="text-muted-foreground font-bold">
                                                                     {userCount} {userCount === 1 ? 'residente' : 'residentes'}
                                                                 </span>
                                                             </div>
                                                         )}
                                                         {plates.length > 0 && (
                                                             <div className="flex items-center gap-2 text-xs">
-                                                                <Car size={12} className="text-neutral-600" />
+                                                                <Car size={12} className="text-muted-foreground" />
                                                                 <div className="flex flex-wrap gap-1">
                                                                     {plates.slice(0, 3).map((plate: string, i: number) => (
-                                                                        <span key={i} className="px-1.5 py-0.5 bg-neutral-700/50 rounded text-[10px] font-mono text-neutral-400">
+                                                                        <span key={i} className="px-1.5 py-0.5 bg-muted/50 rounded text-[10px] font-mono text-muted-foreground">
                                                                             {plate}
                                                                         </span>
                                                                     ))}
                                                                     {plates.length > 3 && (
-                                                                        <span className="text-neutral-600 text-[10px] font-bold">
+                                                                        <span className="text-muted-foreground text-[10px] font-bold">
                                                                             +{plates.length - 3}
                                                                         </span>
                                                                     )}
@@ -902,7 +902,7 @@ export default function PlazasPage() {
                                         linkSlotToUnit(selectedSlot, '');
                                     }
                                 }}
-                                className="flex-1 border-neutral-700 bg-neutral-800/50 text-neutral-300 hover:bg-neutral-700 hover:text-white h-11 rounded-xl text-xs font-black uppercase tracking-wider transition-all"
+                                className="flex-1 border-border bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground h-11 rounded-xl text-xs font-black uppercase tracking-wider transition-all"
                             >
                                 <XCircle size={16} className="mr-2" />
                                 Desasignar

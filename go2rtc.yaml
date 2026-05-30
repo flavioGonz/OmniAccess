@@ -1,0 +1,20 @@
+streams:
+  bosch_main:
+    - "rtsp://admin:admin@172.26.20.199/rtsp_tunnel?p=0&line=1&inst=1&vcd=2"
+  bosch_172_26_20_199:
+    - "rtsp://admin:admin@172.26.20.199/rtsp_tunnel?p=1&line=1&inst=2&vcd=2"
+  bosch_172_26_20_199_hd:
+    - "rtsp://admin:admin@172.26.20.199/rtsp_tunnel?p=0&line=1&inst=1&vcd=2"
+
+api:
+  listen: ":1984"
+  origin: "*"
+
+rtsp:
+  listen: ":8554"
+
+webrtc:
+  listen: ":8555"
+
+log:
+  level: info

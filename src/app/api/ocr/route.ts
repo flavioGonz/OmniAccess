@@ -19,7 +19,6 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "No image provided" }, { status: 400 });
         }
 
-        console.log(`OCR API: Received image (${file.size} bytes)`);
 
         const buffer = Buffer.from(await file.arrayBuffer());
 
@@ -50,7 +49,6 @@ export async function POST(req: NextRequest) {
         await worker.terminate();
 
         const cleanedText = text.replace(/[^A-Z0-9]/g, "").toUpperCase();
-        console.log(`OCR API: Detected "${cleanedText}" (confidence: ${confidence})`);
 
         // More extensive patterns
         let isMatch = false;

@@ -55,7 +55,6 @@ export default function OCRScannerTF({ onClose, onDetected, cameraFacingMode, to
             try {
                 await tf.setBackend('webgl');
                 await tf.ready();
-                console.log("✅ TFJS Backend:", tf.getBackend());
             } catch (e) {
                 console.warn("WebGL not available, falling back to CPU", e);
                 await tf.setBackend('cpu');
@@ -68,7 +67,6 @@ export default function OCRScannerTF({ onClose, onDetected, cameraFacingMode, to
                 base: 'lite_mobilenet_v2' // Smaller model for mobile
             });
             setCocoModel(model);
-            console.log("✅ TensorFlow.js COCO-SSD loaded");
 
             // Load Tesseract for OCR
             setWorkerStatus("Cargando OCR...");
@@ -91,7 +89,6 @@ export default function OCRScannerTF({ onClose, onDetected, cameraFacingMode, to
 
             setWorker(w);
             setWorkerStatus("Listo");
-            console.log("✅ Tesseract OCR loaded");
         } catch (error) {
             console.error("Model Init Error:", error);
             setWorkerStatus("Error en IA");
@@ -119,7 +116,6 @@ export default function OCRScannerTF({ onClose, onDetected, cameraFacingMode, to
 
     const startCamera = async () => {
         try {
-            console.log("Attempting to start camera...");
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: {
                     facingMode: facingMode,
@@ -133,7 +129,6 @@ export default function OCRScannerTF({ onClose, onDetected, cameraFacingMode, to
                 streamRef.current = stream;
                 setIsScanning(true);
                 isScanningRef.current = true;
-                console.log("✅ Camera started successfully");
             }
         } catch (error) {
             console.error("Camera Error:", error);
@@ -302,7 +297,6 @@ export default function OCRScannerTF({ onClose, onDetected, cameraFacingMode, to
                 const { data: { text, confidence } } = await worker.recognize(tempCanvas);
                 const cleanText = text.replace(/[^A-Z0-9]/g, '').trim();
 
-                console.log(`OCR Mode ${mode}:`, cleanText, `Conf: ${confidence}%`);
 
                 const mercosurPlate = validateMercosurPlate(cleanText);
                 const isValid = mercosurPlate !== null || (cleanText.length >= 5 && cleanText.length <= 8 && /[A-Z]{2,}/.test(cleanText));
@@ -377,7 +371,7 @@ export default function OCRScannerTF({ onClose, onDetected, cameraFacingMode, to
                 onClick={() => { stopCamera(); onClose(); }}
                 className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-black/60 backdrop-blur-md flex items-center justify-center ring-1 ring-white/10"
             >
-                <X className="w-5 h-5 text-white" />
+                <X className="w-5 h-5 text-foreground" />
             </button>
 
             {/* Video feed */}
@@ -396,8 +390,8 @@ export default function OCRScannerTF({ onClose, onDetected, cameraFacingMode, to
                     <div className={cn(
                         "relative transition-all duration-300",
                         isPhotoMode
-                            ? "w-[90%] h-[80%] border-4 border-white/20 rounded-3xl"
-                            : "w-[80%] max-w-md aspect-[3/1] border-4 border-white/50 rounded-xl shadow-2xl"
+                            ? "w-[90%] h-[80%] border-4 border-border rounded-3xl"
+                            : "w-[80%] max-w-md aspect-[3/1] border-4 border-border rounded-xl shadow-2xl"
                     )}>
                         {!isPhotoMode && (
                             <>
@@ -413,7 +407,7 @@ export default function OCRScannerTF({ onClose, onDetected, cameraFacingMode, to
                     {!isPhotoMode && lastDetected && (
                         <div className="absolute inset-0 flex items-center justify-center">
                             <div className="bg-[#B20D30] px-6 py-3 rounded-2xl shadow-2xl animate-pulse">
-                                <span className="text-white font-black text-3xl tracking-[0.3em]">{lastDetected}</span>
+                                <span className="text-foreground font-black text-3xl tracking-[0.3em]">{lastDetected}</span>
                             </div>
                         </div>
                     )}
@@ -425,11 +419,11 @@ export default function OCRScannerTF({ onClose, onDetected, cameraFacingMode, to
                     {!isPhotoMode && (
                         <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full ring-1 ring-white/10">
                             {isProcessingRef.current || workerStatus !== "Listo" ? (
-                                <Loader2 className="w-3 h-3 text-white animate-spin" />
+                                <Loader2 className="w-3 h-3 text-foreground animate-spin" />
                             ) : (
                                 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_#10b981]" />
                             )}
-                            <span className="text-[10px] font-black text-white uppercase tracking-widest">
+                            <span className="text-[10px] font-black text-foreground uppercase tracking-widest">
                                 {workerStatus}
                             </span>
                         </div>
@@ -452,21 +446,21 @@ export default function OCRScannerTF({ onClose, onDetected, cameraFacingMode, to
                         disabled={(!isPhotoMode && (isProcessingRef.current || !cocoModel || !worker))}
                         className="pointer-events-auto group flex flex-col items-center gap-2 active:scale-95 transition-all disabled:opacity-50"
                     >
-                        <div className="w-20 h-20 rounded-full bg-white shadow-2xl flex items-center justify-center ring-4 ring-white/30 group-active:ring-8 transition-all">
+                        <div className="w-20 h-20 rounded-full bg-white shadow-2xl flex items-center justify-center ring-4 ring-border group-active:ring-8 transition-all">
                             {isPhotoMode ? (
                                 <div className="w-16 h-16 rounded-full bg-slate-900" />
                             ) : (
                                 <Camera className="w-10 h-10 text-black" />
                             )}
                         </div>
-                        <span className="text-white text-xs font-bold tracking-wider">{isPhotoMode ? "CAPTURAR" : "SCANNER"}</span>
+                        <span className="text-foreground text-xs font-bold tracking-wider">{isPhotoMode ? "CAPTURAR" : "SCANNER"}</span>
                     </button>
 
                     {/* Mode Toggle */}
                     <button
                         onClick={() => setIsPhotoMode(prev => !prev)}
                         className={cn(
-                            "pointer-events-auto w-12 h-12 rounded-full backdrop-blur-md flex items-center justify-center text-white ring-1 ring-white/20 active:scale-95 transition-all",
+                            "pointer-events-auto w-12 h-12 rounded-full backdrop-blur-md flex items-center justify-center text-foreground ring-1 ring-border active:scale-95 transition-all",
                             isPhotoMode ? "bg-white text-black" : "bg-black/40"
                         )}
                     >

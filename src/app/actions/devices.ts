@@ -259,10 +259,8 @@ export async function syncPlatesToDevice(deviceId: string) {
         const driver = new HikvisionDriver();
 
         // 1. Wipe the camera first for a TRUE mirror (Forzar Sincro)
-        console.log(`[Sync] Initiating full wipe for ${device.ip} before mirror...`);
         try {
             await driver.clearWhiteList(device);
-            console.log(`[Sync] Camera wiped successfully.`);
         } catch (wipeError) {
             console.warn(`[Sync] Could not wipe camera, will attempt to append:`, wipeError);
         }
@@ -344,19 +342,29 @@ export async function importPlateBatch(id: string, plates: string[]) {
 
         let importedCount = 0;
 
+        // Prefetch all existing credentials and vehicles in batch to avoid N+1
+        const normalizedPlates = plates
+            .map(p => p.trim().toUpperCase().replace(/[^A-Z0-9]/g, ""))
+            .filter(p => p.length >= 3);
+        const [existingCreds, existingVehicles] = await Promise.all([
+            prisma.credential.findMany({
+                where: { type: 'PLATE', value: { in: normalizedPlates } }
+            }),
+            prisma.vehicle.findMany({
+                where: { plate: { in: normalizedPlates } }
+            })
+        ]);
+        const credMap = new Map(existingCreds.map(c => [c.value, c]));
+        const vehicleMap = new Map(existingVehicles.map(v => [v.plate, v]));
+
         for (const rawPlate of plates) {
             // Normalización
             const plateNum = rawPlate.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
             if (!plateNum || plateNum.length < 3) continue;
 
-            // Buscamos si ya existe la credencial o el vehículo para asociarlo a un usuario existente
-            const existingCred = await prisma.credential.findFirst({
-                where: { type: 'PLATE', value: plateNum }
-            });
-
-            const existingVehicle = await prisma.vehicle.findUnique({
-                where: { plate: plateNum }
-            });
+            // Use prefetched data instead of per-iteration queries
+            const existingCred = credMap.get(plateNum) || null;
+            const existingVehicle = vehicleMap.get(plateNum) || null;
 
             let userId = existingCred?.userId || existingVehicle?.userId;
 
@@ -507,6 +515,18 @@ export async function importFaceBatch(id: string, faces: any[]) {
         let importedCount = 0;
         let failedCount = 0;
 
+        // Prefetch all users by DNI and name in batch to avoid N+1
+        const faceIds = faces.map(f => f.UserID || f.ID).filter(Boolean);
+        const faceNames = faces.map(f => f.Name).filter(n => n && n.length > 3);
+        const [usersByDni, usersByName] = await Promise.all([
+            prisma.user.findMany({ where: { dni: { in: faceIds } } }),
+            faceNames.length > 0
+                ? prisma.user.findMany({ where: { name: { in: faceNames, mode: 'insensitive' } } })
+                : Promise.resolve([])
+        ]);
+        const dniMap = new Map(usersByDni.map(u => [u.dni, u]));
+        const nameMap = new Map(usersByName.map(u => [u.name?.toLowerCase(), u]));
+
         for (const face of faces) {
             // face object is { UserID, Name, FaceUrl, ... }
             const userId = face.UserID || face.ID; // Usually employeeNo or ID
@@ -514,15 +534,12 @@ export async function importFaceBatch(id: string, faces: any[]) {
 
             if (!userId) continue;
 
-            let user = await prisma.user.findFirst({
-                where: { dni: userId } // Matching logic: DNI = ID from device
-            });
+            // Use prefetched maps instead of per-iteration queries
+            let user = dniMap.get(userId) || null;
 
             // Fallback: Check by exact name match if ID didn't match and name is substantial
             if (!user && name && name.length > 3) {
-                user = await prisma.user.findFirst({
-                    where: { name: { equals: name, mode: 'insensitive' } }
-                });
+                user = nameMap.get(name.toLowerCase()) || null;
             }
 
             if (!user) {
@@ -632,7 +649,6 @@ export async function syncPlatesToAllDevices() {
                 }
 
                 // Clear camera list
-                console.log(`[SyncAll] Wiping ${device.name} (${device.ip})...`);
                 try {
                     await driver.clearWhiteList(device);
                 } catch (wipeError) {

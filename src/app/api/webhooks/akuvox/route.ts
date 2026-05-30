@@ -1,21 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { AccessDecision } from "@prisma/client";
+
+/**
+ * DEPRECATED: Akuvox webhooks are handled by server.js (port 10000).
+ * This Next.js route exists only as a fallback/health-check.
+ * Configure your Akuvox devices Action URL to point to :10000, NOT :10001.
+ */
+
+export async function GET(req: NextRequest) {
+    return NextResponse.json({
+        status: "ok",
+        message: "Akuvox webhook endpoint. NOTE: Production webhooks are handled by server.js on port 10000.",
+        timestamp: new Date().toISOString()
+    });
+}
 
 export async function POST(req: NextRequest) {
-    try {
-        const body = await req.json();
-        console.log("Akuvox Event:", body);
-
-        // Assume Akuvox sends JSON with face/card info
-        // Example: { "ext_id": "123", "card_no": "...", "event_type": "access", "photo_url": "..." }
-
-        // Logic similar to Hikvision but simpler JSON parsing
-        // AccessEvent generation...
-
-        return NextResponse.json({ status: "received" });
-    } catch (error: any) {
-        console.error("Akuvox Webhook Error:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    console.warn("[Webhook Akuvox] Received event on Next.js route — this should go to server.js:10000 instead");
+    
+    return NextResponse.json({
+        warning: "This webhook was received by Next.js (:10001) but should be directed to server.js (:10000) for full processing.",
+        received: true
+    }, { status: 200 });
 }

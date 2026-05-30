@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
             prisma.setting.findUnique({ where: { key: "S3_BUCKET_FACE" } }),
         ]);
 
-        const s3Endpoint = endpoint?.value || process.env.S3_ENDPOINT || "http://192.168.99.108:9000";
+        const s3Endpoint = endpoint?.value || process.env.S3_ENDPOINT || "";
         const startMinio = performance.now();
 
         const client = new S3Client({

@@ -12,9 +12,6 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
     try {
         const body = await req.text();
-        console.log("Test endpoint received POST:");
-        console.log("Body length:", body.length);
-        console.log("Headers:", Object.fromEntries(req.headers.entries()));
 
         return new NextResponse("OK - Received", {
             status: 200,

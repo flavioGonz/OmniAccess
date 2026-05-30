@@ -114,24 +114,24 @@ export function VehicleList({ initialVehicles, initialTotal, users }: VehicleLis
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="relative flex-1 max-w-md">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" size={18} />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
                     <Input
                         placeholder="Buscar por placa, propietario, marca o modelo..."
-                        className="pl-10 bg-neutral-900 border-neutral-800 h-11 rounded-xl"
+                        className="pl-10 bg-card border-border h-11 rounded-xl"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                     {searchTerm && (
                         <button
                             onClick={() => setSearchTerm("")}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                         >
                             <X size={16} />
                         </button>
                     )}
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline" className="border-neutral-800 hover:bg-neutral-800">
+                    <Button variant="outline" className="border-border hover:bg-muted">
                         <Filter size={16} className="mr-2" />
                         Filtros
                     </Button>
@@ -140,33 +140,33 @@ export function VehicleList({ initialVehicles, initialTotal, users }: VehicleLis
             </div>
 
             {/* Table Container with Gradient Fade */}
-            <div className="relative bg-neutral-900/50 backdrop-blur-sm rounded-lg border border-neutral-800/50 overflow-hidden shadow-xl">
+            <div className="relative bg-card/50 backdrop-blur-sm rounded-lg border border-border/50 overflow-hidden shadow-xl">
                 <div className="overflow-x-auto">
                     <table className="w-full">
-                        <thead className="sticky top-0 bg-neutral-900 z-10">
-                            <tr className="border-b border-neutral-800">
-                                <th className="text-left p-4 text-[10px] font-black text-neutral-500 uppercase tracking-widest">Matrícula</th>
-                                <th className="text-left p-4 text-[10px] font-black text-neutral-500 uppercase tracking-widest">Vehículo</th>
-                                <th className="text-left p-4 text-[10px] font-black text-neutral-500 uppercase tracking-widest">Propietario</th>
-                                <th className="text-left p-4 text-[10px] font-black text-neutral-500 uppercase tracking-widest">Color</th>
-                                <th className="text-left p-4 text-[10px] font-black text-neutral-500 uppercase tracking-widest">Estado</th>
-                                <th className="text-right p-4 text-[10px] font-black text-neutral-500 uppercase tracking-widest">Acciones</th>
+                        <thead className="sticky top-0 bg-card z-10">
+                            <tr className="border-b border-border">
+                                <th className="text-left p-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Matrícula</th>
+                                <th className="text-left p-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Vehículo</th>
+                                <th className="text-left p-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Propietario</th>
+                                <th className="text-left p-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Color</th>
+                                <th className="text-left p-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Estado</th>
+                                <th className="text-right p-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-neutral-800/50">
                             {vehicles.map((vehicle) => (
                                 <tr
                                     key={vehicle.id}
-                                    className="hover:bg-neutral-800/30 transition-colors group"
+                                    className="hover:bg-muted/30 transition-colors group"
                                 >
                                     <td className="p-4">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-lg bg-neutral-800 flex items-center justify-center border border-neutral-700 group-hover:border-blue-500/30 transition-colors">
-                                                <Car size={20} className="text-neutral-600 group-hover:text-blue-400 transition-colors" />
+                                            <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center border border-border group-hover:border-blue-500/30 transition-colors">
+                                                <Car size={20} className="text-muted-foreground group-hover:text-blue-400 transition-colors" />
                                             </div>
                                             <div>
-                                                <p className="text-sm font-black text-white font-mono tracking-wider">{vehicle.plate}</p>
-                                                <p className="text-[10px] text-neutral-500 font-mono">ID: {vehicle.id.slice(0, 8)}</p>
+                                                <p className="text-sm font-black text-foreground font-mono tracking-wider">{vehicle.plate}</p>
+                                                <p className="text-[10px] text-muted-foreground font-mono">ID: {vehicle.id.slice(0, 8)}</p>
                                             </div>
                                         </div>
                                     </td>
@@ -177,35 +177,35 @@ export function VehicleList({ initialVehicles, initialTotal, users }: VehicleLis
                                                     <Image src={getCarLogo(vehicle.brand)!} alt={vehicle.brand || ""} fill sizes="32px" className="object-contain filter brightness-0 invert opacity-60 group-hover:opacity-100 transition-opacity" />
                                                 </div>
                                             ) : (
-                                                <div className="w-8 h-8 rounded-lg bg-neutral-800 border border-neutral-700 flex items-center justify-center shrink-0">
-                                                    <Car size={14} className="text-neutral-600" />
+                                                <div className="w-8 h-8 rounded-lg bg-muted border border-border flex items-center justify-center shrink-0">
+                                                    <Car size={14} className="text-muted-foreground" />
                                                 </div>
                                             )}
                                             <div>
-                                                <p className="text-sm font-black text-white uppercase tracking-tight">{vehicle.brand || 'Genérico'}</p>
-                                                <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest">{vehicle.model || 'Sin modelo'}</p>
+                                                <p className="text-sm font-black text-foreground uppercase tracking-tight">{vehicle.brand || 'Genérico'}</p>
+                                                <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">{vehicle.model || 'Sin modelo'}</p>
                                             </div>
                                         </div>
                                     </td>
                                     <td className="p-4">
                                         <div className="flex items-center gap-2">
-                                            <div className="w-8 h-8 rounded-full bg-neutral-800 flex items-center justify-center text-xs font-black text-neutral-400">
+                                            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-black text-muted-foreground">
                                                 {vehicle.user.name.charAt(0)}
                                             </div>
                                             <div>
-                                                <p className="text-sm font-bold text-white">{vehicle.user.name}</p>
-                                                <p className="text-xs text-neutral-500">{vehicle.user.email}</p>
+                                                <p className="text-sm font-bold text-foreground">{vehicle.user.name}</p>
+                                                <p className="text-xs text-muted-foreground">{vehicle.user.email}</p>
                                             </div>
                                         </div>
                                     </td>
                                     <td className="p-4">
                                         {vehicle.color ? (
                                             <div className="flex items-center gap-2">
-                                                <div className="w-6 h-6 rounded-full border-2 border-neutral-700" style={{ backgroundColor: vehicle.color }} />
-                                                <span className="text-xs text-neutral-400 capitalize">{vehicle.color}</span>
+                                                <div className="w-6 h-6 rounded-full border-2 border-border" style={{ backgroundColor: vehicle.color }} />
+                                                <span className="text-xs text-muted-foreground capitalize">{vehicle.color}</span>
                                             </div>
                                         ) : (
-                                            <span className="text-xs text-neutral-600">-</span>
+                                            <span className="text-xs text-muted-foreground">-</span>
                                         )}
                                     </td>
                                     <td className="p-4">
@@ -248,13 +248,13 @@ export function VehicleList({ initialVehicles, initialTotal, users }: VehicleLis
 
                     <div ref={lastElementRef} className="h-20 flex items-center justify-center">
                         {loading && (
-                            <div className="flex items-center gap-2 text-neutral-500 text-xs font-black uppercase tracking-widest mt-4">
+                            <div className="flex items-center gap-2 text-muted-foreground text-xs font-black uppercase tracking-widest mt-4">
                                 <Loader2 className="animate-spin" size={16} />
                                 Cargando más...
                             </div>
                         )}
                         {!hasMore && vehicles.length > 0 && (
-                            <div className="text-[10px] font-black text-neutral-600 uppercase tracking-widest mt-4">
+                            <div className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mt-4">
                                 Fin del listado
                             </div>
                         )}
@@ -262,9 +262,9 @@ export function VehicleList({ initialVehicles, initialTotal, users }: VehicleLis
 
                     {!loading && vehicles.length === 0 && (
                         <div className="py-20 text-center">
-                            <Car size={48} className="mx-auto text-neutral-700 mb-4 animate-pulse" />
-                            <h3 className="text-lg font-bold text-white mb-2">No se encontraron vehículos</h3>
-                            <p className="text-sm text-neutral-500">{searchTerm ? 'Intenta con otro término de búsqueda' : 'Agrega tu primer vehículo'}</p>
+                            <Car size={48} className="mx-auto text-muted-foreground mb-4 animate-pulse" />
+                            <h3 className="text-lg font-bold text-foreground mb-2">No se encontraron vehículos</h3>
+                            <p className="text-sm text-muted-foreground">{searchTerm ? 'Intenta con otro término de búsqueda' : 'Agrega tu primer vehículo'}</p>
                         </div>
                     )}
                 </div>
@@ -274,28 +274,28 @@ export function VehicleList({ initialVehicles, initialTotal, users }: VehicleLis
                 )}
             </div>
 
-            <div className="flex items-center justify-between text-[10px] font-black text-neutral-500 uppercase tracking-widest">
-                <p>Mostrando <span className="text-white">{vehicles.length}</span> de <span className="text-white">{total}</span> registros</p>
+            <div className="flex items-center justify-between text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+                <p>Mostrando <span className="text-foreground">{vehicles.length}</span> de <span className="text-foreground">{total}</span> registros</p>
             </div>
 
             {showHistory && selectedVehicle && (
                 <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-500">
-                    <div className="bg-[#0a0a0a] rounded-xl border border-white/10 max-w-2xl w-full max-h-[85vh] overflow-hidden shadow-[0_32px_64px_-16px_rgba(0,0,0,0.6)] flex flex-col">
+                    <div className="bg-[#0a0a0a] rounded-xl border border-border max-w-2xl w-full max-h-[85vh] overflow-hidden shadow-[0_32px_64px_-16px_rgba(0,0,0,0.6)] flex flex-col">
                         {/* Header */}
-                        <div className="px-8 py-6 border-b border-white/5 flex items-center justify-between">
+                        <div className="px-8 py-6 border-b border-border flex items-center justify-between">
                             <div className="flex items-center gap-5">
                                 <div className="w-11 h-11 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
                                     <History size={22} />
                                 </div>
                                 <div className="space-y-1">
-                                    <h2 className="text-lg font-black text-white tracking-widest uppercase leading-none">
+                                    <h2 className="text-lg font-black text-foreground tracking-widest uppercase leading-none">
                                         Historial de Accesos
                                     </h2>
                                     <div className="flex items-center gap-2">
                                         <Badge variant="outline" className="h-4 px-1.5 text-[7px] font-black uppercase tracking-[0.2em] bg-emerald-500/5 text-emerald-500/60 border-emerald-500/10 rounded">
                                             Matrícula
                                         </Badge>
-                                        <span className="text-sm font-mono font-black text-neutral-400 uppercase tracking-widest">
+                                        <span className="text-sm font-mono font-black text-muted-foreground uppercase tracking-widest">
                                             {selectedVehicle.plate}
                                         </span>
                                     </div>
@@ -305,7 +305,7 @@ export function VehicleList({ initialVehicles, initialTotal, users }: VehicleLis
                                 size="icon"
                                 variant="ghost"
                                 onClick={() => setShowHistory(false)}
-                                className="w-10 h-10 rounded-lg hover:bg-white/5 text-neutral-500 hover:text-white transition-all border border-transparent hover:border-white/10"
+                                className="w-10 h-10 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-all border border-transparent hover:border-border"
                             >
                                 <X size={20} />
                             </Button>
@@ -316,14 +316,14 @@ export function VehicleList({ initialVehicles, initialTotal, users }: VehicleLis
                             {historyLoading ? (
                                 <div className="py-24 flex flex-col items-center justify-center gap-4">
                                     <Loader2 className="animate-spin text-emerald-500/50" size={32} />
-                                    <p className="text-[9px] font-black text-neutral-600 uppercase tracking-[0.3em]">Sincronizando registros...</p>
+                                    <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.3em]">Sincronizando registros...</p>
                                 </div>
                             ) : history.length > 0 ? (
                                 <div className="space-y-3">
                                     {history.map((event, i) => (
                                         <div
                                             key={event.id}
-                                            className="group relative bg-[#111] border border-white/[0.03] rounded-lg p-5 hover:bg-[#151515] transition-all hover:border-white/10 animate-in slide-in-from-bottom-2 duration-300"
+                                            className="group relative bg-[#111] border border-white/[0.03] rounded-lg p-5 hover:bg-[#151515] transition-all hover:border-border animate-in slide-in-from-bottom-2 duration-300"
                                             style={{ animationDelay: `${i * 40}ms` }}
                                         >
                                             <div className="flex items-center justify-between gap-6">
@@ -338,7 +338,7 @@ export function VehicleList({ initialVehicles, initialTotal, users }: VehicleLis
                                                     </div>
                                                     <div>
                                                         <div className="flex items-center gap-2 mb-1.5">
-                                                            <p className="text-xs font-black text-white uppercase tracking-wider">
+                                                            <p className="text-xs font-black text-foreground uppercase tracking-wider">
                                                                 {event.location || event.device?.location || 'Punto de Acceso'}
                                                             </p>
                                                             <div className={cn(
@@ -348,17 +348,17 @@ export function VehicleList({ initialVehicles, initialTotal, users }: VehicleLis
                                                                 {event.decision === 'GRANT' ? 'PULSO OK' : 'DENEGADO'}
                                                             </div>
                                                         </div>
-                                                        <div className="flex items-center gap-2 text-[9px] text-neutral-600 font-bold uppercase tracking-widest">
+                                                        <div className="flex items-center gap-2 text-[9px] text-muted-foreground font-bold uppercase tracking-widest">
                                                             <span className="opacity-40 whitespace-nowrap">ID DISP:</span>
-                                                            <span className="text-neutral-500 truncate max-w-[120px]">{event.device?.name || 'LPR_NODE_01'}</span>
+                                                            <span className="text-muted-foreground truncate max-w-[120px]">{event.device?.name || 'LPR_NODE_01'}</span>
                                                         </div>
                                                     </div>
                                                 </div>
                                                 <div className="text-right shrink-0">
-                                                    <p className="text-xs font-black text-white leading-none mb-1.5">
+                                                    <p className="text-xs font-black text-foreground leading-none mb-1.5">
                                                         {new Date(event.timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                                                     </p>
-                                                    <p className="text-[9px] font-black text-neutral-600 uppercase tracking-[0.2em] whitespace-nowrap">
+                                                    <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.2em] whitespace-nowrap">
                                                         {new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: 'short' }).format(new Date(event.timestamp))}
                                                     </p>
                                                 </div>
@@ -368,11 +368,11 @@ export function VehicleList({ initialVehicles, initialTotal, users }: VehicleLis
                                 </div>
                             ) : (
                                 <div className="py-24 text-center">
-                                    <div className="w-16 h-16 rounded-full bg-white/[0.02] border border-white/[0.05] flex items-center justify-center mx-auto mb-6">
-                                        <History size={24} className="text-neutral-800" />
+                                    <div className="w-16 h-16 rounded-full bg-foreground/[0.04] border border-white/[0.05] flex items-center justify-center mx-auto mb-6">
+                                        <History size={24} className="text-muted-foreground" />
                                     </div>
-                                    <h3 className="text-xs font-black text-neutral-400 uppercase tracking-[0.2em] mb-3">Sin actividad reciente</h3>
-                                    <p className="text-[10px] text-neutral-600 font-bold max-w-[280px] mx-auto uppercase tracking-widest leading-relaxed opacity-60">
+                                    <h3 className="text-xs font-black text-muted-foreground uppercase tracking-[0.2em] mb-3">Sin actividad reciente</h3>
+                                    <p className="text-[10px] text-muted-foreground font-bold max-w-[280px] mx-auto uppercase tracking-widest leading-relaxed opacity-60">
                                         No se han detectado eventos para esta matrícula en el historial del servidor.
                                     </p>
                                 </div>
@@ -380,10 +380,10 @@ export function VehicleList({ initialVehicles, initialTotal, users }: VehicleLis
                         </div>
 
                         {/* Footer */}
-                        <div className="px-8 py-6 bg-neutral-900/10 border-t border-white/5">
+                        <div className="px-8 py-6 bg-card/10 border-t border-border">
                             <Button
                                 onClick={() => setShowHistory(false)}
-                                className="w-full h-12 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white text-[10px] font-black uppercase tracking-[0.4em] border border-white/5 transition-all"
+                                className="w-full h-12 rounded-lg bg-card hover:bg-muted text-muted-foreground hover:text-foreground text-[10px] font-black uppercase tracking-[0.4em] border border-border transition-all"
                             >
                                 Cerrar Registro
                             </Button>

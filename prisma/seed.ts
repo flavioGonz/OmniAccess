@@ -7,7 +7,6 @@ async function main() {
 
     // 0. Clean slate
     console.log('🧹 Cleaning existing data...')
-    await prisma.wahaRequestLog.deleteMany()
     await prisma.accessEvent.deleteMany()
     await prisma.callEvent.deleteMany()
     await prisma.hardwareMirror.deleteMany()

@@ -29,50 +29,6 @@ const crypto = require("crypto");
 const { uploadToS3 } = require("./lib-s3");
 const { getVehicleColorName, getVehicleBrandName } = require("./hikvision-codes");
 const { handleWahaWebhook } = require("./waha-handler");
-const webpush = require('web-push');
-
-// Configure Web Push
-if (process.env.VAPID_PRIVATE_KEY) {
-    try {
-        webpush.setVapidDetails(
-            process.env.VAPID_SUBJECT || 'mailto:admin@omniaccess.com',
-            process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
-            process.env.VAPID_PRIVATE_KEY
-        );
-        console.log("✅ Web Push Configured");
-    } catch (e) {
-        console.error("❌ Web Push Config Error:", e.message);
-    }
-}
-
-const sendPushToAll = async (payload) => {
-    try {
-        const subsPath = path.join(__dirname, 'push_subs.json');
-        if (!fs.existsSync(subsPath)) return;
-
-        const data = fs.readFileSync(subsPath, 'utf-8');
-        const subscriptions = JSON.parse(data);
-
-        console.log(`[PUSH] Sending to ${subscriptions.length} devices...`);
-
-        const notificationPayload = JSON.stringify(payload);
-
-        const promises = subscriptions.map(sub =>
-            webpush.sendNotification(sub, notificationPayload)
-                .catch(err => {
-                    if (err.statusCode === 410 || err.statusCode === 404) {
-                        // In a real app, we would remove the subscription here
-                        return;
-                    }
-                    console.error("[PUSH] Send error:", err.message);
-                })
-        );
-
-        await Promise.all(promises);
-    } catch (error) {
-        console.error("[PUSH] Broadcast error:", error);
-    }
-};
 
 // Configure axios defaults for device communication
 const agent = new https.Agent({
@@ -103,72 +59,6 @@ const isValidImage = (buffer, contentType) => {
     if (header[0] === 0xFF && header[1] === 0xD8) return true;
     if (header[0] === 0x89 && header[1] === 0x50) return true;
     return false;
-};
-
-// Helpers for formatted S3 filenames
-const formatEventDate = (date) => {
-    const d = new Date(date);
-    const day = String(d.getDate()).padStart(2, '0');
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const year = d.getFullYear();
-    const hours = String(d.getHours()).padStart(2, '0');
-    const minutes = String(d.getMinutes()).padStart(2, '0');
-    return `${day}-${month}-${year}-${hours}-${minutes}`;
-};
-
-const sanitizeName = (name) => {
-    return (name || "unknown").toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-};
-
-const generateId = () => {
-    // Generates a short unique ID similar to cuid/uuid but shorter for filenames
-    return Math.random().toString(36).substring(2, 9);
-};
-
-// Helper for Auto-Adopting Devices from Discovery
-const adoptDevice = async (mac, ip, brand, deviceType = 'LPR_CAMERA') => {
-    try {
-        const normalizeMac = (m) => m ? String(m).replace(/[:-\s]/g, "").toUpperCase() : null;
-        const cleanMac = normalizeMac(mac);
-        const cleanIp = ip ? String(ip).replace(/^.*:/, '') : null;
-
-        if (!cleanMac && !cleanIp) return null;
-
-        // Final check before creation to avoid duplicates
-        const all = await prisma.device.findMany();
-        const existing = all.find(d => 
-            (cleanMac && normalizeMac(d.mac) === cleanMac) || 
-            (cleanIp && d.ip === cleanIp)
-        );
-        
-        if (existing) return existing;
-
-        const newDevice = await prisma.device.create({
-            data: {
-                name: `NUEVO: ${brand} (${cleanMac || cleanIp})`,
-                brand: brand,
-                deviceType: deviceType,
-                ip: cleanIp || '0.0.0.0',
-                mac: cleanMac,
-                direction: 'ENTRY',
-                authType: 'BASIC',
-                doorStatus: 'UNKNOWN',
-                username: 'admin', // Placeholder for manual update
-                password: '',      // Placeholder for manual update
-            }
-        });
-        
-        console.log(`[Discovery] 🆕 Device auto-adopted: ${newDevice.name} [${brand}]`);
-        
-        if (global.io) {
-            global.io.emit("device_adopted", newDevice);
-        }
-        
-        return newDevice;
-    } catch (e) {
-        console.error(`[Discovery] ❌ Failed to adopt device: ${e.message}`);
-        return null;
-    }
 };
 
 // Helper for Camera Snapshots (Basic/Digest)
@@ -330,17 +220,14 @@ const tryFetchWithDigest = async (url, path, device, method = "GET") => {
         const nonce = getVal("nonce");
         const qop = getVal("qop");
         const opaque = getVal("opaque");
-        const algorithmFromDevice = getVal("algorithm"); const cnonce = crypto.randomBytes(8).toString("hex"); const algorithm = (algorithmFromDevice || "MD5").toUpperCase();
+        const algorithmFromDevice = getVal("algorithm") || "MD5";
 
         if (!nonce) return null;
 
-        let ha1 = crypto.createHash("md5").update(`${device.username}:${realm}:${device.password}`).digest("hex");
-        if (algorithm === "MD5-SESS") {
-            ha1 = crypto.createHash("md5").update(`${ha1}:${nonce}:${cnonce}`).digest("hex");
-        }
-        
+        const ha1 = crypto.createHash("md5").update(`${device.username}:${realm}:${device.password}`).digest("hex");
         const ha2 = crypto.createHash("md5").update(`${method}:${path}`).digest("hex");
         const nc = "00000001";
+        const cnonce = crypto.randomBytes(8).toString("hex");
 
         let responseStr;
         if (qop === 'auth' || qop === 'auth-int') {
@@ -394,10 +281,6 @@ const proxyVideoStream = async (device, res, req) => {
     const ports = (device.brand === 'AKUVOX') ? ((isSPA || isTorre || isAndroid) ? ['8080', null] : [null, '8080']) : [null];
 
     const endpoints = [
-        "/ISAPI/Streaming/channels/101/httppreview",
-        "/ISAPI/Streaming/channels/102/httppreview",
-        "/ISAPI/Streaming/channels/1/httppreview",
-        "/ISAPI/Streaming/channels/2/httppreview",
         "/video.cgi",
         "/fcgi/video.cgi",
         "/fcgi/do?action=mjpeg",
@@ -532,17 +415,16 @@ const tryStreamWithDigest = async (url, path, device) => {
         const nonce = getVal("nonce");
         const qop = getVal("qop");
         const opaque = getVal("opaque");
-        const algorithmFromDevice = getVal("algorithm"); const cnonce = crypto.randomBytes(8).toString("hex"); const algorithm = (algorithmFromDevice || "MD5").toUpperCase();
+        const algorithmFromDevice = getVal("algorithm");
+        const algorithm = algorithmFromDevice || "MD5";
 
         if (!nonce) return null;
 
-        let ha1 = crypto.createHash("md5").update(`${device.username}:${realm}:${device.password}`).digest("hex");
-        if (algorithm === "MD5-SESS") {
-            ha1 = crypto.createHash("md5").update(`${ha1}:${nonce}:${cnonce}`).digest("hex");
-        }
-        
+        const ha1 = crypto.createHash("md5").update(`${device.username}:${realm}:${device.password}`).digest("hex");
         const ha2 = crypto.createHash("md5").update(`GET:${path}`).digest("hex");
         const nc = "00000001";
+        const cnonce = crypto.randomBytes(8).toString("hex");
+
         let responseStr;
         if (qop === 'auth' || qop === 'auth-int') {
             responseStr = crypto.createHash("md5").update(`${ha1}:${nonce}:${nc}:${cnonce}:${qop}:${ha2}`).digest("hex");
@@ -777,16 +659,6 @@ const fetchAkuvoxFaceImage = async (device, options = {}) => {
 const debounceCache = new Map();
 const DEBOUNCE_TIME = 5000;
 
-// Global Alert State
-let isAlertActive = false;
-let globalLastAlertUpdateTime = 0;
-
-// Global Guard Locations Map
-const guardLocations = new Map();
-
-// Global Active Missions (Incidents)
-const activeMissions = new Map();
-
 // Debug Logs History (In-memory)
 const debugLogsHistory = [];
 const MAX_DEBUG_LOGS = 500;
@@ -974,14 +846,16 @@ const handleWebhook = async (req, res, logPrefix) => {
             console.log(`${logPrefix} 👤 [FACE] Event: ${eventType}, Name: '${personName}', Sim: ${similarity}%`);
 
             // --- FILTER: Only Store Matches ---
-            // Removed filter to allow capturing and displaying all faces including unknown subjects
             if (!personName || personName === "msg.unknown" || personName === "unknown" || personName === "") {
-                console.log(`${logPrefix} 👤 [FACE] Unknown subject detected. Processing as INTRUSO.`);
+                console.log(`${logPrefix} 🚫 [FILTER] Ignored non-matched face (Name: ${personName || 'Empty'}).`);
+                res.writeHead(200);
+                res.end(JSON.stringify({ status: "ignored", reason: "No match" }));
+                return;
             }
 
             // Debug Data Enrichment
-            // debugData.credentialValue = personName;
-            // debugData.status = 200;
+            debugData.credentialValue = personName;
+            debugData.status = 200;
 
             // --- Find Device ---
             const macAddress = jsonData.macAddress || alarmData.macAddress || jsonData.mac || null;
@@ -1000,43 +874,37 @@ const handleWebhook = async (req, res, logPrefix) => {
                 device = await prisma.device.findFirst({ where: { ip: ipAddress } });
             }
 
-            if (!device) {
-                device = await adoptDevice(macAddress, ipAddress || req.socket.remoteAddress, 'HIKVISION', 'FACE_TERMINAL');
-            }
-
             // --- Process Images (Full vs Face) ---
-            let fullImagePath = null;
-            let faceImagePath = null;
-            const eventId = generateId();
+            let fullImagePath = "";
+            let faceImagePath = "";
 
             if (images.length > 0) {
                 // Improved Image Classification based on Field Name
                 // Hikvision usually sends 'FaceImage' and 'BackgroundImage'
-                let fullImg = images.find(img => img.name && (img.name.toLowerCase().includes('background') || img.name.toLowerCase().includes('scene') || img.name.toLowerCase().includes('full')));
-                let faceImg = images.find(img => img.name && (img.name.toLowerCase().includes('face') || img.name.toLowerCase().includes('tracking') || img.name.toLowerCase().includes('capture') || img.name.toLowerCase().includes('snap')));
+                let fullImg = images.find(img => img.name && (img.name.toLowerCase().includes('background') || img.name.toLowerCase().includes('scene')));
+                let faceImg = images.find(img => img.name && (img.name.toLowerCase() === 'faceimage' || img.name.toLowerCase() === 'facecaptured' || img.name.toLowerCase().includes('face')));
 
                 // Fallback: Sort by size (Largest = Full, Smallest = Face)
-                if (!fullImg || !faceImg) {
+                if (!fullImg) {
                     images.sort((a, b) => b.size - a.size);
-                    if (!fullImg) fullImg = images[0];
-                    if (!faceImg && images.length > 1) {
-                        faceImg = images.find(img => img !== fullImg) || images[1];
-                    }
+                    fullImg = images[0];
+                }
+
+                // If we found a full image by size, and still need a face image, pick the smallest one (provided it's not the same as full)
+                if (!faceImg && images.length > 1) {
+                    images.sort((a, b) => a.size - b.size); // Smallest first
+                    if (images[0] !== fullImg) faceImg = images[0];
                 }
 
                 try {
-                    const devName = sanitizeName(device?.name);
-                    const direction = (device?.direction === 'EXIT' ? 'salida' : 'entrada');
-                    const fDate = formatEventDate(eventTimestamp);
-
                     // Upload Full (Using 'face' bucket for all face recognition events)
-                    const fnameFull = `hik-face-${devName}-${direction}-${fDate}-${eventId}-full.jpg`;
+                    const fnameFull = `hik_face_full_${Date.now()}_${personName.replace(/\s+/g, '_')}.jpg`;
                     fullImagePath = await uploadToS3(fullImg.buffer, fnameFull, fullImg.mimeType, "face");
                     console.log(`${logPrefix} [S3] Full image uploaded to face bucket: ${fullImagePath}`);
 
                     // Upload Face Crop (if exists)
                     if (faceImg) {
-                        const fnameFace = `hik-face-${devName}-${direction}-${fDate}-${eventId}-crop.jpg`;
+                        const fnameFace = `hik_face_crop_${Date.now()}_${personName.replace(/\s+/g, '_')}.jpg`;
                         faceImagePath = await uploadToS3(faceImg.buffer, fnameFace, faceImg.mimeType, "face");
                         console.log(`${logPrefix} [S3] Face crop uploaded to face bucket: ${faceImagePath}`);
                     }
@@ -1074,7 +942,6 @@ const handleWebhook = async (req, res, logPrefix) => {
             // --- Create Event ---
             const event = await prisma.accessEvent.create({
                 data: {
-                    id: eventId,
                     deviceId: device ? device.id : null,
                     credentialId,
                     userId,
@@ -1082,12 +949,11 @@ const handleWebhook = async (req, res, logPrefix) => {
                     accessType: 'FACE',
                     direction: device?.direction || "ENTRY",
                     decision: finalDecision, // Dynamic Decision
-                    snapshotPath: faceImagePath || fullImagePath, // Store FACE crop as main snapshot if available
-                    imagePath: fullImagePath || faceImagePath, // Store FULL scene as context
+                    snapshotPath: fullImagePath, // Store FULL image as main snapshot
                     plateDetected: null,
                     plateNumber: null,
                     // Store extra details including Face Crop Path
-                    details: `Modo: Rostro, Persona: ${personName || "Desconocido"}, CamMatch: ${similarity}% (Local: ${mode})`
+                    details: `Rostro: ${personName}, ${faceImagePath ? `FaceImage: ${faceImagePath}, ` : ''}Similitud: ${similarity}% (Modo: ${mode})`
                 }
             });
 
@@ -1096,10 +962,8 @@ const handleWebhook = async (req, res, logPrefix) => {
                 global.io.emit("access_event", {
                     ...event,
                     device,
-                    user: user || { name: personName },
-                    direction: event.direction,
-                    brand: 'HIKVISION',
-                    userName: personName || user?.name || "Desconocido"
+                    user,
+                    direction: event.direction
                 });
                 // Emit webhook event for topology animation
                 global.io.emit("webhook-event", {
@@ -1176,8 +1040,8 @@ const handleWebhook = async (req, res, logPrefix) => {
                 return;
             }
 
-            // If it's a known non-plate message, we don't log or emit debug to avoid spam
-            // addDebugLog({ ...debugData, status: 200, credentialValue: "NON-ANPR" });
+            // If it's a known non-plate message, we still emit debug but don't log error
+            addDebugLog({ ...debugData, status: 200, credentialValue: "NON-ANPR" });
 
             console.warn(`${logPrefix} ℹ️ Webhook received without plate (possible test or non-ANPR event)`);
             res.writeHead(200);
@@ -1366,10 +1230,34 @@ const handleWebhook = async (req, res, logPrefix) => {
         }
         debounceCache.set(finalPlate, now);
 
-        // Helper to normalize MAC (removes colons, dashes, and makes uppercase)
-        const normalizeMac = (m) => m ? m.replace(/[:-\s]/g, "").toUpperCase() : m;
+        // Save Image to S3 (MinIO)
+        // Save Image to S3 (MinIO)
+        let relativeImagePath = "";
 
-        // Find Device - Strategic lookup (MOVED UP)
+        // Sort images by size to pick the largest (Full Scene) instead of the crop
+        if (images.length > 1) {
+            images.sort((a, b) => b.size - a.size);
+        }
+        const imageFile = images.length > 0 ? images[0] : null;
+
+        if (imageFile) {
+            try {
+                const filename = `hik_${finalPlate}_${eventTimestamp.getTime()}.jpg`;
+                console.log(`${logPrefix} [S3] Attempting upload of ${imageFile.size} bytes to bucket 'lpr'...`);
+                relativeImagePath = await uploadToS3(imageFile.buffer, filename, imageFile.mimeType || "image/jpeg", "lpr");
+                console.log(`${logPrefix} [S3] Upload SUCCESS: ${relativeImagePath}`);
+            } catch (imgError) {
+                console.error(`${logPrefix} [S3] Upload FAILED: ${imgError.message}`);
+                // Fallback to empty to avoid crashing but log it clearly
+            }
+        } else {
+            console.warn(`${logPrefix} [S3] Skip upload: No image part in webhook.`);
+        }
+
+        // Helper to normalize MAC (removes colons, dashes, and makes uppercase)
+        const normalizeMac = (m) => m ? m.replace(/[:-\s]/g, "").toUpperCase() : null;
+
+        // Find Device - Strategic lookup
         let device = null;
         const cleanIncomingMac = normalizeMac(macAddress);
 
@@ -1391,10 +1279,6 @@ const handleWebhook = async (req, res, logPrefix) => {
             }
         }
 
-        if (!device) {
-            device = await adoptDevice(macAddress, ipAddress || req.socket.remoteAddress, 'HIKVISION', 'LPR_CAMERA');
-        }
-
         // UPDATE: Track push connection for actual events
         if (device) {
             await prisma.device.update({
@@ -1403,40 +1287,13 @@ const handleWebhook = async (req, res, logPrefix) => {
             }).catch(e => { });
         }
 
-        // Save Image to S3 (MinIO)
-        let relativeImagePath = null;
-        const eventId = generateId();
-
-        // Sort images by size to pick the largest (Full Scene) instead of the crop
-        if (images.length > 1) {
-            images.sort((a, b) => b.size - a.size);
-        }
-        const imageFile = images.length > 0 ? images[0] : null;
-
-        if (imageFile) {
-            try {
-                const devName = sanitizeName(device?.name);
-                const direction = (device?.direction === 'EXIT' ? 'salida' : 'entrada');
-                const fDate = formatEventDate(eventTimestamp);
-
-                const filename = `hik-lpr-${devName}-${direction}-${fDate}-${eventId}.jpg`;
-                console.log(`${logPrefix} [S3] Attempting upload of ${imageFile.size} bytes: ${filename}`);
-                relativeImagePath = await uploadToS3(imageFile.buffer, filename, imageFile.mimeType || "image/jpeg", "lpr");
-                console.log(`${logPrefix} [S3] Upload SUCCESS: ${relativeImagePath}`);
-            } catch (imgError) {
-                console.error(`${logPrefix} [S3] Upload FAILED: ${imgError.message}`);
-            }
-        } else {
-            console.warn(`${logPrefix} [S3] Skip upload: No image part in webhook. Images length: ${images.length}`);
-        }
-
         // Finalize debug emission for ACTUAL events
-        // addDebugLog({
-        //     ...debugData,
-        //     status: 200,
-        //     deviceName: device?.name,
-        //     deviceMac: macAddress || device?.mac
-        // });
+        addDebugLog({
+            ...debugData,
+            status: 200,
+            deviceName: device?.name,
+            deviceMac: macAddress || device?.mac
+        });
 
         // Create Event Logic
         // ACCESS LOGIC: Prioritize Camera Decision (allowList/whiteList)
@@ -1482,12 +1339,9 @@ const handleWebhook = async (req, res, logPrefix) => {
             }
         }
 
-        console.log(`${logPrefix} [DEBUG] Generated eventId: ${eventId}`);
-
         // Persist Event
         const event = await prisma.accessEvent.create({
             data: {
-                id: eventId,
                 deviceId: device ? device.id : null,
                 credentialId,
                 userId,
@@ -1532,212 +1386,11 @@ const handleWebhook = async (req, res, logPrefix) => {
     }
 }
 
-const handleAvicamWebhook = async (req, res, logPrefix) => {
-    try {
-        console.log(`${logPrefix} === Avicam Webhook Received ===`);
-        let body = {};
-        if (req.method === 'POST') {
-            const chunks = [];
-            for await (const chunk of req) chunks.push(chunk);
-            const data = Buffer.concat(chunks).toString();
-            try {
-                body = JSON.parse(data);
-            } catch (e) {
-                console.warn(`${logPrefix} Avicam body is not JSON`);
-            }
-        }
-
-        const macAddress = body.info?.DeviceID || body.mac || body.SN || body.SerialNumber;
-        const eventType = body.operator || 'FACE_DETECTION';
-        console.log(`${logPrefix} [Avicam] Processing Triggered: op='${body.operator}' (len:${body.operator?.length}) mac='${macAddress}'`);
-        
-        const allDevices = await prisma.device.findMany({ where: { brand: 'AVICAM' } });
-        const normalizeMac = (m) => (m ? String(m).replace(/[:-\s]/g, "").toUpperCase() : null);
-        const cleanIncomingMac = normalizeMac(macAddress);
-        let device = allDevices.find(d => normalizeMac(d.mac) === cleanIncomingMac);
-
-        console.log(`${logPrefix} [Avicam] Device search for '${cleanIncomingMac}' -> ${device ? device.name : 'NOT FOUND'}`);
-        if (!device) {
-            console.log(`${logPrefix} [Avicam] Available AVICAM MACs:`, allDevices.map(d => normalizeMac(d.mac)));
-        }
-
-        if (!device) {
-            const remoteIp = req.socket.remoteAddress;
-            const cleanRemoteIp = remoteIp ? remoteIp.replace(/^.*:/, '') : null;
-            if (cleanRemoteIp) {
-                device = allDevices.find(d => d.ip === cleanRemoteIp || d.ip.includes(cleanRemoteIp));
-                if (device) console.log(`${logPrefix} [Avicam] Device matched by IP: ${device.name}`);
-            }
-        }
-
-        if (!device) {
-            device = await adoptDevice(macAddress, req.socket.remoteAddress, 'AVICAM', 'FACE_TERMINAL');
-        }
-
-        if (device) {
-            await prisma.device.update({
-                where: { id: device.id },
-                data: { lastOnlinePush: new Date() }
-            }).catch(() => { });
-        }
-
-        // --- NEW: Process Events and Create History ---
-        if (body.operator === 'VerifyPush' || body.operator === 'FacePicPush') {
-            console.log(`${logPrefix} [Avicam] Entering VerifyPush block...`);
-            const info = body.info || {};
-            const personName = info.Name || body.data?.Name || 'Desconocido';
-            const personId = info.PersonID || body.data?.PersonId;
-            console.log(`${logPrefix} [Avicam] Event details - Person: ${personName}, ID: ${personId}`);
-            
-            // Extract image (can be direct string or inside array)
-            let imagePath = null;
-            let rawImage = null;
-            
-            if (typeof body.SanpPic === 'string' && body.SanpPic.length > 100) {
-                rawImage = body.SanpPic;
-            } else if (Array.isArray(body.SanpPic) && body.SanpPic.length > 0) {
-                rawImage = body.SanpPic[0].szPicData || body.SanpPic[0].szPicData1;
-            } else if (body.data?.SanpPic) {
-                rawImage = typeof body.data.SanpPic === 'string' ? body.data.SanpPic : body.data.SanpPic[0]?.szPicData;
-            }
-
-            if (rawImage && typeof rawImage === 'string') {
-                try {
-                    // Limpiar prefijo data:image si existe
-                    const cleanBase64 = rawImage.replace(/^data:image\/\w+;base64,/, "");
-                    const buffer = Buffer.from(cleanBase64, 'base64');
-                    console.log(`${logPrefix} [Avicam] Decoded image size: ${buffer.length} bytes. Raw time: ${info.CreateTime}`);
-                    
-                    const filename = `av-${device?.id || 'unknown'}-${Date.now()}.jpg`;
-                    
-                    // Wrap upload in a timeout to prevent hanging the whole request
-                    const uploadPromise = uploadToS3(buffer, filename, "image/jpeg", 'face');
-                    const timeoutPromise = new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error('S3 Upload Timeout')), 5000)
-                    );
-                    
-                    imagePath = await Promise.race([uploadPromise, timeoutPromise]);
-                    console.log(`${logPrefix} [Avicam] Image uploaded: ${imagePath}`);
-                } catch (imgErr) {
-                    console.error(`${logPrefix} [Avicam] Image upload failed or timed out:`, imgErr.message);
-                }
-            }
-
-            // Clean body for DB (remove huge image)
-            const bodyForDb = { ...body };
-            if (bodyForDb.SanpPic) bodyForDb.SanpPic = "[STRIPIED_IMAGE_DATA]";
-            if (bodyForDb.data?.SanpPic) bodyForDb.data.SanpPic = "[STRIPIED_IMAGE_DATA]";
-
-            // Try to find user in DB
-            let userId = null;
-            if (personName && personName !== 'Desconocido') {
-                try {
-                    const user = await prisma.user.findFirst({
-                        where: {
-                            OR: [
-                                { name: { contains: personName, mode: 'insensitive' } },
-                                { credentials: { some: { value: String(personId) } } }
-                            ]
-                        }
-                    });
-                    if (user) userId = user.id;
-                } catch (userErr) {
-                    console.error(`${logPrefix} [Avicam] User search error:`, userErr.message);
-                }
-            }
-
-            // Format details as a Key:Value string for the UI to parse easily
-            const detailsStr = `Modo: Rostro, Rostro: ${personName}, ID: ${personId}, Sim: ${info.Similarity1 || body.data?.Similarity || 0}%`;
-
-            // Create AccessEvent record
-            let eventData = null;
-            try {
-                // Timezone Correction: Avicam sends local time (UTC-3). Convert to UTC for server.
-                let eventTime = info.CreateTime ? new Date(info.CreateTime) : new Date();
-                if (info.CreateTime && !info.CreateTime.includes('Z') && !info.CreateTime.includes('+')) {
-                    // It's a local string. Add 3 hours to match UTC server.
-                    eventTime = new Date(eventTime.getTime() + (3 * 60 * 60 * 1000));
-                }
-
-                eventData = {
-                    timestamp: eventTime,
-                    accessType: 'FACE',
-                    deviceId: device?.id || null,
-                    userId: userId || null,
-                    direction: device?.direction || 'ENTRY',
-                    location: device?.location || 'Terminal Avicam',
-                    decision: info.VerifyStatus === 1 ? 'GRANT' : 'DENY',
-                    details: detailsStr,
-                    imagePath: imagePath,
-                    snapshotPath: imagePath
-                };
-                
-                console.log(`${logPrefix} [Avicam] PRE-DB: Creating event with ts=${eventData.timestamp.toISOString()} deviceId=${eventData.deviceId}`);
-                const event = await prisma.accessEvent.create({ data: eventData });
-                console.log(`${logPrefix} [Avicam] DB SUCCESS: id=${event.id} timestamp=${event.timestamp.toISOString()}`);
-                
-                // Emit event for real-time dashboards (Underscore for UI compatibility)
-                if (global.io) {
-                    // Enrich for UI components that expect joined relations
-                    const enrichedEvent = {
-                        ...event,
-                        device: device,
-                        user: {
-                            name: personName,
-                            cara: imagePath,
-                            unit: null
-                        },
-                        deviceName: device?.name,
-                        userName: personName,
-                        brand: 'AVICAM'
-                    };
-                    global.io.emit("access_event", enrichedEvent);
-                }
-            } catch (dbErr) {
-                console.error(`${logPrefix} [Avicam] DB ERROR!!!!`);
-                console.error(`${logPrefix} [Avicam] Stack:`, dbErr.stack);
-                console.error(`${logPrefix} [Avicam] Code:`, dbErr.code);
-                console.log(`${logPrefix} [Avicam] Data attempted for ${personName}:`, JSON.stringify(eventData, null, 2));
-            }
-        }
-
-        addDebugLog({
-            id: Date.now().toString(),
-            timestamp: new Date(),
-            source: 'avicam',
-            method: req.method,
-            url: req.url,
-            params: body,
-            deviceName: device?.name || 'Avicam Desconocido',
-            deviceMac: macAddress,
-            credentialValue: body.info?.Name || body.name || body.personName || eventType
-        });
-
-        if (global.io) {
-            global.io.emit("webhook-event", {
-                type: "AVICAM",
-                vendor: "AVICAM",
-                device: device?.name || "Avicam Device",
-                eventType: eventType,
-                timestamp: new Date().toISOString()
-            });
-        }
-
-        res.writeHead(200);
-        res.end(JSON.stringify({ success: true }));
-    } catch (error) {
-        console.error(`${logPrefix} Avicam Handler Error:`, error);
-        res.writeHead(500);
-        res.end("Error");
-    }
-};
-
 const handleAkuvoxWebhook = async (req, res, logPrefix) => {
     try {
         console.log(`${logPrefix} === Akuvox Webhook Received ===`);
         const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
         const params = Object.fromEntries(parsedUrl.searchParams);
-        const eventId = generateId();
 
         console.log(`${logPrefix} Akuvox Params:`, params);
 
@@ -1828,10 +1481,6 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
         }
 
         if (!device) {
-            device = await adoptDevice(macAddress, req.socket.remoteAddress, 'AKUVOX', 'DOOR_INTERCOM');
-        }
-
-        if (!device) {
             console.warn(`${logPrefix} Unknown Akuvox Device. MAC: ${macAddress}, IP: ${req.socket.remoteAddress}`);
         }
 
@@ -1864,17 +1513,13 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
                     const snapBuffer = await fetchAkuvoxFaceImage(device, { name: params.user || params.name });
                     if (snapBuffer) {
                         try {
-                            const devName = sanitizeName(device?.name);
-                            const direction = (device?.direction === 'EXIT' ? 'salida' : 'entrada');
-                            const fDate = formatEventDate(new Date());
-                            const filename = `aku-open-${devName}-${direction}-${fDate}-${eventId}.jpg`;
+                            const filename = `aku_open_${device.id}_${Date.now()}.jpg`;
                             snapPath = await uploadToS3(snapBuffer, filename, "image/jpeg", "face");
                             details += " (Evidencia capturada)";
                         } catch (e) {
                             console.error("Error uploading open snapshot to S3:", e.message);
                         }
                     }
-
                 } catch (e) { console.error("Error updating door status:", e); }
             }
 
@@ -1923,10 +1568,7 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
                 const snapBuffer = await fetchAkuvoxFaceImage(device, { userId: params.userid, card: cardNumber, name: params.user || params.name });
                 if (snapBuffer) {
                     try {
-                        const devName = sanitizeName(device?.name);
-                        const direction = (device?.direction === 'EXIT' ? 'salida' : 'entrada');
-                        const fDate = formatEventDate(new Date());
-                        const filename = `aku-card-${devName}-${direction}-${fDate}-${eventId}.jpg`;
+                        const filename = `aku_card_${device.id}_${Date.now()}.jpg`;
                         snapPath = await uploadToS3(snapBuffer, filename, "image/jpeg", "face");
                         details += " (Evidencia capturada)";
                     } catch (e) {
@@ -1967,10 +1609,7 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
                 });
                 if (snapBuffer) {
                     try {
-                        const devName = sanitizeName(device?.name);
-                        const direction = (device?.direction === 'EXIT' ? 'salida' : 'entrada');
-                        const fDate = formatEventDate(new Date());
-                        const filename = `aku-face-${devName}-${direction}-${fDate}-${eventId}.jpg`;
+                        const filename = `aku_face_${device.id}_${Date.now()}.jpg`;
                         snapPath = await uploadToS3(snapBuffer, filename, "image/jpeg", "face");
 
                         // Enrich details for the UI modal (EventDetailsDialog expects FaceImage: <path>)
@@ -1984,8 +1623,7 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
                     } catch (e) {
                         console.error("Error uploading face snapshot to S3:", e.message);
                     }
-                }
-                else {
+                } else {
                     console.warn(`${logPrefix} [AUTO-SNAP] ✗ Failed to fetch face image from device`);
                 }
             }
@@ -2001,10 +1639,7 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
                 const snapBuffer = await fetchAkuvoxFaceImage(device, { userId: params.userid, name: params.user || params.name });
                 if (snapBuffer) {
                     try {
-                        const devName = sanitizeName(device?.name);
-                        const direction = (device?.direction === 'EXIT' ? 'salida' : 'entrada');
-                        const fDate = formatEventDate(new Date());
-                        const filename = `aku-pin-${devName}-${direction}-${fDate}-${eventId}.jpg`;
+                        const filename = `aku_pin_${device.id}_${Date.now()}.jpg`;
                         snapPath = await uploadToS3(snapBuffer, filename, "image/jpeg", "face");
                         details += " (Evidencia capturada)";
                     } catch (e) {
@@ -2038,10 +1673,7 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
                 const snapBuffer = await fetchAkuvoxFaceImage(device, { name: params.user || params.name, type: 'intercom' });
                 if (snapBuffer) {
                     try {
-                        const devName = sanitizeName(device?.name);
-                        const direction = (device?.direction === 'EXIT' ? 'salida' : 'entrada');
-                        const fDate = formatEventDate(new Date());
-                        const filename = `aku-call-${devName}-${direction}-${fDate}-${eventId}.jpg`;
+                        const filename = `aku_call_${device.id}_${Date.now()}.jpg`;
                         snapPath = await uploadToS3(snapBuffer, filename, "image/jpeg", "face");
                         details += " (Foto S3 capturada)";
                     } catch (e) {
@@ -2064,10 +1696,7 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
                 const snapBuffer = await fetchAkuvoxFaceImage(device, { userId: params.userid, name: params.user || params.name });
                 if (snapBuffer) {
                     try {
-                        const devName = sanitizeName(device?.name);
-                        const direction = (device?.direction === 'EXIT' ? 'salida' : 'entrada');
-                        const fDate = formatEventDate(new Date());
-                        const filename = `aku-qr-${devName}-${direction}-${fDate}-${eventId}.jpg`;
+                        const filename = `aku_qr_${device.id}_${Date.now()}.jpg`;
                         snapPath = await uploadToS3(snapBuffer, filename, "image/jpeg", "face");
                         details += " (Foto S3 capturada)";
                     } catch (e) { }
@@ -2181,7 +1810,6 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
         if (device) {
             const event = await prisma.accessEvent.create({
                 data: {
-                    id: eventId,
                     deviceId: device.id,
                     timestamp: new Date(),
                     accessType: credentialType || (eventType.includes('face') ? 'FACE' : 'TAG'),
@@ -2201,10 +1829,8 @@ const handleAkuvoxWebhook = async (req, res, logPrefix) => {
                 global.io.emit("access_event", {
                     ...event,
                     device,
-                    user: user || { name: credentialValue },
-                    direction: event.direction,
-                    brand: 'AKUVOX',
-                    userName: credentialValue || user?.name || "Desconocido"
+                    user,
+                    direction: event.direction // Ensure direction is explicitly sent
                 });
                 // Emit webhook event for topology animation
                 global.io.emit("webhook-event", {
@@ -2245,30 +1871,9 @@ const requestHandler = async (req, res) => {
         return;
     }
 
-    // Test Socket
-    if (req.url === '/api/test-socket') {
-        console.log(`${logPrefix} 🧪 Manual Socket Test Triggered`);
-        if (global.io) {
-            global.io.emit("access_event", {
-                id: "test-" + Date.now(),
-                accessType: "FACE",
-                userName: "Test Manual",
-                brand: "AVICAM",
-                timestamp: new Date(),
-                device: { name: "Cámara Test" }
-            });
-            res.writeHead(200);
-            res.end("Emitted");
-        } else {
-            res.writeHead(500);
-            res.end("global.io not defined");
-        }
-        return;
-    }
-
     // Ignorar rutas de Socket.IO (el motor las intercepta automáticamente, 
     // pero evitamos que lleguen al 404 final o que ensucien el log)
-    if (req.url.includes('/socket.io/')) {
+    if (req.url.startsWith('/socket.io')) {
         return;
     }
 
@@ -2485,6 +2090,26 @@ const requestHandler = async (req, res) => {
         return;
     }
 
+    // INTERNAL: Socket event emitter (called by Next.js onvif-polling)
+    if (url === '/internal/emit' && req.method === 'POST') {
+        let body = '';
+        req.on('data', c => body += c);
+        req.on('end', () => {
+            try {
+                const data = JSON.parse(body);
+                if (global.io) {
+                    global.io.emit(data.__event || 'webhook-event', data);
+                }
+                res.writeHead(200);
+                res.end('ok');
+            } catch {
+                res.writeHead(400);
+                res.end('bad');
+            }
+        });
+        return;
+    }
+
     // LIVE PROXY (Para ver cámaras remotas en el navegador)
     if (url.includes('/api/live/')) {
         console.log(`${logPrefix} 🎯 Match: LIVE Proxy (Path: ${req.url})`);
@@ -2510,8 +2135,8 @@ const requestHandler = async (req, res) => {
             data: { lastOnlinePush: new Date() }
         }).catch(() => { });
 
-        // STRATEGY 1: Direct MJPEG Pipe (Linux/Dahua/Hikvision Efficient Stream)
-        if (device.brand === 'AKUVOX' || device.brand === 'DAHUA' || device.brand === 'HIKVISION') {
+        // STRATEGY 1: Direct MJPEG Pipe (Linux/Dahua Efficient Stream)
+        if (device.brand === 'AKUVOX' || device.brand === 'DAHUA') {
             const success = await proxyVideoStream(device, res, req);
             if (success) return;
         }
@@ -2573,18 +2198,10 @@ const requestHandler = async (req, res) => {
         return;
     }
 
-    // AVICAM (FACE TERMINAL) - Usamos matches específicos para evitar colisión con archivos
-    if (url.includes('/webhooks/avicam') || url.includes('/subscribe/heartbeat')) {
-        console.log(`${logPrefix} 🎯 Match: AVICAM Driver (Path: ${req.url})`);
-        await handleAvicamWebhook(req, res, logPrefix);
-        return;
-    }
-
     // WAHA (WhatsApp Chatbot)
-    // We make this more permissive as various environments might strip or add slashes
-    if (url.includes('waha') || url.includes('whatsapp')) {
-        console.log(`${logPrefix} 💬 Match: WAHA WhatsApp Webhook (Path: ${req.url})`);
-        await handleWahaWebhook(req, res, logPrefix, prisma);
+    if (url.includes('/api/waha/webhook')) {
+        console.log(`${logPrefix} 💬 Match: WAHA WhatsApp Webhook`);
+        await handleWahaWebhook(req, res, logPrefix);
         return;
     }
 
@@ -2593,7 +2210,7 @@ const requestHandler = async (req, res) => {
         console.warn(`${logPrefix} ❓ Webhook detectado pero no coincide con marca específica: ${req.url}`);
     }
 
-    console.log(`${logPrefix} ⚠️  404 Not Found: ${req.method} ${req.url}. URL processed: ${url}`);
+    console.log(`${logPrefix} ⚠️  404 Not Found: ${req.method} ${req.url}`);
     res.writeHead(404);
     res.end();
 };
@@ -2602,6 +2219,7 @@ const httpServer = http.createServer(requestHandler);
 
 // NOTA: Unificamos Socket.IO en el mismo puerto 10000
 const io = new Server(httpServer, {
+    addTrailingSlash: false,
     cors: {
         origin: "*",
         methods: ["GET", "POST"]
@@ -2611,261 +2229,73 @@ const io = new Server(httpServer, {
 io.on("connection", (socket) => {
     console.log(`Socket client connected: ${socket.id}`);
 
-    socket.on("ping_test", (data) => {
-        console.log(`[SOCKET-DEBUG] Ping received: ${data}`);
-        socket.emit("pong_test", "pong-" + data);
-        io.emit("broadcast_test", "broadcast-" + data);
-    });
-
     // Send history to new connection
     if (debugLogsHistory.length > 0) {
         console.log(`Sending ${debugLogsHistory.length} debug logs to client ${socket.id}`);
         socket.emit("webhook_history", debugLogsHistory);
     }
-
-    // Send initial alert status
-    socket.emit("alert_status", { active: isAlertActive });
-
-    // Send current guard locations immediately
-    if (guardLocations.size > 0) {
-        socket.emit("guard_locations", Array.from(guardLocations.values()));
-    }
-
-    // Send active missions immediately
-    if (activeMissions.size > 0) {
-        socket.emit("active_missions", Array.from(activeMissions.values()));
-    }
-
-    // Register guard tablet presence and broadcast to admin
-    socket.on("guard_presence", (data) => {
-        // Prioritize the IP reported by the client if it exists (local IP detection)
-        const socketIp = (socket.handshake.headers['x-forwarded-for'] || socket.handshake.address).replace('::ffff:', '');
-
-        io.emit("guard_presence", {
-            ...data,
-            socketId: socket.id,
-            ip: data.reportedIp || socketIp
-        });
-    });
-
-    // --- GPS TRACKING ---
-    socket.on("guard_location_update", (data) => {
-        // data: { lat, lng, accuracy, guardName, timestamp }
-        guardLocations.set(socket.id, { ...data, socketId: socket.id });
-        io.emit("guard_locations", Array.from(guardLocations.values()));
-    });
-
-    // --- BACKUP REQUESTS (SOLICITUD DE APOYO) ---
-    socket.on("request_backup", async (data) => {
-        // data: { type: 'INDIVIDUO' | 'VEHICULO', lat, lng, requesterName, details }
-        console.log(`[BACKUP] Request from ${data.requesterName}: ${data.type}`);
-
-        let bitacoraId = null;
-        try {
-            const entry = await prisma.bitacora.create({
-                data: {
-                    type: "ALERTA",
-                    plate: "SOS",
-                    name: (data.type || "SOLICITUD APOYO").toUpperCase(),
-                    notes: `Solicitud iniciada por ${data.requesterName}. Detalles: ${data.details || 'Sin detalles'}`,
-                    guardName: data.requesterName,
-                    latitude: data.lat,
-                    longitude: data.lng,
-                    timestamp: new Date()
-                }
-            });
-            bitacoraId = entry.id;
-        } catch (e) {
-            console.error("Error logging backup request:", e);
-        }
-
-        const mission = {
-            id: data.id || 'req-' + Date.now(),
-            bitacoraId: bitacoraId,
-            ...data,
-            requesterId: socket.id,
-            timestamp: Date.now(),
-            status: 'PENDING'
-        };
-
-        activeMissions.set(mission.id, mission);
-
-        // Broadcast to all
-        io.emit("backup_requested", mission);
-
-        // Also notify admin consoles
-        socket.broadcast.emit("admin_alert", {
-            type: "BACKUP_REQUEST",
-            message: `Solicitud de apoyo: ${data.type} por ${data.requesterName}`,
-            location: { lat: data.lat, lng: data.lng }
-        });
-
-        // Broadcast Push Notification
-        sendPushToAll({
-            title: "⚠️ SOLICITUD DE APOYO",
-            body: `${data.type} reportado por ${data.requesterName}.`,
-            icon: "/iconos/sildan-pwa.png",
-            tag: "mission-alert",
-            vibrate: [200, 100, 200, 100, 200],
-            data: { url: '/guard', missionId: mission.id } // Opens /guard (tablet version defaults)
-        });
-    });
-
-    socket.on("respond_backup", (data) => {
-        // data: { requestId, accepted: true/false, responderName }
-        console.log(`[BACKUP] Response from ${data.responderName}: ${data.accepted ? 'ACCEPTED' : 'REJECTED'}`);
-
-        const mission = activeMissions.get(data.requestId);
-        if (mission) {
-            mission.status = data.accepted ? 'ACCEPTED' : 'PENDING';
-            mission.responderName = data.responderName;
-            mission.responderId = socket.id;
-            activeMissions.set(data.requestId, mission);
-        }
-
-        // Notify everyone Update status
-        io.emit("backup_status_update", {
-            ...data,
-            responderId: socket.id
-        });
-    });
-
-    socket.on("resolve_backup", async (data) => {
-        // data: { requestId, bitacoraId, outcome: 'FALSA_ALARMA' | 'SOLUCIONADO', notes, guardName }
-        console.log(`[BACKUP] Resolved by ${data.guardName}: ${data.outcome}`);
-
-        try {
-            if (data.bitacoraId) {
-                // Update existing record
-                await prisma.bitacora.update({
-                    where: { id: data.bitacoraId },
-                    data: {
-                        notes: `[RESUELTO: ${data.outcome}] ${data.notes || ''}`
-                    }
-                });
-            } else {
-                // Fallback: Create new if no ID provided
-                await prisma.bitacora.create({
-                    data: {
-                        type: "ALERTA",
-                        plate: "SOS",
-                        name: "RESOLUCIÓN",
-                        notes: `Incidente resuelto (${data.outcome}). Detalles: ${data.notes || ''}`,
-                        guardName: data.guardName,
-                        timestamp: new Date()
-                    }
-                });
-            }
-        } catch (e) {
-            console.error("Error resolving backup in DB:", e);
-        }
-
-        activeMissions.delete(data.requestId);
-
-        io.emit("backup_resolved", {
-            requestId: data.requestId,
-            outcome: data.outcome,
-            resolverName: data.guardName
-        });
-    });
-
-    socket.on("cancel_backup", (data) => {
-        console.log(`[BACKUP] Cancelled by ${data.guardName}`);
-        activeMissions.delete(data.requestId);
-        io.emit("backup_cancelled", {
-            requestId: data.requestId,
-            cancelledBy: data.guardName
-        });
-    });
-
-    socket.on("disconnect", () => {
-        if (guardLocations.has(socket.id)) {
-            guardLocations.delete(socket.id);
-            io.emit("guard_locations", Array.from(guardLocations.values()));
-        }
-        console.log(`Socket client disconnected: ${socket.id}`);
-    });
-
-    socket.on("new_bitacora", (data) => {
-        io.emit("new_bitacora", data);
-    });
-
-    socket.on("alert_toggle", async (data) => {
-        const now = Date.now();
-        if (now - globalLastAlertUpdateTime < 3000) {
-            console.warn(`[ALERT] Global alert toggle throttled. Source: ${socket.id}, TriggeredBy: ${data.triggeredBy}`);
-            return;
-        }
-
-        const previousState = isAlertActive;
-        isAlertActive = !!data.active;
-
-        // If state didn't change, return (prevents notification flood)
-        if (previousState === isAlertActive) {
-            console.log(`[ALERT] Alert toggle ignored (no change). Source: ${socket.id}`);
-            return;
-        }
-
-        globalLastAlertUpdateTime = now;
-
-        console.log(`[ALERT] Alert mode set to: ${isAlertActive} by ${data.triggeredBy || socket.id}`);
-
-        // Log to database for permanent record
-        try {
-            const loc = guardLocations.get(socket.id);
-            const notes = isAlertActive
-                ? `[BOTÓN DE PÁNICO] Activado por ${data.triggeredBy || 'Guardia'}.`
-                : `[SISTEMA NORMALIZADO] Desactivado por ${data.triggeredBy || 'Guardia'}. ${data.explanation ? `Motivo: ${data.explanation}` : ''}`;
-
-            await prisma.bitacora.create({
-                data: {
-                    type: "ALERTA",
-                    plate: isAlertActive ? "PÁNICO" : "Manual",
-                    name: (data.triggeredBy || "GUARDIA").toUpperCase(),
-                    notes: notes,
-                    guardName: data.triggeredBy || "Invitado",
-                    latitude: loc ? loc.lat : null,
-                    longitude: loc ? loc.lng : null,
-                    timestamp: new Date()
-                }
-            });
-        } catch (e) {
-            console.error("Error logging alert status change:", e);
-        }
-
-        io.emit("alert_status", {
-            active: isAlertActive,
-            triggeredBy: data.triggeredBy,
-            explanation: data.explanation || ""
-        });
-
-        // SEND PUSH
-        const pushPayload = isAlertActive ? {
-            title: "⚠️ ALERTA DE SEGURIDAD",
-            body: `Modo de alerta activado por ${data.triggeredBy || "un compañero"}.`,
-            icon: "/iconos/sildan-pwa.png",
-            tag: "security-alert",
-            vibrate: [200, 100, 200, 100, 200],
-            data: { url: '/guard' }
-        } : {
-            title: "SISTEMA NORMALIZADO",
-            body: data.explanation ? `Alerta desactivada. Motivo: ${data.explanation}` : "La alerta ha sido desactivada.",
-            icon: "/iconos/sildan-pwa.png",
-            tag: "security-alert",
-            data: { url: '/guard' }
-        };
-
-        sendPushToAll(pushPayload);
-    });
 });
 
 global.io = io;
+
+// ── go2rtc WebSocket proxy ──────────────────────────────────────────────
+// Next.js rewrites only handle HTTP; WebSocket upgrade requests for
+// /go2rtc/ must be proxied here so the MSE player can reach go2rtc.
+const GO2RTC_PORT = 1984;
+
+httpServer.on("upgrade", (req, socket, head) => {
+    // Let Socket.IO handle its own upgrades
+    if (!req.url || !req.url.startsWith("/go2rtc/")) return;
+
+    const targetPath = req.url.replace(/^\/go2rtc/, "");
+    const proxyReq = http.request({
+        hostname: "127.0.0.1",
+        port: GO2RTC_PORT,
+        path: targetPath,
+        method: "GET",
+        headers: { ...req.headers, host: `127.0.0.1:${GO2RTC_PORT}` },
+    });
+
+    proxyReq.on("upgrade", (_proxyRes, proxySocket, proxyHead) => {
+        // Build raw 101 response from go2rtc's headers
+        let rawResponse = "HTTP/1.1 101 Switching Protocols\r\n";
+        const h = _proxyRes.headers;
+        for (const key of Object.keys(h)) {
+            const val = h[key];
+            if (Array.isArray(val)) val.forEach(v => { rawResponse += `${key}: ${v}\r\n`; });
+            else rawResponse += `${key}: ${val}\r\n`;
+        }
+        rawResponse += "\r\n";
+        socket.write(rawResponse);
+
+        if (proxyHead && proxyHead.length) proxySocket.unshift(proxyHead);
+        proxySocket.pipe(socket);
+        socket.pipe(proxySocket);
+
+        proxySocket.on("error", () => socket.destroy());
+        socket.on("error", () => proxySocket.destroy());
+        proxySocket.on("close", () => socket.destroy());
+        socket.on("close", () => proxySocket.destroy());
+    });
+
+    proxyReq.on("error", (err) => {
+        console.error("[go2rtc-proxy] upstream error:", err.message);
+        socket.destroy();
+    });
+
+    proxyReq.end();
+});
+
+// ── HTTP proxy for go2rtc REST API (snapshots, stream list, etc.) ───────
+// This lets the client fetch /go2rtc/api/streams etc. through port 10000
+// without needing the Next.js rewrite.
 
 // Escuchamos en todas las interfaces explícitamente ("0.0.0.0")
 httpServer.listen(port, "0.0.0.0", () => {
     console.log(`\n🚀 SERVIDOR UNIFICADO ACTIVO EN EL PUERTO ${port}`);
     console.log(`> LPR/Face Webhooks: http://[TU_IP]:${port}/api/webhooks/...`);
     console.log(`> WebSockets: ws://[TU_IP]:${port}`);
+    console.log(`> go2rtc proxy: ws://[TU_IP]:${port}/go2rtc/api/ws`);
     console.log(`> Registro de conexiones activado para diagnóstico.\n`);
 });
 

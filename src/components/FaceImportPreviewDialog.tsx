@@ -94,7 +94,7 @@ export function FaceImportPreviewDialog({
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
-            <DialogContent className="max-w-2xl bg-[#09090b] border border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.5)] p-0 gap-0 overflow-hidden rounded-md">
+            <DialogContent className="max-w-2xl bg-[#09090b] border border-border shadow-[0_0_50px_rgba(0,0,0,0.5)] p-0 gap-0 overflow-hidden rounded-md">
                 <div className="p-6 bg-gradient-to-b from-[#111] to-[#09090b]">
                     <DialogHeader className="mb-6">
                         <div className="flex items-center gap-3 mb-2">
@@ -102,8 +102,8 @@ export function FaceImportPreviewDialog({
                                 <ScanFace size={24} />
                             </div>
                             <div>
-                                <DialogTitle className="text-xl font-bold text-white tracking-tight">Importar Usuarios de Rostro</DialogTitle>
-                                <DialogDescription className="text-neutral-400 text-xs font-medium uppercase tracking-wider mt-1">
+                                <DialogTitle className="text-xl font-bold text-foreground tracking-tight">Importar Usuarios de Rostro</DialogTitle>
+                                <DialogDescription className="text-muted-foreground text-xs font-medium uppercase tracking-wider mt-1">
                                     Sincronización desde Dispositivo
                                 </DialogDescription>
                             </div>
@@ -114,9 +114,9 @@ export function FaceImportPreviewDialog({
                         <div className="space-y-6">
                             {/* Summary Cards */}
                             <div className="grid grid-cols-3 gap-3">
-                                <div className="p-4 rounded-md bg-neutral-900/50 border border-white/5 flex flex-col items-center justify-center text-center">
-                                    <span className="text-2xl font-black text-white font-mono tracking-tighter mb-1">{faces.length}</span>
-                                    <span className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest">Total en Equipo</span>
+                                <div className="p-4 rounded-md bg-card/50 border border-border flex flex-col items-center justify-center text-center">
+                                    <span className="text-2xl font-black text-foreground font-mono tracking-tighter mb-1">{faces.length}</span>
+                                    <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">Total en Equipo</span>
                                 </div>
 
                                 <div className="p-4 rounded-md bg-indigo-500/5 border border-indigo-500/10 flex flex-col items-center justify-center text-center group hover:bg-indigo-500/10 transition-colors">
@@ -138,25 +138,25 @@ export function FaceImportPreviewDialog({
 
                             {/* Detailed List Preview */}
                             <div className="border border-white/5 rounded-md overflow-hidden flex flex-col h-64 bg-black/20">
-                                <div className="bg-white/5 px-4 py-2 border-b border-white/5 flex justify-between items-center">
-                                    <h3 className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Vista Previa de Importación</h3>
-                                    <span className="text-[9px] font-mono text-neutral-500">{newFaces.length} items</span>
+                                <div className="bg-foreground/10 px-4 py-2 border-b border-border flex justify-between items-center">
+                                    <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Vista Previa de Importación</h3>
+                                    <span className="text-[9px] font-mono text-muted-foreground">{newFaces.length} items</span>
                                 </div>
                                 <ScrollArea className="flex-1">
                                     {newFaces.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center h-full text-neutral-600 gap-2">
+                                        <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
                                             <CheckCircle2 size={24} className="opacity-20" />
                                             <p className="text-xs font-medium">Todos los usuarios ya existen en el sistema.</p>
                                         </div>
                                     ) : (
                                         <div className="divide-y divide-white/5">
                                             {newFaces.slice(0, 100).map((face, idx) => (
-                                                <div key={idx} className="px-4 py-3 flex items-center justify-between group hover:bg-white/5 transition-colors">
+                                                <div key={idx} className="px-4 py-3 flex items-center justify-between group hover:bg-accent transition-colors">
                                                     <div className="flex items-center gap-3">
                                                         <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)] animate-pulse" />
                                                         <div>
-                                                            <div className="text-xs font-bold text-white group-hover:text-indigo-300 transition-colors">{face.Name}</div>
-                                                            <div className="text-[10px] font-mono text-neutral-500">ID: {face.UserID}</div>
+                                                            <div className="text-xs font-bold text-foreground group-hover:text-indigo-300 transition-colors">{face.Name}</div>
+                                                            <div className="text-[10px] font-mono text-muted-foreground">ID: {face.UserID}</div>
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-2">
@@ -165,7 +165,7 @@ export function FaceImportPreviewDialog({
                                                 </div>
                                             ))}
                                             {newFaces.length > 100 && (
-                                                <div className="px-4 py-2 text-center text-[10px] text-neutral-500 italic">
+                                                <div className="px-4 py-2 text-center text-[10px] text-muted-foreground italic">
                                                     ... y {newFaces.length - 100} más
                                                 </div>
                                             )}
@@ -174,10 +174,10 @@ export function FaceImportPreviewDialog({
                                 </ScrollArea>
                             </div>
 
-                            <div className="flex items-center gap-2 p-3 rounded-md bg-neutral-900 border border-white/5">
-                                <Info size={14} className="text-neutral-500 shrink-0" />
-                                <p className="text-[10px] text-neutral-400 leading-snug">
-                                    <span className="text-indigo-400 font-bold">Nota:</span> Se creará un <span className="text-white font-bold">Usuario</span> y una credencial biométrica <span className="text-white font-bold">FACE</span> por cada registro seleccionado.
+                            <div className="flex items-center gap-2 p-3 rounded-md bg-card border border-border">
+                                <Info size={14} className="text-muted-foreground shrink-0" />
+                                <p className="text-[10px] text-muted-foreground leading-snug">
+                                    <span className="text-indigo-400 font-bold">Nota:</span> Se creará un <span className="text-foreground font-bold">Usuario</span> y una credencial biométrica <span className="text-foreground font-bold">FACE</span> por cada registro seleccionado.
                                 </p>
                             </div>
 
@@ -185,7 +185,7 @@ export function FaceImportPreviewDialog({
                                 <Button
                                     variant="outline"
                                     onClick={() => onOpenChange(false)}
-                                    className="flex-1 border-white/10 hover:bg-white/5 text-neutral-400 hover:text-white uppercase font-bold text-xs h-10 tracking-wider"
+                                    className="flex-1 border-border hover:bg-accent text-muted-foreground hover:text-foreground uppercase font-bold text-xs h-10 tracking-wider"
                                 >
                                     <X className="mr-2 h-3.5 w-3.5" />
                                     Cancelar
@@ -193,7 +193,7 @@ export function FaceImportPreviewDialog({
                                 <Button
                                     onClick={handleImport}
                                     disabled={importing || newFaces.length === 0}
-                                    className="flex-[2] bg-indigo-600 hover:bg-indigo-500 text-white border-0 shadow-[0_0_20px_rgba(79,70,229,0.2)] uppercase font-bold text-xs h-10 tracking-wider"
+                                    className="flex-[2] bg-indigo-600 hover:bg-indigo-500 text-foreground border-0 shadow-[0_0_20px_rgba(79,70,229,0.2)] uppercase font-bold text-xs h-10 tracking-wider"
                                 >
                                     {importing ? (
                                         <>
@@ -215,12 +215,12 @@ export function FaceImportPreviewDialog({
                                 <CheckCircle2 size={40} className="text-emerald-500" />
                             </div>
                             <div className="text-center space-y-2">
-                                <h3 className="text-xl font-black uppercase text-white tracking-tight">Importación Exitosa</h3>
-                                <p className="text-sm text-neutral-400">Se han creado {result.success} nuevos usuarios.</p>
+                                <h3 className="text-xl font-black uppercase text-foreground tracking-tight">Importación Exitosa</h3>
+                                <p className="text-sm text-muted-foreground">Se han creado {result.success} nuevos usuarios.</p>
                             </div>
                             <Button
                                 onClick={handleClose}
-                                className="w-full max-w-xs bg-white text-black hover:bg-neutral-200 uppercase font-black text-xs h-10 tracking-widest shadow-xl mt-4"
+                                className="w-full max-w-xs bg-white text-black hover:bg-muted uppercase font-black text-xs h-10 tracking-widest shadow-xl mt-4"
                             >
                                 Finalizar
                             </Button>

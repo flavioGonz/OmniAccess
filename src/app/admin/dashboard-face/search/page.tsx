@@ -75,12 +75,12 @@ export default function SearchFacePage() {
         <div className="min-h-screen bg-black text-white p-12">
             <div className="max-w-4xl mx-auto space-y-12">
                 <header className="flex items-center gap-6">
-                    <Link href="/admin/dashboard-face" className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-all">
+                    <Link href="/admin/dashboard-face" className="w-12 h-12 rounded-full bg-foreground/10 flex items-center justify-center hover:bg-accent transition-all">
                         <ChevronLeft size={24} />
                     </Link>
                     <div>
                         <h1 className="text-4xl font-black uppercase tracking-tighter">Buscador Inteligente</h1>
-                        <p className="text-sm text-neutral-500 font-bold uppercase tracking-widest mt-1">Motor de Interrogación Biométrica OmniAccess</p>
+                        <p className="text-sm text-muted-foreground font-bold uppercase tracking-widest mt-1">Motor de Interrogación Biométrica OmniAccess</p>
                     </div>
                 </header>
 
@@ -88,32 +88,32 @@ export default function SearchFacePage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div
                             onClick={() => document.getElementById('img-search')?.click()}
-                            className="p-8 rounded-[3rem] bg-neutral-900/30 border border-white/5 hover:bg-[#B20D30]/10 hover:border-[#B20D30]/30 transition-all cursor-pointer flex flex-col items-center gap-4 text-center group"
+                            className="p-8 rounded-[3rem] bg-card/30 border border-border hover:bg-[#B20D30]/10 hover:border-[#B20D30]/30 transition-all cursor-pointer flex flex-col items-center gap-4 text-center group"
                         >
-                            {isSearchingImg ? <Loader2 className="animate-spin text-[#B20D30]" size={40} /> : <ImageIcon className="text-neutral-600 group-hover:text-[#B20D30] transition-colors" size={40} />}
+                            {isSearchingImg ? <Loader2 className="animate-spin text-[#B20D30]" size={40} /> : <ImageIcon className="text-muted-foreground group-hover:text-[#B20D30] transition-colors" size={40} />}
                             <div>
-                                <h4 className="text-sm font-black uppercase text-white">Búsqueda Visual</h4>
-                                <p className="text-[10px] text-neutral-600 font-bold uppercase mt-1">Comparación por Fotografía</p>
+                                <h4 className="text-sm font-black uppercase text-foreground">Búsqueda Visual</h4>
+                                <p className="text-[10px] text-muted-foreground font-bold uppercase mt-1">Comparación por Fotografía</p>
                             </div>
                         </div>
                         <input id="img-search" type="file" accept="image/*" className="hidden" onChange={handleImageSearch} />
 
-                        <div className="p-8 rounded-[3rem] bg-neutral-900/30 border border-white/5 hover:bg-blue-500/10 hover:border-blue-500/30 transition-all flex flex-col items-center gap-4 text-center group">
-                            <Fingerprint className="text-neutral-600 group-hover:text-blue-500 transition-colors" size={40} />
+                        <div className="p-8 rounded-[3rem] bg-card/30 border border-border hover:bg-blue-500/10 hover:border-blue-500/30 transition-all flex flex-col items-center gap-4 text-center group">
+                            <Fingerprint className="text-muted-foreground group-hover:text-blue-500 transition-colors" size={40} />
                             <div>
-                                <h4 className="text-sm font-black uppercase text-white">Huella Digital</h4>
-                                <p className="text-[10px] text-neutral-600 font-bold uppercase mt-1">Próximamente</p>
+                                <h4 className="text-sm font-black uppercase text-foreground">Huella Digital</h4>
+                                <p className="text-[10px] text-muted-foreground font-bold uppercase mt-1">Próximamente</p>
                             </div>
                         </div>
                     </div>
 
                     <div className="relative">
-                        <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-neutral-600" size={24} />
+                        <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-muted-foreground" size={24} />
                         <Input
                             value={query}
                             onChange={(e) => handleTextSearch(e.target.value)}
                             placeholder="Buscar por Nombre, DNI o Unidad..."
-                            className="h-20 bg-neutral-900/50 border-white/10 pl-16 rounded-[2.5rem] text-xl font-bold uppercase focus:ring-2 focus:ring-[#B20D30] transition-all"
+                            className="h-20 bg-card/50 border-border pl-16 rounded-[2.5rem] text-xl font-bold uppercase focus:ring-2 focus:ring-[#B20D30] transition-all"
                         />
                     </div>
                 </div>
@@ -128,8 +128,8 @@ export default function SearchFacePage() {
                                 className="absolute inset-x-0 h-1 bg-white shadow-[0_0_20px_white] z-10"
                             />
                             <div className="z-20 flex flex-col items-center gap-4">
-                                <Loader2 className="animate-spin text-white" size={48} />
-                                <p className="text-xs font-black uppercase tracking-[0.5em] text-white animate-pulse">Scanning Neural Database...</p>
+                                <Loader2 className="animate-spin text-foreground" size={48} />
+                                <p className="text-xs font-black uppercase tracking-[0.5em] text-foreground animate-pulse">Scanning Neural Database...</p>
                             </div>
                         </div>
                     ) : (
@@ -142,10 +142,10 @@ export default function SearchFacePage() {
                                 >
                                     <div>
                                         <p className="text-[10px] font-black text-[#B20D30] uppercase tracking-widest">Coincidencia Biométrica</p>
-                                        <h4 className="text-2xl font-black text-white uppercase italic">{match.subject}</h4>
+                                        <h4 className="text-2xl font-black text-foreground uppercase italic">{match.subject}</h4>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">Confianza</p>
+                                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Confianza</p>
                                         <h4 className="text-2xl font-black text-emerald-500">{(match.similarity * 100).toFixed(1)}%</h4>
                                     </div>
                                 </motion.div>
@@ -153,13 +153,13 @@ export default function SearchFacePage() {
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 {results.map(user => (
-                                    <div key={user.id} className="bg-neutral-900/50 border border-white/5 p-6 rounded-[2.5rem] flex items-center gap-6 hover:bg-neutral-800 transition-all group">
-                                        <div className="w-20 h-20 rounded-2xl overflow-hidden relative border border-white/10 shrink-0">
+                                    <div key={user.id} className="bg-card/50 border border-border p-6 rounded-[2.5rem] flex items-center gap-6 hover:bg-muted transition-all group">
+                                        <div className="w-20 h-20 rounded-2xl overflow-hidden relative border border-border shrink-0">
                                             <Image src={getImagePath(user.cara) || "/placeholder-face.jpg"} alt="" fill className="object-cover grayscale group-hover:grayscale-0 transition-all" />
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <h4 className="text-lg font-black uppercase truncate text-white tracking-tighter">{user.name}</h4>
-                                            <p className="text-xs text-neutral-600 font-bold uppercase truncate">{user.dni || "---"} • {user.unit?.name || "Visitante"}</p>
+                                            <h4 className="text-lg font-black uppercase truncate text-foreground tracking-tighter">{user.name}</h4>
+                                            <p className="text-xs text-muted-foreground font-bold uppercase truncate">{user.dni || "---"} • {user.unit?.name || "Visitante"}</p>
                                         </div>
                                     </div>
                                 ))}

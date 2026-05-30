@@ -188,15 +188,15 @@ export function ImportUsersDialog({ onSuccess }: ImportUsersDialogProps) {
             </Tooltip>
 
             <Dialog open={open} onOpenChange={setOpen}>
-                <DialogContent className="max-w-4xl bg-[#09090b] border border-white/10 p-0 overflow-hidden">
-                    <DialogHeader className="p-6 bg-[#0c0c0c] border-b border-white/5">
-                        <DialogTitle className="text-xl font-black text-white uppercase flex items-center gap-3">
+                <DialogContent className="max-w-4xl bg-[#09090b] border border-border p-0 overflow-hidden">
+                    <DialogHeader className="p-6 bg-[#0c0c0c] border-b border-border">
+                        <DialogTitle className="text-xl font-black text-foreground uppercase flex items-center gap-3">
                             <div className="p-2 bg-[#107c41]/10 rounded border border-[#107c41]/20">
                                 <FileSpreadsheet className="text-[#107c41]" size={24} />
                             </div>
                             Importación Masiva
                         </DialogTitle>
-                        <DialogDescription className="text-neutral-400">
+                        <DialogDescription className="text-muted-foreground">
                             Carga nuevos usuarios o actualiza existentes mediante un archivo Excel (.xlsx).
                         </DialogDescription>
                     </DialogHeader>
@@ -205,7 +205,7 @@ export function ImportUsersDialog({ onSuccess }: ImportUsersDialogProps) {
                         {/* Upload Area */}
                         {!file ? (
                             <div
-                                className="border-2 border-dashed border-white/10 rounded-xl p-10 flex flex-col items-center justify-center gap-4 hover:bg-white/5 transition-colors cursor-pointer group"
+                                className="border-2 border-dashed border-border rounded-xl p-10 flex flex-col items-center justify-center gap-4 hover:bg-accent transition-colors cursor-pointer group"
                                 onClick={() => fileInputRef.current?.click()}
                             >
                                 <input
@@ -215,12 +215,12 @@ export function ImportUsersDialog({ onSuccess }: ImportUsersDialogProps) {
                                     accept=".xlsx, .xls"
                                     onChange={handleFileChange}
                                 />
-                                <div className="w-16 h-16 rounded-full bg-neutral-800 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                    <Upload className="text-neutral-400 group-hover:text-white" size={32} />
+                                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <Upload className="text-muted-foreground group-hover:text-foreground" size={32} />
                                 </div>
                                 <div className="text-center">
-                                    <p className="text-sm font-bold text-white uppercase tracking-widest">Haz click para seleccionar archivo</p>
-                                    <p className="text-xs text-neutral-500 mt-1">Soporta formatos .xlsx</p>
+                                    <p className="text-sm font-bold text-foreground uppercase tracking-widest">Haz click para seleccionar archivo</p>
+                                    <p className="text-xs text-muted-foreground mt-1">Soporta formatos .xlsx</p>
                                 </div>
                                 <Button variant="link" onClick={(e) => { e.stopPropagation(); downloadTemplate(); }} className="text-[#107c41] text-xs">
                                     <Download size={12} className="mr-1" /> Descargar Plantilla
@@ -228,14 +228,14 @@ export function ImportUsersDialog({ onSuccess }: ImportUsersDialogProps) {
                             </div>
                         ) : (
                             <div className="space-y-4">
-                                <div className="flex items-center justify-between p-4 bg-neutral-900 rounded-lg border border-white/10">
+                                <div className="flex items-center justify-between p-4 bg-card rounded-lg border border-border">
                                     <div className="flex items-center gap-3">
                                         <div className="p-2 bg-[#107c41]/20 text-[#107c41] rounded">
                                             <FileSpreadsheet size={24} />
                                         </div>
                                         <div>
-                                            <p className="text-sm font-bold text-white truncate max-w-[200px]">{file.name}</p>
-                                            <p className="text-xs text-neutral-500">{previewData.length} registros detectados</p>
+                                            <p className="text-sm font-bold text-foreground truncate max-w-[200px]">{file.name}</p>
+                                            <p className="text-xs text-muted-foreground">{previewData.length} registros detectados</p>
                                         </div>
                                     </div>
                                     <Button size="sm" variant="ghost" onClick={() => { setFile(null); setPreviewData([]); }}>
@@ -245,31 +245,31 @@ export function ImportUsersDialog({ onSuccess }: ImportUsersDialogProps) {
 
                                 {/* Preview Table */}
                                 <div className="border border-white/10 rounded-lg overflow-hidden bg-black/20 h-64 flex flex-col">
-                                    <div className="p-2 bg-white/5 border-b border-white/5 text-[10px] font-bold uppercase text-neutral-400 tracking-widest">Vista Previa</div>
+                                    <div className="p-2 bg-foreground/10 border-b border-border text-[10px] font-bold uppercase text-muted-foreground tracking-widest">Vista Previa</div>
                                     <ScrollArea className="flex-1">
                                         {loading ? (
                                             <div className="flex items-center justify-center h-full">
-                                                <Loader2 className="animate-spin text-neutral-500" />
+                                                <Loader2 className="animate-spin text-muted-foreground" />
                                             </div>
                                         ) : (
                                             <Table>
                                                 <TableHeader>
-                                                    <TableRow className="border-white/5 hover:bg-transparent">
-                                                        <TableHead className="text-[10px] text-neutral-500">Nombre</TableHead>
-                                                        <TableHead className="text-[10px] text-neutral-500">DNI</TableHead>
-                                                        <TableHead className="text-[10px] text-neutral-500">Rol</TableHead>
-                                                        <TableHead className="text-[10px] text-neutral-500">Unidad</TableHead>
-                                                        <TableHead className="text-[10px] text-neutral-500 text-right">Credenciales</TableHead>
+                                                    <TableRow className="border-border hover:bg-transparent">
+                                                        <TableHead className="text-[10px] text-muted-foreground">Nombre</TableHead>
+                                                        <TableHead className="text-[10px] text-muted-foreground">DNI</TableHead>
+                                                        <TableHead className="text-[10px] text-muted-foreground">Rol</TableHead>
+                                                        <TableHead className="text-[10px] text-muted-foreground">Unidad</TableHead>
+                                                        <TableHead className="text-[10px] text-muted-foreground text-right">Credenciales</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
                                                     {previewData.slice(0, 50).map((row, idx) => (
-                                                        <TableRow key={idx} className="border-white/5 hover:bg-white/5">
-                                                            <TableCell className="text-xs font-bold text-white uppercase">{row.Name || "-"}</TableCell>
-                                                            <TableCell className="text-xs text-neutral-400 font-mono">{row.DNI || "-"}</TableCell>
-                                                            <TableCell className="text-[10px] text-neutral-400 uppercase">{row.Role || "RESIDENT"}</TableCell>
-                                                            <TableCell className="text-[10px] text-neutral-400 uppercase">{row.Unidad || "-"}</TableCell>
-                                                            <TableCell className="text-[10px] text-neutral-500 text-right font-mono">
+                                                        <TableRow key={idx} className="border-border hover:bg-accent">
+                                                            <TableCell className="text-xs font-bold text-foreground uppercase">{row.Name || "-"}</TableCell>
+                                                            <TableCell className="text-xs text-muted-foreground font-mono">{row.DNI || "-"}</TableCell>
+                                                            <TableCell className="text-[10px] text-muted-foreground uppercase">{row.Role || "RESIDENT"}</TableCell>
+                                                            <TableCell className="text-[10px] text-muted-foreground uppercase">{row.Unidad || "-"}</TableCell>
+                                                            <TableCell className="text-[10px] text-muted-foreground text-right font-mono">
                                                                 {[
                                                                     row.Plates ? `${row.Plates.split(',').length} Pat.` : null,
                                                                     row.Tags ? `${row.Tags.split(',').length} Tags` : null,
@@ -288,7 +288,7 @@ export function ImportUsersDialog({ onSuccess }: ImportUsersDialogProps) {
                                     <Button
                                         onClick={handleImport}
                                         disabled={loading || importing || previewData.length === 0}
-                                        className="bg-[#107c41] hover:bg-[#0b5c30] text-white"
+                                        className="bg-[#107c41] hover:bg-[#0b5c30] text-foreground"
                                     >
                                         {importing ? <Loader2 className="animate-spin mr-2" size={16} /> : <CheckCircle2 className="mr-2" size={16} />}
                                         Confirmar e Importar

@@ -156,7 +156,7 @@ export function TreeDiagram({ data: initialData }: TreeDiagramProps) {
 
     return (
         <div className={cn(
-            "w-full h-full bg-[#080808] relative overflow-hidden transition-all duration-500 rounded-3xl border border-white/5",
+            "w-full h-full bg-[#080808] relative overflow-hidden transition-all duration-500 rounded-3xl border border-border",
             isFullScreen ? "fixed inset-0 z-[100] rounded-none border-none" : "shadow-3xl"
         )}>
             {/* Legend & Controls Overlay */}
@@ -164,14 +164,14 @@ export function TreeDiagram({ data: initialData }: TreeDiagramProps) {
                 <div className="bg-black/60 backdrop-blur-xl border border-white/5 p-4 rounded-2xl flex flex-col gap-2 shadow-2xl pointer-events-auto">
                     <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
-                        <span className="text-[9px] font-black text-white/60 uppercase tracking-widest">Operativo</span>
+                        <span className="text-[9px] font-black text-foreground/70 uppercase tracking-widest">Operativo</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)] animate-pulse" />
-                        <span className="text-[9px] font-black text-white/60 uppercase tracking-widest">En Desarrollo</span>
+                        <span className="text-[9px] font-black text-foreground/70 uppercase tracking-widest">En Desarrollo</span>
                     </div>
                     {isSaving && (
-                        <div className="mt-2 pt-2 border-t border-white/5 flex items-center gap-2">
+                        <div className="mt-2 pt-2 border-t border-border flex items-center gap-2">
                             <RefreshCcw size={10} className="text-blue-400 animate-spin" />
                             <span className="text-[8px] font-black text-blue-400 uppercase tracking-widest">Guardando...</span>
                         </div>
@@ -182,7 +182,7 @@ export function TreeDiagram({ data: initialData }: TreeDiagramProps) {
             <div className="absolute top-6 right-6 z-20 flex gap-3">
                 <Button
                     variant="outline" size="icon"
-                    className="bg-neutral-900 border-white/5 hover:bg-neutral-800 rounded-xl"
+                    className="bg-card border-border hover:bg-muted rounded-xl"
                     onClick={() => setIsFullScreen(!isFullScreen)}
                 >
                     {isFullScreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
@@ -190,14 +190,14 @@ export function TreeDiagram({ data: initialData }: TreeDiagramProps) {
                 <div className="flex flex-col gap-1.5">
                     <Button
                         variant="outline" size="icon"
-                        className="bg-neutral-900 border-white/5 hover:bg-neutral-800 rounded-xl h-10 w-10"
+                        className="bg-card border-border hover:bg-muted rounded-xl h-10 w-10"
                         onClick={() => d3.select(svgRef.current).transition().call(d3.zoom<SVGSVGElement, any>().scaleBy as any, 1.3)}
                     >
                         <Plus size={18} />
                     </Button>
                     <Button
                         variant="outline" size="icon"
-                        className="bg-neutral-900 border-white/5 hover:bg-neutral-800 rounded-xl h-10 w-10"
+                        className="bg-card border-border hover:bg-muted rounded-xl h-10 w-10"
                         onClick={() => d3.select(svgRef.current).transition().call(d3.zoom<SVGSVGElement, any>().scaleBy as any, 0.7)}
                     >
                         <div className="w-4 h-0.5 bg-current rounded-full" />
@@ -260,14 +260,14 @@ export function TreeDiagram({ data: initialData }: TreeDiagramProps) {
                                                 "inline-flex items-center gap-2.5 px-3 py-1.5 rounded-xl border backdrop-blur-md transition-all duration-300 group hover:shadow-2xl hover:shadow-white/5",
                                                 node.data.type === 'section'
                                                     ? 'bg-blue-500/10 border-blue-500/30 text-blue-100'
-                                                    : 'bg-neutral-900 border-neutral-800 text-neutral-400'
+                                                    : 'bg-card border-border text-muted-foreground'
                                             )}>
                                                 {Icon && <Icon size={11} className="opacity-60" />}
                                                 <span className="text-[10px] font-bold uppercase tracking-widest whitespace-nowrap truncate max-w-[120px]">
                                                     {node.data.name}
                                                 </span>
 
-                                                <div className="flex items-center gap-1 opacity-0 group-hover/node:opacity-100 transition-opacity ml-1 border-l border-white/10 pl-2 pointer-events-auto">
+                                                <div className="flex items-center gap-1 opacity-0 group-hover/node:opacity-100 transition-opacity ml-1 border-l border-border pl-2 pointer-events-auto">
                                                     <button onClick={() => addNode(node.data.id)} className="p-1 hover:text-emerald-400"><Plus size={12} /></button>
                                                     <button onClick={() => setEditingNode(node.data)} className="p-1 hover:text-blue-400"><Settings size={10} /></button>
                                                     {node.data.id !== "root" && (
@@ -276,7 +276,7 @@ export function TreeDiagram({ data: initialData }: TreeDiagramProps) {
                                                 </div>
                                             </div>
                                             {node.data.description && (
-                                                <div className="text-[8px] font-medium text-neutral-600 uppercase tracking-tighter px-2 truncate max-w-[180px]">
+                                                <div className="text-[8px] font-medium text-muted-foreground uppercase tracking-tighter px-2 truncate max-w-[180px]">
                                                     {node.data.description}
                                                 </div>
                                             )}
@@ -292,9 +292,9 @@ export function TreeDiagram({ data: initialData }: TreeDiagramProps) {
             {/* Edit Modal */}
             {editingNode && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[110] p-4 animate-in fade-in duration-300">
-                    <div className="bg-[#0c0c0c] rounded-3xl border border-white/5 p-8 max-w-sm w-full shadow-3xl space-y-6">
+                    <div className="bg-[#0c0c0c] rounded-3xl border border-border p-8 max-w-sm w-full shadow-3xl space-y-6">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-lg font-black text-white uppercase tracking-tighter">Editar Módulo</h3>
+                            <h3 className="text-lg font-black text-foreground uppercase tracking-tighter">Editar Módulo</h3>
                             <Button variant="ghost" size="icon" onClick={() => setEditingNode(null)} className="rounded-xl">
                                 <X size={20} />
                             </Button>
@@ -302,26 +302,26 @@ export function TreeDiagram({ data: initialData }: TreeDiagramProps) {
 
                         <div className="space-y-4">
                             <div className="space-y-1.5">
-                                <label className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">Nombre</label>
+                                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Nombre</label>
                                 <input
-                                    className="w-full h-10 bg-neutral-900 border border-white/5 rounded-xl px-4 text-xs font-bold text-white focus:outline-none"
+                                    className="w-full h-10 bg-card border border-border rounded-xl px-4 text-xs font-bold text-foreground focus:outline-none"
                                     defaultValue={editingNode.name}
                                     onChange={(e) => editingNode.name = e.target.value}
                                 />
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">Descripción</label>
+                                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Descripción</label>
                                 <input
-                                    className="w-full h-10 bg-neutral-900 border border-white/5 rounded-xl px-4 text-xs font-medium text-neutral-400 focus:outline-none"
+                                    className="w-full h-10 bg-card border border-border rounded-xl px-4 text-xs font-medium text-muted-foreground focus:outline-none"
                                     defaultValue={editingNode.description}
                                     onChange={(e) => editingNode.description = e.target.value}
                                 />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
-                                    <label className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">Tipo</label>
+                                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Tipo</label>
                                     <select
-                                        className="w-full h-10 bg-neutral-900 border border-white/5 rounded-xl px-3 text-[10px] font-black text-white outline-none"
+                                        className="w-full h-10 bg-card border border-border rounded-xl px-3 text-[10px] font-black text-foreground outline-none"
                                         defaultValue={editingNode.type}
                                         onChange={(e) => editingNode.type = e.target.value as any}
                                     >
@@ -330,9 +330,9 @@ export function TreeDiagram({ data: initialData }: TreeDiagramProps) {
                                     </select>
                                 </div>
                                 <div className="space-y-1.5">
-                                    <label className="text-[10px] font-black text-neutral-500 uppercase tracking-widest">Estado</label>
+                                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Estado</label>
                                     <select
-                                        className="w-full h-10 bg-neutral-900 border border-white/5 rounded-xl px-3 text-[10px] font-black text-white outline-none"
+                                        className="w-full h-10 bg-card border border-border rounded-xl px-3 text-[10px] font-black text-foreground outline-none"
                                         defaultValue={editingNode.status}
                                         onChange={(e) => editingNode.status = e.target.value as any}
                                     >

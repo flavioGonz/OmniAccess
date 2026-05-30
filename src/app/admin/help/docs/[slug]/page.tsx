@@ -282,7 +282,7 @@ export default async function DocumentationPage({ params }: { params: Params }) 
         title: `Módulo: ${slug}`,
         header: "Documentación en curso",
         icon: Book,
-        color: "text-neutral-400",
+        color: "text-muted-foreground",
         description: "Este módulo está siendo documentado actualmente. Por favor revisa más tarde.",
         guide: [
             {
@@ -302,36 +302,36 @@ export default async function DocumentationPage({ params }: { params: Params }) 
             <div className="flex items-center justify-between">
                 <Link
                     href="/admin/help"
-                    className="group flex items-center gap-3 text-neutral-500 hover:text-white transition-all"
+                    className="group flex items-center gap-3 text-muted-foreground hover:text-foreground transition-all"
                 >
-                    <div className="w-10 h-10 rounded-xl bg-neutral-900 border border-white/5 flex items-center justify-center group-hover:bg-neutral-800">
+                    <div className="w-10 h-10 rounded-xl bg-card border border-border flex items-center justify-center group-hover:bg-muted">
                         <ChevronLeft size={20} />
                     </div>
                     <span className="text-xs font-black uppercase tracking-widest">Volver al Centro de Soporte</span>
                 </Link>
 
-                <div className="flex items-center gap-2 px-4 py-1.5 bg-neutral-900 border border-white/5 rounded-full">
+                <div className="flex items-center gap-2 px-4 py-1.5 bg-card border border-border rounded-full">
                     <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-[10px] font-black text-white uppercase tracking-widest">Documento v1.4.2</span>
+                    <span className="text-[10px] font-black text-foreground uppercase tracking-widest">Documento v1.4.2</span>
                 </div>
             </div>
 
             {/* Hero Section */}
-            <section className="relative p-12 bg-neutral-900 border border-white/10 rounded-[2.5rem] overflow-hidden shadow-3xl">
+            <section className="relative p-12 bg-card border border-border rounded-[2.5rem] overflow-hidden shadow-3xl">
                 <div className={`absolute top-0 right-0 p-8 opacity-5 ${doc.color}`}>
                     <Icon size={300} />
                 </div>
 
                 <div className="relative z-10 flex flex-col md:flex-row items-center gap-10">
-                    <div className={`w-20 h-20 rounded-3xl bg-neutral-800 border-2 border-white/5 flex items-center justify-center shadow-2xl ${doc.color}`}>
+                    <div className={`w-20 h-20 rounded-3xl bg-muted border-2 border-border flex items-center justify-center shadow-2xl ${doc.color}`}>
                         <Icon size={40} />
                     </div>
                     <div className="text-center md:text-left flex-1">
                         <p className={`text-xs font-black uppercase tracking-[0.3em] mb-3 ${doc.color}`}>{doc.header}</p>
-                        <h1 className="text-4xl md:text-5xl font-black text-white uppercase tracking-tighter leading-none mb-4">
+                        <h1 className="text-4xl md:text-5xl font-black text-foreground uppercase tracking-tighter leading-none mb-4">
                             {doc.title}
                         </h1>
-                        <p className="text-neutral-400 text-lg font-medium max-w-2xl leading-relaxed">
+                        <p className="text-muted-foreground text-lg font-medium max-w-2xl leading-relaxed">
                             {doc.description}
                         </p>
                     </div>
@@ -343,7 +343,7 @@ export default async function DocumentationPage({ params }: { params: Params }) 
                 <div className="lg:col-span-8 space-y-16">
                     {doc.guide.map((item: any, i: number) => (
                         <article key={i} className="space-y-8 animate-in slide-in-from-bottom-6 duration-700" style={{ animationDelay: `${i * 150}ms` }}>
-                            <div className="relative h-96 overflow-hidden rounded-[2rem] border border-white/5 group shadow-2xl">
+                            <div className="relative h-96 overflow-hidden rounded-[2rem] border border-border group shadow-2xl">
                                 <Image
                                     src={item.image}
                                     alt={item.title}
@@ -352,12 +352,12 @@ export default async function DocumentationPage({ params }: { params: Params }) 
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-transparent to-transparent opacity-60" />
                                 <div className="absolute bottom-8 left-8 right-8 p-6 bg-black/40 backdrop-blur-xl border border-white/10 rounded-2xl">
-                                    <h3 className="text-xl font-black text-white uppercase tracking-tight">{item.title}</h3>
+                                    <h3 className="text-xl font-black text-foreground uppercase tracking-tight">{item.title}</h3>
                                 </div>
                             </div>
                             <div className="flex gap-6 px-4">
                                 <div className="w-1.5 h-auto bg-blue-600 rounded-full shrink-0" />
-                                <p className="text-lg text-neutral-400 leading-relaxed font-medium italic">
+                                <p className="text-lg text-muted-foreground leading-relaxed font-medium italic">
                                     "{item.text}"
                                 </p>
                             </div>
@@ -367,8 +367,8 @@ export default async function DocumentationPage({ params }: { params: Params }) 
 
                 {/* Sidebar Specs */}
                 <aside className="lg:col-span-4 space-y-8">
-                    <div className="p-8 bg-neutral-900 border border-white/5 rounded-[2rem] shadow-xl sticky top-8">
-                        <h4 className="text-xs font-black text-white uppercase tracking-widest mb-8 flex items-center gap-3">
+                    <div className="p-8 bg-card border border-border rounded-[2rem] shadow-xl sticky top-8">
+                        <h4 className="text-xs font-black text-foreground uppercase tracking-widest mb-8 flex items-center gap-3">
                             <Code size={16} className="text-blue-400" /> Especificaciones Técnicas
                         </h4>
 
@@ -376,24 +376,24 @@ export default async function DocumentationPage({ params }: { params: Params }) 
                             {doc.technical.map((tech: string, i: number) => (
                                 <div key={i} className="flex gap-4 group">
                                     <div className="w-1.5 h-1.5 rounded-full bg-blue-500/40 mt-1.5 shrink-0 group-hover:bg-blue-500 transition-colors" />
-                                    <p className="text-sm text-neutral-500 font-medium leading-normal group-hover:text-neutral-300 transition-colors">
+                                    <p className="text-sm text-muted-foreground font-medium leading-normal group-hover:text-muted-foreground transition-colors">
                                         {tech}
                                     </p>
                                 </div>
                             ))}
                         </div>
 
-                        <div className="mt-10 pt-8 border-t border-white/5 space-y-4">
-                            <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-neutral-600">
+                        <div className="mt-10 pt-8 border-t border-border space-y-4">
+                            <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                                 <span>Criticidad de Módulo</span>
                                 <span className="text-orange-500">Alta</span>
                             </div>
-                            <div className="w-full h-1 bg-neutral-800 rounded-full overflow-hidden">
+                            <div className="w-full h-1 bg-muted rounded-full overflow-hidden">
                                 <div className="w-[85%] h-full bg-gradient-to-r from-blue-600 to-indigo-600" />
                             </div>
                         </div>
 
-                        <button className="w-full mt-10 h-14 bg-white text-black font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl hover:bg-neutral-200 transition-all flex items-center justify-center gap-2">
+                        <button className="w-full mt-10 h-14 bg-white text-black font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl hover:bg-muted transition-all flex items-center justify-center gap-2">
                             Ver Repositorio <ExternalLink size={14} />
                         </button>
                     </div>
@@ -407,13 +407,13 @@ export default async function DocumentationPage({ params }: { params: Params }) 
                     { icon: Bell, title: "Alertas", text: "Configura notificaciones Push para este módulo." },
                     { icon: CheckCircle2, title: "Validado", text: "Cumple con normativas de protección de datos." }
                 ].map((tip, i) => (
-                    <div key={i} className="p-6 bg-neutral-900 border border-white/5 rounded-[1.5rem] flex items-start gap-4">
-                        <div className="p-3 bg-white/5 rounded-xl text-neutral-400">
+                    <div key={i} className="p-6 bg-card border border-border rounded-[1.5rem] flex items-start gap-4">
+                        <div className="p-3 bg-foreground/10 rounded-xl text-muted-foreground">
                             <tip.icon size={18} />
                         </div>
                         <div>
-                            <h5 className="text-[10px] font-black text-white uppercase tracking-widest mb-1">{tip.title}</h5>
-                            <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-tighter leading-normal">{tip.text}</p>
+                            <h5 className="text-[10px] font-black text-foreground uppercase tracking-widest mb-1">{tip.title}</h5>
+                            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tighter leading-normal">{tip.text}</p>
                         </div>
                     </div>
                 ))}

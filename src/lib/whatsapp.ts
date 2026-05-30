@@ -1,66 +1,75 @@
-import { prisma } from "@/lib/prisma";
 import { getSetting } from "@/app/actions/settings";
 import axios from "axios";
 
-export async function getWahaConfig() {
-    const [url, apiKey] = await Promise.all([
+/**
+ * OpenWA transport layer (replaces WAHA).
+ * OpenWA REST API (self-hosted on the LAN). Session-scoped endpoints:
+ *   POST /api/sessions/{session}/messages/send-text   body {chatId, text}
+ *   POST /api/sessions/{session}/messages/send-image  body {chatId, base64|url, mimetype, filename, caption}
+ * Auth header: X-API-Key. Config from Settings (OPENWA_* with WAHA_* fallback).
+ */
+export async function getWhatsAppConfig() {
+    const [url, apiKey, session, wahaUrl, wahaKey] = await Promise.all([
+        getSetting("OPENWA_URL"),
+        getSetting("OPENWA_API_KEY"),
+        getSetting("OPENWA_SESSION"),
         getSetting("WAHA_URL"),
-        getSetting("WAHA_API_KEY")
+        getSetting("WAHA_API_KEY"),
     ]);
     return {
-        url: url?.value || "http://localhost:3000",
-        apiKey: apiKey?.value
+        url: (url?.value || wahaUrl?.value || process.env.OPENWA_URL || "http://192.168.99.22:2785").replace(/\/+$/, ""),
+        apiKey: apiKey?.value || wahaKey?.value || process.env.OPENWA_API_KEY || "",
+        session: session?.value || process.env.OPENWA_SESSION || "omniaccess",
     };
+}
+
+// Backwards-compatible alias (older imports use getWahaConfig)
+export const getWahaConfig = getWhatsAppConfig;
+
+function authHeaders(apiKey?: string) {
+    const h: any = { "Content-Type": "application/json" };
+    if (apiKey) h["X-API-Key"] = apiKey;
+    return h;
 }
 
 export async function sendWahaText(chatId: string, text: string) {
     try {
-        const config = await getWahaConfig();
-        const headers: any = { 'Content-Type': 'application/json' };
-        if (config.apiKey) headers['X-Api-Key'] = config.apiKey;
-
-        await axios.post(`${config.url}/api/sendText`, {
-            chatId,
-            text,
-            session: "default"
-        }, { headers });
+        const cfg = await getWhatsAppConfig();
+        await axios.post(
+            `${cfg.url}/api/sessions/${encodeURIComponent(cfg.session)}/messages/send-text`,
+            { chatId, text },
+            { headers: authHeaders(cfg.apiKey), timeout: 15000 }
+        );
         return { success: true };
     } catch (error: any) {
-        console.error("Failed to send WAHA text:", error.message);
-        return { success: false, error: error.message };
+        const msg = error?.response?.data?.message || error.message;
+        console.error("Failed to send WhatsApp text:", msg);
+        return { success: false, error: msg };
     }
 }
 
-export async function sendWahaImage(chatId: string, image: { url?: string, base64?: string }, caption?: string) {
+export async function sendWahaImage(chatId: string, image: { url?: string; base64?: string }, caption?: string) {
     try {
-        const config = await getWahaConfig();
-        const headers: any = { 'Content-Type': 'application/json' };
-        if (config.apiKey) headers['X-Api-Key'] = config.apiKey;
-
-        const body: any = {
-            chatId,
-            file: {
-                mimetype: "image/jpeg",
-                filename: "snapshot.jpg",
-            },
-            caption: caption,
-            session: "default"
-        };
-
+        const cfg = await getWhatsAppConfig();
+        const body: any = { chatId, mimetype: "image/jpeg", filename: "snapshot.jpg" };
+        if (caption) body.caption = caption;
         if (image.base64) {
-            // Ensure base64 string doesn't include the data:image/xxx;base64, prefix if WAHA behaves standardly,
-            // but usually libraries accept plain base64 data.
-            // Check if it has prefix and strip it if needed, or pass full data uri.
-            // WAHA documentation usually expects data URI or plain base64. Let's try passing the data URI format if available.
-            body.file.data = image.base64;
+            body.base64 = image.base64.replace(/^data:[^;]+;base64,/, "");
         } else if (image.url) {
-            body.file.url = image.url;
+            body.url = image.url;
         }
-
-        await axios.post(`${config.url}/api/sendImage`, body, { headers });
+        await axios.post(
+            `${cfg.url}/api/sessions/${encodeURIComponent(cfg.session)}/messages/send-image`,
+            body,
+            { headers: authHeaders(cfg.apiKey), timeout: 20000 }
+        );
         return { success: true };
     } catch (error: any) {
-        console.error("Failed to send WAHA image:", error.message);
-        return { success: false, error: error.message };
+        const msg = error?.response?.data?.message || error.message;
+        console.error("Failed to send WhatsApp image:", msg);
+        return { success: false, error: msg };
     }
 }
+
+export const sendOpenWAText = sendWahaText;
+export const sendOpenWAImage = sendWahaImage;

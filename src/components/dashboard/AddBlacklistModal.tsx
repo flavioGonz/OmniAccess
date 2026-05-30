@@ -90,20 +90,20 @@ export function AddBlacklistModal({ isOpen, onClose, onSuccess }: AddBlacklistMo
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                        className="bg-[#0a0a0a] border border-white/10 rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl"
+                        className="bg-[#0a0a0a] border border-border rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl"
                     >
                         {/* Header */}
-                        <div className="p-6 border-b border-white/5 flex items-center justify-between bg-gradient-to-r from-red-600/10 to-transparent">
+                        <div className="p-6 border-b border-border flex items-center justify-between bg-gradient-to-r from-red-600/10 to-transparent">
                             <div className="flex items-center gap-4">
                                 <div className="w-10 h-10 rounded-xl bg-red-600/20 flex items-center justify-center text-red-500">
                                     <ShieldAlert size={20} />
                                 </div>
                                 <div>
                                     <h2 className="text-xl font-black uppercase tracking-tight">Agregar a Lista Negra</h2>
-                                    <p className="text-[9px] text-neutral-500 font-black uppercase tracking-widest">Protocolo de Restricción Biométrica</p>
+                                    <p className="text-[9px] text-muted-foreground font-black uppercase tracking-widest">Protocolo de Restricción Biométrica</p>
                                 </div>
                             </div>
-                            <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-lg text-neutral-500 hover:text-white transition-colors">
+                            <button onClick={onClose} className="p-2 hover:bg-accent rounded-lg text-muted-foreground hover:text-foreground transition-colors">
                                 <X size={20} />
                             </button>
                         </div>
@@ -115,14 +115,14 @@ export function AddBlacklistModal({ isOpen, onClose, onSuccess }: AddBlacklistMo
                                 <div className="space-y-4">
                                     <div
                                         onClick={() => fileInputRef.current?.click()}
-                                        className="w-40 h-40 rounded-2xl border-2 border-dashed border-white/10 hover:border-red-600/50 bg-white/5 flex flex-col items-center justify-center gap-3 cursor-pointer transition-all overflow-hidden relative group"
+                                        className="w-40 h-40 rounded-2xl border-2 border-dashed border-border hover:border-red-600/50 bg-foreground/10 flex flex-col items-center justify-center gap-3 cursor-pointer transition-all overflow-hidden relative group"
                                     >
                                         {preview ? (
                                             <Image src={preview} alt="Preview" fill className="object-cover" />
                                         ) : (
                                             <>
-                                                <Camera className="text-neutral-600 group-hover:text-red-500 transition-colors" size={32} />
-                                                <span className="text-[8px] font-black uppercase tracking-widest text-neutral-600">Subir Rostro</span>
+                                                <Camera className="text-muted-foreground group-hover:text-red-500 transition-colors" size={32} />
+                                                <span className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Subir Rostro</span>
                                             </>
                                         )}
                                     </div>
@@ -138,20 +138,20 @@ export function AddBlacklistModal({ isOpen, onClose, onSuccess }: AddBlacklistMo
                                 {/* Inputs */}
                                 <div className="flex-1 space-y-4">
                                     <div className="space-y-1.5">
-                                        <label className="text-[9px] font-black uppercase tracking-[0.2em] text-neutral-500">Nombre Completo</label>
+                                        <label className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground">Nombre Completo</label>
                                         <input
                                             value={name}
                                             onChange={(e) => setName(e.target.value)}
-                                            className="w-full h-11 bg-white/5 border border-white/10 rounded-xl px-4 text-sm outline-none focus:border-red-600/50 transition-all font-bold"
+                                            className="w-full h-11 bg-foreground/10 border border-border rounded-xl px-4 text-sm outline-none focus:border-red-600/50 transition-all font-bold"
                                             placeholder="EJ: JUAN PEREZ"
                                         />
                                     </div>
                                     <div className="space-y-1.5">
-                                        <label className="text-[9px] font-black uppercase tracking-[0.2em] text-neutral-500">DNI / ID Interno (Opcional)</label>
+                                        <label className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground">DNI / ID Interno (Opcional)</label>
                                         <input
                                             value={dni}
                                             onChange={(e) => setDni(e.target.value)}
-                                            className="w-full h-11 bg-white/5 border border-white/10 rounded-xl px-4 text-sm outline-none focus:border-red-600/50 transition-all font-bold"
+                                            className="w-full h-11 bg-foreground/10 border border-border rounded-xl px-4 text-sm outline-none focus:border-red-600/50 transition-all font-bold"
                                             placeholder="EJ: 12345678"
                                         />
                                     </div>
@@ -159,11 +159,11 @@ export function AddBlacklistModal({ isOpen, onClose, onSuccess }: AddBlacklistMo
                             </div>
 
                             <div className="space-y-1.5">
-                                <label className="text-[9px] font-black uppercase tracking-[0.2em] text-neutral-500">Motivo de la Restricción</label>
+                                <label className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground">Motivo de la Restricción</label>
                                 <textarea
                                     value={reason}
                                     onChange={(e) => setReason(e.target.value)}
-                                    className="w-full h-24 bg-white/5 border border-white/10 rounded-xl p-4 text-sm outline-none focus:border-red-600/50 transition-all font-medium resize-none"
+                                    className="w-full h-24 bg-foreground/10 border border-border rounded-xl p-4 text-sm outline-none focus:border-red-600/50 transition-all font-medium resize-none"
                                     placeholder="Describa el motivo por el cual este sujeto debe ser restringido..."
                                 />
                             </div>
@@ -172,14 +172,14 @@ export function AddBlacklistModal({ isOpen, onClose, onSuccess }: AddBlacklistMo
                                 <button
                                     type="button"
                                     onClick={onClose}
-                                    className="flex-1 h-14 rounded-xl border border-white/10 text-[10px] font-black uppercase tracking-widest hover:bg-white/5 transition-all"
+                                    className="flex-1 h-14 rounded-xl border border-border text-[10px] font-black uppercase tracking-widest hover:bg-accent transition-all"
                                 >
                                     Cancelar
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={loading}
-                                    className="flex-[2] h-14 bg-red-600 hover:bg-red-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-xl shadow-red-600/20 flex items-center justify-center gap-3 disabled:opacity-50"
+                                    className="flex-[2] h-14 bg-red-600 hover:bg-red-700 text-foreground rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-xl shadow-red-600/20 flex items-center justify-center gap-3 disabled:opacity-50"
                                 >
                                     {loading ? (
                                         <>

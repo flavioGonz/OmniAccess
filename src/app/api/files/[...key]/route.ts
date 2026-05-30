@@ -25,7 +25,6 @@ export async function GET(
         const bucketName = keyParts[0];
         const fileKey = keyParts.slice(1).join("/");
 
-        console.log(`[S3 Proxy] Attempting to fetch: ${fileKey} from bucket: ${bucketName}`);
 
         const command = new GetObjectCommand({
             Bucket: bucketName || BUCKET_NAME,
@@ -45,7 +44,6 @@ export async function GET(
             (response.Body as any).on('end', () => resolve(Buffer.concat(chunks)));
         });
 
-        console.log(`[S3 Proxy] Serving ${fileKey} from ${bucketName} (${byteArray.length} bytes)`);
 
         return new Response(byteArray as any, {
             status: 200,

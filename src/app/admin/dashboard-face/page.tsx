@@ -504,8 +504,8 @@ function FaceDashboardContent() {
                     <div className="w-full p-6 pb-0 pointer-events-auto">
                         <div className="h-[160px] w-full bg-transparent overflow-hidden relative">
                             <div className="absolute top-3 left-6 flex items-center gap-2 z-10">
-                                <Activity size={12} className="text-white/20 animate-pulse" />
-                                <span className="text-[11px] font-black uppercase tracking-[0.3em] text-white/40">Monitor En Vivo (ENTRADA)</span>
+                                <Activity size={12} className="text-muted-foreground animate-pulse" />
+                                <span className="text-[11px] font-black uppercase tracking-[0.3em] text-muted-foreground">Monitor En Vivo (ENTRADA)</span>
                             </div>
 
                             <div
@@ -542,7 +542,7 @@ function FaceDashboardContent() {
 
 
 
-                            <div className="h-[1px] w-6 bg-white/10 mx-auto my-1" />
+                            <div className="h-[1px] w-6 bg-foreground/10 mx-auto my-1" />
 
                             <button
                                 onClick={() => {
@@ -552,28 +552,28 @@ function FaceDashboardContent() {
                                 }}
                                 className={cn(
                                     "w-10 h-10 rounded-full flex items-center justify-center transition-all",
-                                    faceMode === "WHITELIST" ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)]" : "bg-red-600 text-white shadow-[0_0_15px_rgba(220,38,38,0.5)]"
+                                    faceMode === "WHITELIST" ? "bg-emerald-500 text-foreground shadow-[0_0_15px_rgba(16,185,129,0.5)]" : "bg-red-600 text-foreground shadow-[0_0_15px_rgba(220,38,38,0.5)]"
                                 )}
                                 title={`Modo actual: ${faceMode === "BLACKLIST" ? "LISTA NEGRA" : "LISTA BLANCA"}`}
                             >
                                 {faceMode === "WHITELIST" ? <ShieldCheck size={18} /> : <ShieldAlert size={18} />}
                             </button>
 
-                            <div className="h-[1px] w-6 bg-white/10 mx-auto my-1" />
+                            <div className="h-[1px] w-6 bg-foreground/10 mx-auto my-1" />
 
                             <Popover>
                                 <PopoverTrigger asChild>
-                                    <button className="w-10 h-10 rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all" title="Gestionar Planos">
+                                    <button className="w-10 h-10 rounded-full flex items-center justify-center text-foreground/70 hover:text-foreground hover:bg-accent transition-all" title="Gestionar Planos">
                                         <MapIcon size={18} />
                                     </button>
                                 </PopoverTrigger>
                                 <PopoverContent side="left" className="w-64 bg-black/90 border-white/10 backdrop-blur-xl p-4 rounded-2xl shadow-2xl z-[100]">
                                     <div className="space-y-4">
-                                        <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                                            <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest leading-none">PLANOS DISPONIBLES</span>
+                                        <div className="flex items-center justify-between border-b border-border pb-2">
+                                            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest leading-none">PLANOS DISPONIBLES</span>
                                             <button
                                                 onClick={() => mapFileInputRef.current?.click()}
-                                                className="w-6 h-6 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all text-white"
+                                                className="w-6 h-6 rounded-full bg-foreground/10 hover:bg-accent flex items-center justify-center transition-all text-foreground"
                                             >
                                                 <Upload size={12} />
                                             </button>
@@ -585,14 +585,14 @@ function FaceDashboardContent() {
                                                     onClick={() => setCurrentFloorPlan(fp)}
                                                     className={cn(
                                                         "w-full text-left px-3 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all",
-                                                        currentFloorPlan?.id === fp.id ? "bg-[#B20D30] text-white" : "text-neutral-400 hover:bg-white/5"
+                                                        currentFloorPlan?.id === fp.id ? "bg-[#B20D30] text-foreground" : "text-muted-foreground hover:bg-accent"
                                                     )}
                                                 >
                                                     {fp.name}
                                                 </button>
                                             ))}
                                             {floorPlans.length === 0 && (
-                                                <p className="text-[9px] text-neutral-600 uppercase font-black tracking-widest text-center py-4">Sin planos cargados</p>
+                                                <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest text-center py-4">Sin planos cargados</p>
                                             )}
                                         </div>
                                         <input
@@ -614,14 +614,14 @@ function FaceDashboardContent() {
                                 onCheckedChange={setIsAutoPopupEnabled}
                                 className="scale-75 data-[state=checked]:bg-[#B20D30]"
                             />
-                            <Label htmlFor="auto-popup-float" className="text-[8px] font-black uppercase tracking-widest text-white/40 cursor-pointer text-center leading-none">
+                            <Label htmlFor="auto-popup-float" className="text-[8px] font-black uppercase tracking-widest text-muted-foreground cursor-pointer text-center leading-none">
                                 AUTO
                             </Label>
                         </div>
 
                         <div className="flex flex-col items-center gap-1 mt-2">
                             <div className={cn("w-1.5 h-1.5 rounded-full animate-pulse", isConnected ? "bg-emerald-500 shadow-[0_0_10px_#10b981]" : "bg-red-600 shadow-[0_0_10px_#dc2626]")} />
-                            <span className="text-[7px] font-black text-white/20 uppercase tracking-tighter">{isConnected ? "ONLINE" : "OFFLINE"}</span>
+                            <span className="text-[7px] font-black text-muted-foreground uppercase tracking-tighter">{isConnected ? "ONLINE" : "OFFLINE"}</span>
                         </div>
                     </div>
 
@@ -629,8 +629,8 @@ function FaceDashboardContent() {
                     <div className="w-full p-6 pt-0 pointer-events-auto">
                         <div className="h-[160px] w-full bg-transparent overflow-hidden relative">
                             <div className="absolute top-3 left-6 flex items-center gap-2 z-10">
-                                <Activity size={12} className="text-white/20 animate-pulse" />
-                                <span className="text-[11px] font-black uppercase tracking-[0.3em] text-white/40">Monitor En Vivo (SALIDA)</span>
+                                <Activity size={12} className="text-muted-foreground animate-pulse" />
+                                <span className="text-[11px] font-black uppercase tracking-[0.3em] text-muted-foreground">Monitor En Vivo (SALIDA)</span>
                             </div>
 
                             <div
@@ -678,7 +678,7 @@ function FaceDashboardContent() {
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="relative w-full max-w-md bg-[#0A0A0A] border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
+                            className="relative w-full max-w-md bg-[#0A0A0A] border border-border rounded-2xl overflow-hidden shadow-2xl"
                         >
                             <div className={cn(
                                 "p-6 flex flex-col items-center text-center",
@@ -690,10 +690,10 @@ function FaceDashboardContent() {
                                 )}>
                                     {pendingMode === 'WHITELIST' ? <ShieldCheck size={32} /> : <ShieldAlert size={32} />}
                                 </div>
-                                <h3 className="text-xl font-black uppercase tracking-widest text-white mb-2">
+                                <h3 className="text-xl font-black uppercase tracking-widest text-foreground mb-2">
                                     ¿Activar Modo {pendingMode === 'WHITELIST' ? 'Lista Blanca' : 'Lista Negra'}?
                                 </h3>
-                                <p className="text-sm text-neutral-400 mb-6 px-4 leading-relaxed">
+                                <p className="text-sm text-muted-foreground mb-6 px-4 leading-relaxed">
                                     {pendingMode === 'WHITELIST'
                                         ? "Este modo prioriza la detección de residentes autorizados. El sistema registrará ingresos cotidianos y alertará solo en casos de discrepancias críticas con la base de datos de confianza."
                                         : "Este modo es restrictivo. El sistema buscará activamente sujetos marcados en la Lista Negra y disparará una alerta sensorial inmediata (visual y sonora) al detectar coincidencias."
@@ -702,7 +702,7 @@ function FaceDashboardContent() {
                                 <div className="flex gap-3 w-full">
                                     <button
                                         onClick={() => setShowModeConfirm(false)}
-                                        className="flex-1 h-12 bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest text-neutral-400 transition-all rounded-xl"
+                                        className="flex-1 h-12 bg-foreground/10 hover:bg-accent text-[10px] font-black uppercase tracking-widest text-muted-foreground transition-all rounded-xl"
                                     >
                                         Cancelar
                                     </button>
@@ -716,7 +716,7 @@ function FaceDashboardContent() {
                                             setShowModeConfirm(false);
                                         }}
                                         className={cn(
-                                            "flex-1 h-12 text-[10px] font-black uppercase tracking-widest text-white transition-all rounded-xl",
+                                            "flex-1 h-12 text-[10px] font-black uppercase tracking-widest text-foreground transition-all rounded-xl",
                                             pendingMode === 'WHITELIST' ? "bg-emerald-600 hover:bg-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.3)]" : "bg-red-600 hover:bg-red-500 shadow-[0_0_20px_rgba(220,38,38,0.3)]"
                                         )}
                                     >
@@ -749,10 +749,10 @@ function FaceDashboardContent() {
     );
 }
 
-function StatusRow({ label, value, color = "text-white" }: any) {
+function StatusRow({ label, value, color = "text-foreground" }: any) {
     return (
         <div className="flex items-center justify-between">
-            <span className="text-[9px] font-black text-neutral-600 uppercase tracking-widest">{label}</span>
+            <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">{label}</span>
             <span className={cn("text-[11px] font-black uppercase tracking-tight", color)}>{value}</span>
         </div>
     );
@@ -762,7 +762,7 @@ function NavButton({ icon, label, active = false }: { icon: React.ReactNode, lab
     return (
         <button className={cn(
             "h-12 px-6 flex items-center gap-3 transition-all border-none",
-            active ? "bg-[#B20D30] text-white shadow-[0_0_20px_rgba(178,13,48,0.3)]" : "text-white/40 hover:text-white hover:bg-white/5"
+            active ? "bg-[#B20D30] text-foreground shadow-[0_0_20px_rgba(178,13,48,0.3)]" : "text-muted-foreground hover:text-foreground hover:bg-accent"
         )}>
             {icon}
             <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
@@ -813,11 +813,11 @@ function FeedCard({ event, verification, currentTime, onClick }: FeedCardProps) 
         >
             {/* Image Container */}
             <div className={cn(
-                "w-24 h-24 bg-neutral-900 relative rounded-xl overflow-hidden border transition-all duration-300",
+                "w-24 h-24 bg-card relative rounded-xl overflow-hidden border transition-all duration-300",
                 isBlacklisted ? "border-red-600 shadow-[0_0_15px_rgba(220,38,38,0.3)]" :
                     isWhiteList ? "border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.2)]" :
                         isConflict || isSuspicious ? "border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)]" :
-                            "border-white/5 opacity-80 group-hover:opacity-100 group-hover:border-white/20"
+                            "border-border opacity-80 group-hover:opacity-100 group-hover:border-border"
             )}>
                 <img
                     src={getImagePath(event.snapshotPath) || ""}
@@ -830,7 +830,7 @@ function FeedCard({ event, verification, currentTime, onClick }: FeedCardProps) 
 
                 {/* Time Overlay (Top Right) */}
                 <div className="absolute top-1 right-1 bg-black/60 backdrop-blur-md px-1.5 py-0.5 rounded-md border border-white/10 z-10">
-                    <span className="text-[8px] font-black text-white/90 font-mono tracking-tighter">
+                    <span className="text-[8px] font-black text-foreground/70 font-mono tracking-tighter">
                         {timeStr}
                     </span>
                 </div>
@@ -853,14 +853,14 @@ function FeedCard({ event, verification, currentTime, onClick }: FeedCardProps) 
                         "w-2 h-2 rounded-full",
                         isBlacklisted ? "bg-red-600 animate-pulse" :
                             isWhiteList ? "bg-emerald-500" :
-                                isConflict || isSuspicious ? "bg-amber-500 animate-pulse" : "bg-neutral-600"
+                                isConflict || isSuspicious ? "bg-amber-500 animate-pulse" : "bg-muted"
                     )} />
                 </div>
 
                 {/* Similarity tag if identified */}
                 {similarity && similarity !== "0" && (
                     <div className="absolute bottom-1 right-1 bg-black/40 backdrop-blur-sm px-1 rounded border border-white/5">
-                        <span className="text-[7px] font-bold text-white/60">{similarity}%</span>
+                        <span className="text-[7px] font-bold text-foreground/70">{similarity}%</span>
                     </div>
                 )}
             </div>
@@ -871,13 +871,13 @@ function FeedCard({ event, verification, currentTime, onClick }: FeedCardProps) 
                     "text-[9px] font-black uppercase text-center leading-tight truncate w-full px-1",
                     isBlacklisted ? "text-red-500" :
                         isWhiteList ? "text-emerald-500" :
-                            isConflict || isSuspicious ? "text-amber-500" : "text-white/70 group-hover:text-white"
+                            isConflict || isSuspicious ? "text-amber-500" : "text-foreground/70 group-hover:text-foreground"
                 )}>
                     {displayName.split(' ')[0]} {/* Show first name only if too long */}
                 </span>
 
                 {/* Tactical Role Label (Tiny) */}
-                <span className="text-[6px] font-black tracking-widest text-white/20 uppercase leading-none truncate w-full text-center">
+                <span className="text-[6px] font-black tracking-widest text-muted-foreground uppercase leading-none truncate w-full text-center">
                     {event.device?.name?.replace('Terminal ', '') || (event.direction === 'EXIT' ? 'SALIDA' : 'ENTRADA')}
                 </span>
             </div>

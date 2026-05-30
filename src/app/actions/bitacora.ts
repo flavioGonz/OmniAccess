@@ -127,3 +127,63 @@ export async function searchRecentBitacora(query: string) {
         take: 5
     });
 }
+
+export async function getBitacoraForReport(from: Date, to: Date, query: string = "", guardName: string = "") {
+    const where: any = {
+        timestamp: {
+            gte: from,
+            lte: to
+        }
+    };
+
+    if (query) {
+        const queryFilter = [
+            { plate: { contains: query, mode: 'insensitive' as any } },
+            { name: { contains: query, mode: 'insensitive' as any } },
+            { dni: { contains: query, mode: 'insensitive' as any } },
+            { destination: { contains: query, mode: 'insensitive' as any } },
+            { notes: { contains: query, mode: 'insensitive' as any } },
+        ];
+        
+        if (where.OR) {
+             // If we already have OR (unlikely here but for safety)
+        } else {
+            where.OR = queryFilter;
+        }
+    }
+
+    if (guardName && guardName !== "ALL") {
+        where.guardName = guardName;
+    }
+
+    return await prisma.bitacora.findMany({
+        where,
+        orderBy: { timestamp: 'desc' },
+        include: {
+            accessEvent: {
+                include: {
+                    user: true,
+                    device: true
+                }
+            }
+        }
+    });
+}
+
+export async function getBitacoraGuards() {
+    try {
+        const entries = await prisma.bitacora.findMany({
+            where: {
+                guardName: { not: null }
+            },
+            select: {
+                guardName: true
+            },
+            distinct: ['guardName']
+        });
+        return entries.map(e => e.guardName).filter(Boolean) as string[];
+    } catch (error) {
+        console.error("Error fetching guards:", error);
+        return [];
+    }
+}

@@ -101,17 +101,17 @@ export function TagList({ initialTags, users }: TagListProps) {
             {/* Toolbar */}
             <div className="flex items-center justify-between gap-4">
                 <div className="relative flex-1 max-w-md">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" size={18} />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
                     <Input
                         placeholder="Buscar por tag o usuario..."
-                        className="pl-10 bg-neutral-900 border-neutral-800 h-11 rounded-xl"
+                        className="pl-10 bg-card border-border h-11 rounded-xl"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                     {searchTerm && (
                         <button
                             onClick={() => setSearchTerm("")}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                         >
                             <X size={16} />
                         </button>
@@ -120,7 +120,7 @@ export function TagList({ initialTags, users }: TagListProps) {
 
                 <div className="flex gap-2">
                     <Select value={filter} onValueChange={(v: any) => setFilter(v)}>
-                        <SelectTrigger className="w-[180px] bg-neutral-900 border-neutral-800">
+                        <SelectTrigger className="w-[180px] bg-card border-border">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -133,7 +133,7 @@ export function TagList({ initialTags, users }: TagListProps) {
                     <Button
                         variant="outline"
                         onClick={handlePurge}
-                        className="border-red-500/20 bg-red-500/5 text-red-500 hover:bg-red-500 hover:text-white"
+                        className="border-red-500/20 bg-red-500/5 text-red-500 hover:bg-red-500 hover:text-foreground"
                     >
                         <Trash2 size={16} className="mr-2" />
                         Purgar Datos
@@ -152,14 +152,14 @@ export function TagList({ initialTags, users }: TagListProps) {
                             </DialogHeader>
                             <div className="space-y-4 pt-4">
                                 <div>
-                                    <label className="text-sm font-bold text-white mb-2 block">
+                                    <label className="text-sm font-bold text-foreground mb-2 block">
                                         Número de Tag / UID
                                     </label>
                                     <Input
                                         placeholder="Ej: 1234567890"
                                         value={newTagValue}
                                         onChange={(e) => setNewTagValue(e.target.value)}
-                                        className="bg-neutral-900 border-neutral-800"
+                                        className="bg-card border-border"
                                     />
                                 </div>
                                 <div className="flex gap-2 justify-end">
@@ -177,36 +177,36 @@ export function TagList({ initialTags, users }: TagListProps) {
             </div>
 
             {/* Table */}
-            <div className="relative bg-neutral-900 rounded-xl border border-neutral-800 overflow-hidden">
+            <div className="relative bg-card rounded-xl border border-border overflow-hidden">
                 <div className="max-h-[calc(100vh-280px)] overflow-y-auto custom-scrollbar">
                     <table className="w-full">
-                        <thead className="sticky top-0 bg-neutral-900 z-10">
-                            <tr className="border-b border-neutral-800">
-                                <th className="text-left p-4 text-[10px] font-black text-neutral-500 uppercase tracking-widest">Tag / UID</th>
-                                <th className="text-left p-4 text-[10px] font-black text-neutral-500 uppercase tracking-widest">Usuario Asignado</th>
-                                <th className="text-left p-4 text-[10px] font-black text-neutral-500 uppercase tracking-widest">Unidad</th>
-                                <th className="text-left p-4 text-[10px] font-black text-neutral-500 uppercase tracking-widest">Estado</th>
-                                <th className="text-right p-4 text-[10px] font-black text-neutral-500 uppercase tracking-widest">Acciones</th>
+                        <thead className="sticky top-0 bg-card z-10">
+                            <tr className="border-b border-border">
+                                <th className="text-left p-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Tag / UID</th>
+                                <th className="text-left p-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Usuario Asignado</th>
+                                <th className="text-left p-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Unidad</th>
+                                <th className="text-left p-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Estado</th>
+                                <th className="text-right p-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-neutral-800/50">
                             {filteredTags.map((tag, index) => (
                                 <tr
                                     key={tag.id}
-                                    className="hover:bg-neutral-800/30 transition-colors group"
+                                    className="hover:bg-muted/30 transition-colors group"
                                     style={{ animationDelay: `${index * 50}ms` }}
                                 >
                                     {/* Tag Value */}
                                     <td className="p-4">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-lg bg-neutral-800 flex items-center justify-center border border-neutral-700 group-hover:border-emerald-500/30 transition-colors">
-                                                <CreditCard size={20} className="text-neutral-600 group-hover:text-emerald-400 transition-colors" />
+                                            <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center border border-border group-hover:border-emerald-500/30 transition-colors">
+                                                <CreditCard size={20} className="text-muted-foreground group-hover:text-emerald-400 transition-colors" />
                                             </div>
                                             <div>
-                                                <p className="text-sm font-black text-white font-mono tracking-wider">
+                                                <p className="text-sm font-black text-foreground font-mono tracking-wider">
                                                     {tag.value}
                                                 </p>
-                                                <p className="text-[10px] text-neutral-500 font-mono">
+                                                <p className="text-[10px] text-muted-foreground font-mono">
                                                     ID: {tag.id.slice(0, 8)}
                                                 </p>
                                             </div>
@@ -217,31 +217,31 @@ export function TagList({ initialTags, users }: TagListProps) {
                                     <td className="p-4">
                                         {tag.user && tag.userId ? (
                                             <div className="flex items-center gap-2">
-                                                <div className="w-8 h-8 rounded-full bg-neutral-800 flex items-center justify-center text-xs font-black text-neutral-400">
+                                                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-black text-muted-foreground">
                                                     {tag.user.name.charAt(0)}
                                                 </div>
                                                 <div>
-                                                    <p className="text-sm font-bold text-white">
+                                                    <p className="text-sm font-bold text-foreground">
                                                         {tag.user.name}
                                                     </p>
-                                                    <p className="text-xs text-neutral-500">
+                                                    <p className="text-xs text-muted-foreground">
                                                         {tag.user.email || tag.user.phone}
                                                     </p>
                                                 </div>
                                             </div>
                                         ) : (
-                                            <span className="text-xs text-neutral-600">Sin asignar</span>
+                                            <span className="text-xs text-muted-foreground">Sin asignar</span>
                                         )}
                                     </td>
 
                                     {/* Unit */}
                                     <td className="p-4">
                                         {tag.user?.unit ? (
-                                            <span className="text-sm text-neutral-400">
+                                            <span className="text-sm text-muted-foreground">
                                                 {tag.user.unit.name}
                                             </span>
                                         ) : (
-                                            <span className="text-xs text-neutral-600">-</span>
+                                            <span className="text-xs text-muted-foreground">-</span>
                                         )}
                                     </td>
 
@@ -303,11 +303,11 @@ export function TagList({ initialTags, users }: TagListProps) {
                     {/* Empty State */}
                     {filteredTags.length === 0 && (
                         <div className="py-20 text-center">
-                            <CreditCard size={48} className="mx-auto text-neutral-700 mb-4 animate-pulse" />
-                            <h3 className="text-lg font-bold text-white mb-2">
+                            <CreditCard size={48} className="mx-auto text-muted-foreground mb-4 animate-pulse" />
+                            <h3 className="text-lg font-bold text-foreground mb-2">
                                 No se encontraron tags
                             </h3>
-                            <p className="text-sm text-neutral-500">
+                            <p className="text-sm text-muted-foreground">
                                 {searchTerm ? 'Intenta con otro término de búsqueda' : 'Agrega tu primer tag RFID'}
                             </p>
                         </div>
@@ -319,10 +319,10 @@ export function TagList({ initialTags, users }: TagListProps) {
             </div>
 
             {/* Results Counter */}
-            <div className="flex items-center justify-between text-sm text-neutral-500">
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
                 <p>
-                    Mostrando <span className="font-bold text-white">{filteredTags.length}</span> de{' '}
-                    <span className="font-bold text-white">{initialTags.length}</span> tags
+                    Mostrando <span className="font-bold text-foreground">{filteredTags.length}</span> de{' '}
+                    <span className="font-bold text-foreground">{initialTags.length}</span> tags
                 </p>
             </div>
 
@@ -334,16 +334,16 @@ export function TagList({ initialTags, users }: TagListProps) {
                     </DialogHeader>
                     <div className="space-y-4 pt-4">
                         <div>
-                            <label className="text-sm font-bold text-white mb-2 block">
+                            <label className="text-sm font-bold text-foreground mb-2 block">
                                 Tag: <span className="font-mono text-emerald-400">{selectedTag?.value}</span>
                             </label>
                         </div>
                         <div>
-                            <label className="text-sm font-bold text-white mb-2 block">
+                            <label className="text-sm font-bold text-foreground mb-2 block">
                                 Seleccionar Usuario
                             </label>
                             <Select onValueChange={(userId) => selectedTag && handleAssign(selectedTag.id, userId)}>
-                                <SelectTrigger className="bg-neutral-900 border-neutral-800">
+                                <SelectTrigger className="bg-card border-border">
                                     <SelectValue placeholder="Selecciona un usuario..." />
                                 </SelectTrigger>
                                 <SelectContent>

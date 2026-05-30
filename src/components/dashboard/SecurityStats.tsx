@@ -44,15 +44,15 @@ function StatCard({ label, value, icon, chartColor, delay = 0 }: any) {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay }}
-            className="bg-white/5 border border-white/10 rounded-2xl p-4 relative overflow-hidden group hover:bg-white/[0.07] transition-all"
+            className="bg-foreground/10 border border-border rounded-2xl p-4 relative overflow-hidden group hover:bg-foreground/[0.04] transition-all"
         >
             <div className="flex items-center gap-3 mb-4">
                 <div className="p-2 bg-black/40 rounded-xl border border-white/5 group-hover:scale-110 transition-transform">
                     {icon}
                 </div>
                 <div>
-                    <h4 className="text-[10px] text-neutral-500 font-black uppercase tracking-widest">{label}</h4>
-                    <p className="text-2xl font-black text-white tracking-tighter">{value}</p>
+                    <h4 className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">{label}</h4>
+                    <p className="text-2xl font-black text-foreground tracking-tighter">{value}</p>
                 </div>
             </div>
 
@@ -74,7 +74,7 @@ function StatCard({ label, value, icon, chartColor, delay = 0 }: any) {
             </div>
 
             {/* Glowing Accent */}
-            <div className="absolute top-0 right-0 w-20 h-20 bg-white/5 blur-3xl rounded-full translate-x-10 -translate-y-10 group-hover:bg-white/10 transition-colors" />
+            <div className="absolute top-0 right-0 w-20 h-20 bg-foreground/10 blur-3xl rounded-full translate-x-10 -translate-y-10 group-hover:bg-accent transition-colors" />
         </motion.div>
     );
 }

@@ -79,18 +79,18 @@ export default function BitacoraPage() {
                 <div className="flex items-center gap-6">
                     <button
                         onClick={() => router.back()}
-                        className="group flex items-center justify-center w-14 h-14 bg-neutral-900 border border-neutral-800 rounded-2xl hover:bg-neutral-800 hover:border-blue-500/50 transition-all shadow-xl"
+                        className="group flex items-center justify-center w-14 h-14 bg-card border border-border rounded-2xl hover:bg-muted hover:border-blue-500/50 transition-all shadow-xl"
                     >
-                        <ArrowLeft className="text-neutral-500 group-hover:text-blue-400 transition-colors" size={24} />
+                        <ArrowLeft className="text-muted-foreground group-hover:text-blue-400 transition-colors" size={24} />
                     </button>
                     <div>
-                        <h1 className="text-4xl font-black text-white uppercase tracking-tight flex items-center gap-4">
+                        <h1 className="text-4xl font-black text-foreground uppercase tracking-tight flex items-center gap-4">
                             <div className="p-3 bg-amber-500/10 rounded-2xl border border-amber-500/20 shadow-xl shadow-amber-500/5">
                                 <History className="text-amber-500" size={32} />
                             </div>
                             Registros de Bitácora
                         </h1>
-                        <p className="text-neutral-500 font-bold uppercase tracking-widest text-xs mt-2 ml-1">
+                        <p className="text-muted-foreground font-bold uppercase tracking-widest text-xs mt-2 ml-1">
                             Historial completo de registros manuales y rondines de guardias
                         </p>
                     </div>
@@ -98,12 +98,12 @@ export default function BitacoraPage() {
 
                 <div className="flex items-center gap-3">
                     {/* View Switcher */}
-                    <div className="flex bg-neutral-900 border border-neutral-800 p-1 rounded-2xl mr-4">
+                    <div className="flex bg-card border border-border p-1 rounded-2xl mr-4">
                         <button
                             onClick={() => setViewMode('grid')}
                             className={cn(
                                 "p-2 rounded-xl transition-all",
-                                viewMode === 'grid' ? "bg-blue-600 text-white shadow-lg" : "text-neutral-500 hover:text-white"
+                                viewMode === 'grid' ? "bg-blue-600 text-foreground shadow-lg" : "text-muted-foreground hover:text-foreground"
                             )}
                         >
                             <LayoutGrid size={20} />
@@ -112,46 +112,46 @@ export default function BitacoraPage() {
                             onClick={() => setViewMode('table')}
                             className={cn(
                                 "p-2 rounded-xl transition-all",
-                                viewMode === 'table' ? "bg-blue-600 text-white shadow-lg" : "text-neutral-500 hover:text-white"
+                                viewMode === 'table' ? "bg-blue-600 text-foreground shadow-lg" : "text-muted-foreground hover:text-foreground"
                             )}
                         >
                             <ListIcon size={20} />
                         </button>
                     </div>
 
-                    <div className="px-4 py-2 bg-neutral-900 border border-neutral-800 rounded-2xl flex flex-col items-center">
-                        <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest leading-none mb-1">Total Registros</span>
-                        <span className="text-xl font-black text-white">{entries.length}</span>
+                    <div className="px-4 py-2 bg-card border border-border rounded-2xl flex flex-col items-center">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none mb-1">Total Registros</span>
+                        <span className="text-xl font-black text-foreground">{entries.length}</span>
                     </div>
                 </div>
             </header>
 
             {/* Filters Row */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-neutral-900/50 p-6 rounded-[2.5rem] border border-neutral-800 backdrop-blur-sm">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-card/50 p-6 rounded-[2.5rem] border border-border backdrop-blur-sm">
                 <div className="relative group md:col-span-2">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-600 group-focus-within:text-blue-500 transition-colors" size={18} />
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-blue-500 transition-colors" size={18} />
                     <Input
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         placeholder="Buscar por matrícula, nombre, destino o guardia..."
-                        className="pl-12 bg-neutral-950 border-neutral-800 h-14 text-sm font-bold text-white placeholder:text-neutral-700 rounded-[1.25rem] focus:border-blue-500/50 transition-all shadow-inner"
+                        className="pl-12 bg-background border-border h-14 text-sm font-bold text-foreground placeholder:text-muted-foreground rounded-[1.25rem] focus:border-blue-500/50 transition-all shadow-inner"
                     />
                 </div>
 
                 <div className="flex gap-3">
                     <div className="relative flex-1 group">
-                        <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-600 transition-colors group-focus-within:text-blue-500" size={18} />
+                        <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-blue-500" size={18} />
                         <Input
                             type="date"
                             value={filterDate}
                             onChange={(e) => setFilterDate(e.target.value)}
-                            className="pl-12 bg-neutral-950 border-neutral-800 h-14 text-sm font-black text-neutral-400 focus:border-blue-500/50 rounded-[1.25rem] appearance-none uppercase"
+                            className="pl-12 bg-background border-border h-14 text-sm font-black text-muted-foreground focus:border-blue-500/50 rounded-[1.25rem] appearance-none uppercase"
                         />
                     </div>
                     {(searchTerm || filterDate) && (
                         <button
                             onClick={() => { setSearchTerm(""); setFilterDate(""); }}
-                            className="w-14 h-14 bg-neutral-800 hover:bg-neutral-700 text-neutral-400 rounded-[1.25rem] transition-colors flex items-center justify-center shrink-0 shadow-lg"
+                            className="w-14 h-14 bg-muted hover:bg-muted text-muted-foreground rounded-[1.25rem] transition-colors flex items-center justify-center shrink-0 shadow-lg"
                         >
                             <X size={20} />
                         </button>
@@ -171,14 +171,14 @@ export default function BitacoraPage() {
                     >
                         {isLoading ? (
                             Array(6).fill(0).map((_, i) => (
-                                <div key={i} className="h-64 bg-neutral-900 rounded-[2rem] animate-pulse border border-neutral-800" />
+                                <div key={i} className="h-64 bg-card rounded-[2rem] animate-pulse border border-border" />
                             ))
                         ) : filteredEntries.length > 0 ? (
                             filteredEntries.map((entry) => (
                                 <motion.div
                                     key={entry.id}
                                     layout
-                                    className="group bg-neutral-900 border border-neutral-800 rounded-[2rem] overflow-hidden hover:border-blue-500/40 transition-all shadow-xl hover:shadow-blue-500/5"
+                                    className="group bg-card border border-border rounded-[2rem] overflow-hidden hover:border-blue-500/40 transition-all shadow-xl hover:shadow-blue-500/5"
                                 >
                                     <div className="relative h-48 bg-black overflow-hidden">
                                         {entry.photoPath ? (
@@ -188,7 +188,7 @@ export default function BitacoraPage() {
                                                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-70 group-hover:opacity-100"
                                             />
                                         ) : (
-                                            <div className="w-full h-full flex items-center justify-center text-neutral-800">
+                                            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
                                                 <Camera size={48} />
                                             </div>
                                         )}
@@ -199,7 +199,7 @@ export default function BitacoraPage() {
                                             {entry.photoPath && (
                                                 <button
                                                     onClick={() => setSelectedPhoto(entry.photoPath)}
-                                                    className="p-4 bg-white text-neutral-950 rounded-2xl hover:scale-110 transition-transform shadow-2xl"
+                                                    className="p-4 bg-white text-muted-foreground rounded-2xl hover:scale-110 transition-transform shadow-2xl"
                                                 >
                                                     <Eye size={20} />
                                                 </button>
@@ -207,7 +207,7 @@ export default function BitacoraPage() {
                                             {entry.audioPath && (
                                                 <button
                                                     onClick={() => setSelectedAudio(entry.audioPath)}
-                                                    className="p-4 bg-emerald-500 text-white rounded-2xl hover:scale-110 transition-transform shadow-2xl shadow-emerald-500/20"
+                                                    className="p-4 bg-emerald-500 text-foreground rounded-2xl hover:scale-110 transition-transform shadow-2xl shadow-emerald-500/20"
                                                 >
                                                     <Play size={20} className="fill-current" />
                                                 </button>
@@ -226,30 +226,30 @@ export default function BitacoraPage() {
 
                                         {/* Time Badge */}
                                         <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 flex items-center gap-2">
-                                            <Clock size={12} className="text-neutral-400" />
-                                            <span className="text-[10px] font-bold text-white uppercase">{formatTime(entry.timestamp)}</span>
+                                            <Clock size={12} className="text-muted-foreground" />
+                                            <span className="text-[10px] font-bold text-foreground uppercase">{formatTime(entry.timestamp)}</span>
                                         </div>
                                     </div>
 
                                     <div className="p-6 space-y-4">
                                         <div className="flex justify-between items-start">
                                             <div className="space-y-1">
-                                                <h3 className="text-2xl font-black text-white tracking-widest uppercase">{entry.plate || 'S/M'}</h3>
-                                                <div className="flex items-center gap-2 text-neutral-500">
+                                                <h3 className="text-2xl font-black text-foreground tracking-widest uppercase">{entry.plate || 'S/M'}</h3>
+                                                <div className="flex items-center gap-2 text-muted-foreground">
                                                     <CalendarIcon size={12} />
                                                     <span className="text-[10px] font-bold uppercase tracking-widest">{formatDate(entry.timestamp)}</span>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div className="space-y-3 pt-2 border-t border-neutral-800/50">
+                                        <div className="space-y-3 pt-2 border-t border-border/50">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 shrink-0">
                                                     <User size={14} />
                                                 </div>
                                                 <div className="flex-1 overflow-hidden">
-                                                    <p className="text-[9px] font-black text-neutral-500 uppercase tracking-widest leading-none mb-1">Visitante</p>
-                                                    <p className="text-xs font-bold text-white truncate">{entry.name || 'Invitado Desconocido'}</p>
+                                                    <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest leading-none mb-1">Visitante</p>
+                                                    <p className="text-xs font-bold text-foreground truncate">{entry.name || 'Invitado Desconocido'}</p>
                                                 </div>
                                             </div>
 
@@ -258,8 +258,8 @@ export default function BitacoraPage() {
                                                     <Building2 size={14} />
                                                 </div>
                                                 <div className="flex-1 overflow-hidden">
-                                                    <p className="text-[9px] font-black text-neutral-500 uppercase tracking-widest leading-none mb-1">Destino</p>
-                                                    <p className="text-xs font-bold text-white truncate">{entry.destination || '---'}</p>
+                                                    <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest leading-none mb-1">Destino</p>
+                                                    <p className="text-xs font-bold text-foreground truncate">{entry.destination || '---'}</p>
                                                 </div>
                                             </div>
 
@@ -268,15 +268,15 @@ export default function BitacoraPage() {
                                                     <Shield size={14} />
                                                 </div>
                                                 <div className="flex-1 overflow-hidden">
-                                                    <p className="text-[9px] font-black text-neutral-500 uppercase tracking-widest leading-none mb-1">Registrado por</p>
-                                                    <p className="text-xs font-bold text-white truncate">{entry.guardName || 'Sistema'}</p>
+                                                    <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest leading-none mb-1">Registrado por</p>
+                                                    <p className="text-xs font-bold text-foreground truncate">{entry.guardName || 'Sistema'}</p>
                                                 </div>
                                             </div>
                                         </div>
 
                                         {entry.notes && (
-                                            <div className="mt-4 p-4 bg-neutral-950/50 rounded-2xl border border-neutral-800/50">
-                                                <p className="text-[10px] text-neutral-500 italic leading-relaxed line-clamp-2">
+                                            <div className="mt-4 p-4 bg-background/50 rounded-2xl border border-border/50">
+                                                <p className="text-[10px] text-muted-foreground italic leading-relaxed line-clamp-2">
                                                     &quot;{entry.notes}&quot;
                                                 </p>
                                             </div>
@@ -285,10 +285,10 @@ export default function BitacoraPage() {
                                 </motion.div>
                             ))
                         ) : (
-                            <div className="col-span-full py-24 flex flex-col items-center justify-center bg-neutral-900/40 border border-dashed border-neutral-800 rounded-[3rem]">
-                                <History size={64} className="text-neutral-800 mb-6" />
-                                <h3 className="text-xl font-black text-neutral-400 uppercase tracking-[0.2em] text-center px-4">No se encontraron registros</h3>
-                                <p className="text-sm text-neutral-600 font-bold uppercase tracking-widest mt-2">Intenta ajustar los criterios de búsqueda</p>
+                            <div className="col-span-full py-24 flex flex-col items-center justify-center bg-card/40 border border-dashed border-border rounded-[3rem]">
+                                <History size={64} className="text-muted-foreground mb-6" />
+                                <h3 className="text-xl font-black text-muted-foreground uppercase tracking-[0.2em] text-center px-4">No se encontraron registros</h3>
+                                <p className="text-sm text-muted-foreground font-bold uppercase tracking-widest mt-2">Intenta ajustar los criterios de búsqueda</p>
                             </div>
                         )}
                     </motion.div>
@@ -298,56 +298,56 @@ export default function BitacoraPage() {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -20 }}
-                        className="bg-neutral-900/50 border border-neutral-800 rounded-[2rem] overflow-hidden overflow-x-auto"
+                        className="bg-card/50 border border-border rounded-[2rem] overflow-hidden overflow-x-auto"
                     >
                         <table className="w-full text-left border-collapse min-w-[1000px]">
                             <thead>
                                 <tr className="bg-black/40 border-b border-neutral-800">
-                                    <th className="px-6 py-5 text-[10px] font-black text-neutral-500 uppercase tracking-widest">Multimedia</th>
-                                    <th className="px-6 py-5 text-[10px] font-black text-neutral-500 uppercase tracking-widest">Matrícula</th>
-                                    <th className="px-6 py-5 text-[10px] font-black text-neutral-500 uppercase tracking-widest">Tipo</th>
-                                    <th className="px-6 py-5 text-[10px] font-black text-neutral-500 uppercase tracking-widest">Visitante</th>
-                                    <th className="px-6 py-5 text-[10px] font-black text-neutral-500 uppercase tracking-widest">Destino</th>
-                                    <th className="px-6 py-5 text-[10px] font-black text-neutral-500 uppercase tracking-widest">Fecha/Hora</th>
-                                    <th className="px-6 py-5 text-[10px] font-black text-neutral-500 uppercase tracking-widest">Registrado por</th>
-                                    <th className="px-6 py-5 text-[10px] font-black text-neutral-500 uppercase tracking-widest text-right">Acciones</th>
+                                    <th className="px-6 py-5 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Multimedia</th>
+                                    <th className="px-6 py-5 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Matrícula</th>
+                                    <th className="px-6 py-5 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Tipo</th>
+                                    <th className="px-6 py-5 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Visitante</th>
+                                    <th className="px-6 py-5 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Destino</th>
+                                    <th className="px-6 py-5 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Fecha/Hora</th>
+                                    <th className="px-6 py-5 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Registrado por</th>
+                                    <th className="px-6 py-5 text-[10px] font-black text-muted-foreground uppercase tracking-widest text-right">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-neutral-800/50">
                                 {isLoading ? (
                                     Array(10).fill(0).map((_, i) => (
                                         <tr key={i} className="animate-pulse">
-                                            <td colSpan={8} className="px-6 py-10 bg-neutral-900/20" />
+                                            <td colSpan={8} className="px-6 py-10 bg-card/20" />
                                         </tr>
                                     ))
                                 ) : filteredEntries.length > 0 ? (
                                     filteredEntries.map((entry) => (
-                                        <tr key={entry.id} className="group hover:bg-white/5 transition-colors">
+                                        <tr key={entry.id} className="group hover:bg-accent transition-colors">
                                             <td className="px-6 py-4">
                                                 <div className="flex gap-2">
                                                     {entry.photoPath ? (
                                                         <button
                                                             onClick={() => setSelectedPhoto(entry.photoPath)}
-                                                            className="w-10 h-10 rounded-xl bg-neutral-800 border border-neutral-700 overflow-hidden flex items-center justify-center hover:shadow-lg transition-all"
+                                                            className="w-10 h-10 rounded-xl bg-muted border border-border overflow-hidden flex items-center justify-center hover:shadow-lg transition-all"
                                                         >
                                                             <img src={entry.photoPath} className="w-full h-full object-cover" alt="Capture" />
                                                         </button>
                                                     ) : (
-                                                        <div className="w-10 h-10 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-center text-neutral-800">
+                                                        <div className="w-10 h-10 rounded-xl bg-background border border-border flex items-center justify-center text-muted-foreground">
                                                             <Camera size={16} />
                                                         </div>
                                                     )}
                                                     {entry.audioPath && (
                                                         <button
                                                             onClick={() => setSelectedAudio(entry.audioPath)}
-                                                            className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 hover:bg-emerald-500 hover:text-white transition-all"
+                                                            className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 hover:bg-emerald-500 hover:text-foreground transition-all"
                                                         >
                                                             <Play size={16} className="fill-current" />
                                                         </button>
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-4 font-black text-white tracking-widest uppercase text-sm">
+                                            <td className="px-6 py-4 font-black text-foreground tracking-widest uppercase text-sm">
                                                 {entry.plate || '--- ---'}
                                             </td>
                                             <td className="px-6 py-4">
@@ -361,21 +361,21 @@ export default function BitacoraPage() {
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <p className="text-xs font-bold text-white">{entry.name || 'Invitado'}</p>
+                                                <p className="text-xs font-bold text-foreground">{entry.name || 'Invitado'}</p>
                                             </td>
-                                            <td className="px-6 py-4 text-xs font-bold text-neutral-400">
+                                            <td className="px-6 py-4 text-xs font-bold text-muted-foreground">
                                                 {entry.destination || '---'}
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="space-y-0.5">
-                                                    <p className="text-[10px] font-black text-white">{formatTime(entry.timestamp)}</p>
-                                                    <p className="text-[8px] font-bold text-neutral-600 uppercase tracking-widest">{formatDate(entry.timestamp)}</p>
+                                                    <p className="text-[10px] font-black text-foreground">{formatTime(entry.timestamp)}</p>
+                                                    <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest">{formatDate(entry.timestamp)}</p>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-2">
-                                                    <Shield size={10} className="text-neutral-600" />
-                                                    <span className="text-[10px] font-bold text-neutral-300 uppercase">{entry.guardName || 'Sistema'}</span>
+                                                    <Shield size={10} className="text-muted-foreground" />
+                                                    <span className="text-[10px] font-bold text-muted-foreground uppercase">{entry.guardName || 'Sistema'}</span>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4 text-right">
@@ -384,7 +384,7 @@ export default function BitacoraPage() {
                                                         if (entry.photoPath) setSelectedPhoto(entry.photoPath);
                                                         else if (entry.audioPath) setSelectedAudio(entry.audioPath);
                                                     }}
-                                                    className="w-8 h-8 rounded-lg bg-neutral-800 text-neutral-500 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all ml-auto"
+                                                    className="w-8 h-8 rounded-lg bg-muted text-muted-foreground flex items-center justify-center hover:bg-blue-600 hover:text-foreground transition-all ml-auto"
                                                 >
                                                     <ArrowUpRight size={14} />
                                                 </button>
@@ -394,7 +394,7 @@ export default function BitacoraPage() {
                                 ) : (
                                     <tr>
                                         <td colSpan={8} className="py-24 text-center">
-                                            <p className="text-[10px] font-black text-neutral-700 uppercase tracking-widest">Sin registros encontrados</p>
+                                            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Sin registros encontrados</p>
                                         </td>
                                     </tr>
                                 )}
@@ -415,7 +415,7 @@ export default function BitacoraPage() {
                         onClick={() => setSelectedPhoto(null)}
                     >
                         <motion.button
-                            className="absolute top-8 right-8 p-4 bg-white/10 hover:bg-white/20 backdrop-blur-2xl rounded-full text-white transition-all shadow-2xl"
+                            className="absolute top-8 right-8 p-4 bg-foreground/10 hover:bg-foreground/10 backdrop-blur-2xl rounded-full text-foreground transition-all shadow-2xl"
                             onClick={() => setSelectedPhoto(null)}
                         >
                             <X size={24} />
@@ -426,7 +426,7 @@ export default function BitacoraPage() {
                             exit={{ scale: 0.9, opacity: 0 }}
                             src={selectedPhoto}
                             alt="Full Size Capture"
-                            className="max-w-full max-h-full object-contain rounded-3xl shadow-2xl border border-white/5"
+                            className="max-w-full max-h-full object-contain rounded-3xl shadow-2xl border border-border"
                         />
                     </motion.div>
                 )}
@@ -441,12 +441,12 @@ export default function BitacoraPage() {
                         exit={{ opacity: 0, y: 50 }}
                         className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[200] w-full max-w-lg px-4"
                     >
-                        <div className="bg-neutral-900/90 backdrop-blur-2xl border border-white/10 p-8 rounded-[3rem] shadow-2xl shadow-emerald-500/10 flex flex-col items-center text-center">
+                        <div className="bg-card/90 backdrop-blur-2xl border border-border p-8 rounded-[3rem] shadow-2xl shadow-emerald-500/10 flex flex-col items-center text-center">
                             <div className="w-16 h-16 rounded-3xl bg-emerald-500/20 flex items-center justify-center text-emerald-500 mb-4">
                                 <Play size={32} className="fill-current" />
                             </div>
-                            <h4 className="text-lg font-black text-white uppercase tracking-widest mb-2">Nota de Audio del Guardia</h4>
-                            <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest mb-6">Reproduciendo evidencia operativa</p>
+                            <h4 className="text-lg font-black text-foreground uppercase tracking-widest mb-2">Nota de Audio del Guardia</h4>
+                            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mb-6">Reproduciendo evidencia operativa</p>
 
                             <audio
                                 autoPlay
@@ -457,7 +457,7 @@ export default function BitacoraPage() {
 
                             <button
                                 onClick={() => setSelectedAudio(null)}
-                                className="mt-8 px-8 py-3 bg-neutral-800 hover:bg-neutral-700 text-white text-[10px] font-black uppercase tracking-widest rounded-full transition-colors"
+                                className="mt-8 px-8 py-3 bg-muted hover:bg-muted text-foreground text-[10px] font-black uppercase tracking-widest rounded-full transition-colors"
                             >
                                 Cerrar Reproductor
                             </button>

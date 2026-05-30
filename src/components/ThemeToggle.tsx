@@ -31,7 +31,7 @@ export function ThemeToggle() {
             <Button
                 variant="outline"
                 size="icon"
-                className="rounded-full bg-neutral-900 border-neutral-800 text-white"
+                className="rounded-full bg-card border-border text-foreground"
             >
                 <div className="h-[1.2rem] w-[1.2rem]" />
             </Button>
@@ -55,7 +55,7 @@ export function ThemeToggle() {
             <Button
                 variant="outline"
                 size="icon"
-                className="rounded-full bg-neutral-900 border-neutral-800 text-white hover:bg-neutral-800 dark:bg-neutral-800 dark:hover:bg-neutral-700 relative overflow-hidden"
+                className="rounded-full bg-card border-border text-foreground hover:bg-muted dark:bg-muted dark:hover:bg-muted relative overflow-hidden"
                 onClick={toggleTheme}
             >
                 <AnimatePresence mode="wait" initial={false}>

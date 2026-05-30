@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import {
     getDevices,
@@ -11,6 +11,7 @@ import {
     syncPlatesToDevice
 } from "@/app/actions/devices";
 import { getAccessGroups } from "@/app/actions/groups";
+import { getEnabledModules, type ModuleId } from "@/app/actions/modules";
 import { Button } from "@/components/ui/button";
 import {
     Table,
@@ -54,7 +55,6 @@ import { DeviceFormDialog } from "@/components/DeviceFormDialog";
 import { DeleteConfirmDialog } from "@/components/DeleteConfirmDialog";
 import { DeviceMemoryDialog } from "@/components/DeviceMemoryDialog";
 import { DevicePlateListDialog } from "@/components/DevicePlateListDialog";
-import { DeviceFaceListDialog } from "@/components/DeviceFaceListDialog";
 import { AkuvoxActionUrlDialog } from "@/components/AkuvoxActionUrlDialog";
 import { DRIVER_MODELS, DEVICE_MODELS } from "@/lib/driver-models";
 
@@ -75,20 +75,57 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
+// Inline SVG data URIs for fallback images (avoid 404s for missing placeholder files)
+const PLACEHOLDER_DEVICE = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none"><rect width="48" height="48" rx="8" fill="%23262626"/><path d="M24 14a4 4 0 100 8 4 4 0 000-8zm-6 14c0-2 4-3.1 6-3.1S30 26 30 28v1H18v-1z" fill="%23525252"/><rect x="14" y="32" width="20" height="3" rx="1.5" fill="%23525252"/></svg>')}`;
+const PLACEHOLDER_BRAND = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="4" fill="%23262626"/><circle cx="16" cy="16" r="8" stroke="%23525252" stroke-width="1.5" fill="none"/><path d="M16 12v4l3 3" stroke="%23525252" stroke-width="1.5" stroke-linecap="round"/></svg>')}`;
+
+const TYPE_META: Record<string, { label: string; color: string; activeClass: string }> = {
+    LPR_CAMERA: { label: "LPR", color: "text-amber-400", activeClass: "bg-amber-500/15 text-amber-300 border-amber-500/30" },
+    FACE_TERMINAL: { label: "Face", color: "text-teal-400", activeClass: "bg-teal-500/15 text-teal-300 border-teal-500/30" },
+    QUEUE_COUNTER: { label: "Queue", color: "text-violet-400", activeClass: "bg-violet-500/15 text-violet-300 border-violet-500/30" },
+};
+
 const BRAND_CONFIG: Record<string, { label: string, color: string, bg: string, logoUrl: string }> = {
     HIKVISION: { label: "Hikvision", color: "#E4002B", bg: "bg-red-500/10", logoUrl: "/logos/hikvision.png" },
     AKUVOX: { label: "Akuvox", color: "#005BA4", bg: "bg-blue-500/10", logoUrl: "/logos/akuvox.png" },
     INTELBRAS: { label: "Intelbras", color: "#009639", bg: "bg-emerald-500/10", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/f/ff/Intelbras_logo.svg" },
     DAHUA: { label: "Dahua", color: "#ED1C24", bg: "bg-red-500/10", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/b/b3/Dahua_Technology_logo.svg" },
     ZKTECO: { label: "ZKTeco", color: "#0191D2", bg: "bg-sky-500/10", logoUrl: "https://www.zkteco.com/upload/201908/5d4d3c3f3f0f7.png" },
-    AVICAM: { label: "Avicam", color: "#E11D48", bg: "bg-rose-500/10", logoUrl: "/logos/avicam.png" },
+    AVICAM: { label: "Avicam", color: "#8E8E8E", bg: "bg-muted/10", logoUrl: "" },
     MILESIGHT: { label: "Milesight", color: "#00AEEF", bg: "bg-cyan-500/10", logoUrl: "" },
     UNIFI: { label: "UniFi", color: "#0559C9", bg: "bg-blue-600/10", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/e/e0/Ubiquiti_Networks_logo.svg" },
     UNIVIEW: { label: "Uniview", color: "#005EB8", bg: "bg-blue-700/10", logoUrl: "https://www.uniview.com/etc/designs/uniview/logo.png" },
+    BOSCH: { label: "Bosch", color: "#E20015", bg: "bg-red-500/10", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/0/0e/Bosch-brand.svg" },
 };
 
 
-import { getSocketUrl, getApiUrl } from "@/lib/socket-config";
+// go2rtc MP4-over-HTTP live video for Bosch cameras (WS/MSE falla por el proxy)
+function BoschLiveVideo({ ip }: { ip: string }) {
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const [failed, setFailed] = useState(false);
+    useEffect(() => {
+        if (!ip) { setFailed(true); return; }
+        const video = videoRef.current; if (!video) return;
+        const streamName = `bosch_${ip.replace(/\./g, "_")}`;
+        let tries = 0; let stopped = false;
+        const start = () => { if (stopped) return; setFailed(false); video.src = `/go2rtc/api/stream.mp4?src=${encodeURIComponent(streamName)}&t=${Date.now()}`; video.play().catch(() => {}); };
+        const onErr = () => { if (stopped) return; if (tries++ < 6) setTimeout(start, 1300); else setFailed(true); };
+        const onProgress = () => { try { if (video.buffered.length) { const end = video.buffered.end(video.buffered.length - 1); if (end - video.currentTime > 2.5) video.currentTime = end; } } catch {} };
+        video.addEventListener("error", onErr);
+        video.addEventListener("progress", onProgress);
+        start();
+        return () => { stopped = true; video.removeEventListener("error", onErr); video.removeEventListener("progress", onProgress); video.pause(); video.removeAttribute("src"); video.load(); };
+    }, [ip]);
+    if (failed) {
+        return (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 text-neutral-400">
+                <Camera size={32} className="mb-2 opacity-30" />
+                <span className="text-xs">Reconectando…</span>
+            </div>
+        );
+    }
+    return <video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-contain bg-black" />;
+}
 
 export default function DevicesPage() {
     const router = useRouter();
@@ -107,11 +144,23 @@ export default function DevicesPage() {
     const [configActionUrl, setConfigActionUrl] = useState<any>(null);
     const [viewingLive, setViewingLive] = useState<any>(null);
     const [managingPlates, setManagingPlates] = useState<any>(null);
-    const [managingFaceList, setManagingFaceList] = useState<any>(null);
+    const [modules, setModules] = useState<Record<ModuleId, boolean>>({
+        MODULE_LPR: true,
+        MODULE_FACE: true,
+        MODULE_QUEUE: false,
+    });
 
     const typeFilter = searchParams.get('type');
 
+    // Build allowed device types based on active modules
+    const allowedTypes: string[] = [];
+    if (modules.MODULE_LPR) allowedTypes.push("LPR_CAMERA");
+    if (modules.MODULE_FACE) allowedTypes.push("FACE_TERMINAL");
+    if (modules.MODULE_QUEUE) allowedTypes.push("QUEUE_COUNTER");
+
     const filteredDevices = devices.filter(d => {
+        // Only show devices whose type belongs to an active module
+        if (!allowedTypes.includes(d.deviceType)) return false;
         const matchesType = !typeFilter || d.deviceType === typeFilter;
         const matchesSearch = d.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             d.ip.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -121,10 +170,10 @@ export default function DevicesPage() {
 
     useEffect(() => {
         loadData();
+        getEnabledModules().then(setModules);
 
         // Socket Connection for Real-time Status
-        const socketUrl = getSocketUrl();
-        const socket = io(socketUrl);
+        const socket = io(window.location.origin, { path: '/io/socket.io', transports: ['polling'] });
 
         socket.on("device_status", (data) => {
             setDevices(prev => prev.map(d => {
@@ -156,15 +205,6 @@ export default function DevicesPage() {
                 }
                 return d;
             }));
-        });
-
-        socket.on("device_adopted", (newDevice) => {
-            console.log("🆕 New device adopted:", newDevice);
-            setDevices(prev => {
-                const exists = prev.find(d => d.id === newDevice.id);
-                if (exists) return prev;
-                return [newDevice, ...prev];
-            });
         });
 
         return () => {
@@ -228,114 +268,108 @@ export default function DevicesPage() {
     };
 
     return (
-        <div className="p-6 space-y-6 animate-in fade-in duration-700">
-            <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 bg-neutral-900/50 p-8 border border-neutral-800 rounded-3xl shadow-2xl backdrop-blur-xl">
-                <div className="flex items-center gap-6">
-                    <div className="p-4 bg-indigo-500/10 rounded-2xl border border-indigo-500/20 shadow-inner group transition-all hover:scale-110">
-                        <Network className="text-indigo-400 group-hover:rotate-[15deg] transition-transform duration-500" size={32} />
+        <div className="p-6 space-y-4 animate-in fade-in duration-500">
+            {/* Compact Header */}
+            <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-indigo-500/10 rounded-lg border border-indigo-500/20">
+                        <Network className="text-indigo-400" size={20} />
                     </div>
                     <div>
-                        <h1 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 via-blue-400 to-cyan-400 uppercase tracking-tight">
-                            Arquitectura de Hardware
+                        <h1 className="text-base font-bold text-foreground tracking-tight">
+                            Dispositivos
                         </h1>
-                        <p className="text-sm text-neutral-500 font-medium">Gestión de nodos LPR, terminales biométricas y controladores de red.</p>
+                        <p className="text-[11px] text-muted-foreground">
+                            {filteredDevices.length} dispositivo{filteredDevices.length !== 1 ? "s" : ""} {typeFilter ? `· ${TYPE_META[typeFilter]?.label || typeFilter}` : ""}
+                        </p>
                     </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center gap-4 w-full lg:w-auto">
-                    <div className="flex items-center gap-2 bg-neutral-950 p-2 rounded-2xl border border-white/5">
-                        <Button
-                            variant="ghost"
-                            size="sm"
+                <div className="flex items-center gap-3 w-full lg:w-auto">
+                    {/* Module-aware filter tabs */}
+                    <div className="flex items-center gap-1 bg-card/80 p-1 rounded-lg border border-border/60">
+                        <button
                             onClick={() => setFilter()}
                             className={cn(
-                                "h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                                !typeFilter ? "bg-white/10 text-white shadow-lg" : "text-neutral-500 hover:text-neutral-300"
+                                "h-8 px-3 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all",
+                                !typeFilter ? "bg-foreground/10 text-foreground" : "text-muted-foreground hover:text-muted-foreground hover:bg-accent"
                             )}
                         >
                             Todos
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setFilter('LPR_CAMERA')}
-                            className={cn(
-                                "h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                                typeFilter === 'LPR_CAMERA' ? "bg-blue-600 text-white shadow-lg shadow-blue-900/40" : "text-neutral-500 hover:text-neutral-300"
-                            )}
-                        >
-                            Vision
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setFilter('FACE_TERMINAL')}
-                            className={cn(
-                                "h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                                typeFilter === 'FACE_TERMINAL' ? "bg-purple-600 text-white shadow-lg shadow-purple-900/40" : "text-neutral-500 hover:text-neutral-300"
-                            )}
-                        >
-                            Face AI
-                        </Button>
+                        </button>
+                        {allowedTypes.map(type => {
+                            const meta = TYPE_META[type];
+                            return (
+                                <button
+                                    key={type}
+                                    onClick={() => setFilter(type)}
+                                    className={cn(
+                                        "h-8 px-3 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all border border-transparent",
+                                        typeFilter === type ? meta.activeClass : "text-muted-foreground hover:text-muted-foreground hover:bg-accent"
+                                    )}
+                                >
+                                    {meta.label}
+                                </button>
+                            );
+                        })}
                     </div>
 
-                    <div className="relative flex-1 lg:w-80">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500" size={18} />
+                    <div className="relative flex-1 lg:w-64">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={15} />
                         <input
                             type="text"
-                            placeholder="Buscar por nombre o IP..."
+                            placeholder="Buscar dispositivo..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full bg-neutral-950 border border-neutral-800 h-14 rounded-2xl pl-12 pr-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all placeholder:text-neutral-700"
+                            className="w-full bg-card/80 border border-border/60 h-9 rounded-lg pl-9 pr-3 text-xs font-medium focus:ring-1 focus:ring-indigo-500/30 focus:border-indigo-500/30 outline-none transition-all placeholder:text-muted-foreground text-foreground"
                         />
                     </div>
                     <DeviceFormDialog groups={groups} onSuccess={loadData}>
-                        <Button className="bg-gradient-to-r from-indigo-700 to-blue-700 text-white shadow-md shadow-indigo-950/20 font-black h-12 px-8 rounded-lg transition-all hover:brightness-110 active:scale-95 uppercase tracking-tighter text-xs shrink-0">
-                            <Plus className="mr-3 h-5 w-5" /> Vincular Dispositivo
+                        <Button className="bg-indigo-600 hover:bg-indigo-500 text-foreground font-bold h-9 px-4 rounded-lg transition-all active:scale-95 text-xs shrink-0 gap-1.5">
+                            <Plus size={15} /> Nuevo
                         </Button>
                     </DeviceFormDialog>
                 </div>
             </header>
 
-            <div className="border border-neutral-800 rounded-xl overflow-hidden bg-[#0c0c0c] shadow-lg">
+            <div className="border border-border/60 rounded-lg overflow-hidden bg-background/50">
                 <Table>
-                    <TableHeader className="bg-[#0f0f0f]">
-                        <TableRow className="border-neutral-800 hover:bg-transparent">
-                            <TableHead className="text-neutral-400 font-black tracking-widest py-5 px-8 uppercase text-[10px]">Nodo de Acceso</TableHead>
-                            <TableHead className="text-neutral-400 font-black tracking-widest uppercase text-[10px]">Marca y Modelo</TableHead>
-                            <TableHead className="text-neutral-400 font-black tracking-widest uppercase text-[10px]">Protocolo / Red</TableHead>
-                            <TableHead className="text-neutral-400 font-black tracking-widest text-center uppercase text-[10px]">Enlace</TableHead>
-                            <TableHead className="text-neutral-400 font-black tracking-widest text-center uppercase text-[10px]">Estado</TableHead>
-                            <TableHead className="text-right text-neutral-400 font-black tracking-widest pr-8 uppercase text-[10px]">Control & Acciones</TableHead>
+                    <TableHeader className="bg-card/60">
+                        <TableRow className="border-border/60 hover:bg-transparent">
+                            <TableHead className="text-muted-foreground font-semibold tracking-wide py-3 pl-5 uppercase text-[10px]">Dispositivo</TableHead>
+                            <TableHead className="text-muted-foreground font-semibold tracking-wide uppercase text-[10px]">Marca / Modelo</TableHead>
+                            <TableHead className="text-muted-foreground font-semibold tracking-wide uppercase text-[10px]">Red</TableHead>
+                            <TableHead className="text-muted-foreground font-semibold tracking-wide text-center uppercase text-[10px]">Enlace</TableHead>
+                            <TableHead className="text-muted-foreground font-semibold tracking-wide text-center uppercase text-[10px]">Estado</TableHead>
+                            <TableHead className="text-right text-muted-foreground font-semibold tracking-wide pr-5 uppercase text-[10px]">Acciones</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {filteredDevices.length === 0 && !loading && (
                             <TableRow>
-                                <TableCell colSpan={6} className="text-center py-32 text-neutral-700">
-                                    <div className="flex flex-col items-center gap-4">
-                                        <div className="p-8 bg-neutral-900 rounded-full border border-dashed border-neutral-800">
-                                            <Server size={64} className="opacity-10" />
+                                <TableCell colSpan={6} className="text-center py-20">
+                                    <div className="flex flex-col items-center gap-3">
+                                        <div className="p-5 bg-card/50 rounded-lg border border-dashed border-border">
+                                            <Server size={36} className="text-muted-foreground" />
                                         </div>
                                         <div className="space-y-1">
-                                            <p className="text-xl font-bold uppercase tracking-tight">No se encontraron nodos</p>
-                                            <p className="text-sm font-medium opacity-50">Intenta con otro término de búsqueda.</p>
+                                            <p className="text-sm font-semibold text-muted-foreground">No se encontraron dispositivos</p>
+                                            <p className="text-xs text-muted-foreground">Intenta con otro término de búsqueda o agrega un dispositivo.</p>
                                         </div>
                                     </div>
                                 </TableCell>
                             </TableRow>
                         )}
                         {filteredDevices.map((dev) => {
-                            const brand = BRAND_CONFIG[dev.brand] || { label: dev.brand, color: "#fff", bg: "bg-neutral-800" };
+                            const brand = BRAND_CONFIG[dev.brand] || { label: dev.brand, color: "#fff", bg: "bg-muted" };
                             const isOpening = triggeringRelay === dev.id;
 
                             return (
-                                <TableRow key={dev.id} className="border-neutral-800 hover:bg-white/5 transition-all group">
-                                    <TableCell className="py-4 pl-8">
-                                        <div className="flex items-center gap-5">
-                                            {/* Vendor Logo & Model Image Group */}
-                                            <div className="relative group/device">
-                                                <div className="w-14 h-14 rounded-lg bg-white flex items-center justify-center p-2 border border-neutral-200/5 overflow-hidden">
+                                <TableRow key={dev.id} className="border-border/50 hover:bg-foreground/[0.04] transition-colors group">
+                                    <TableCell className="py-3 pl-5">
+                                        <div className="flex items-center gap-4">
+                                            <div className="relative">
+                                                <div className="w-11 h-11 rounded-md bg-white flex items-center justify-center p-1.5 border border-border/30 overflow-hidden">
                                                     <img
                                                         src={
                                                             dev.modelPhoto ||
@@ -343,55 +377,44 @@ export default function DevicesPage() {
                                                             DEVICE_MODELS[dev.brand]?.[dev.deviceType] ||
                                                             DEVICE_MODELS[dev.brand]?.DEFAULT ||
                                                             brand.logoUrl ||
-                                                            "/placeholder-device.png"
+                                                            PLACEHOLDER_DEVICE
                                                         }
                                                         alt={brand.label}
                                                         className="w-full h-full object-contain"
                                                         onError={(e) => {
-                                                            const fallback = brand.logoUrl || "/placeholder-device.png";
+                                                            const fallback = brand.logoUrl || PLACEHOLDER_DEVICE;
                                                             if ((e.target as any).src !== fallback) {
                                                                 (e.target as any).src = fallback;
                                                             }
                                                         }}
                                                     />
                                                     {dev.brandLogo && (
-                                                        <div className="absolute bottom-0 right-0 w-6 h-6 bg-white rounded-lg p-0.5 border border-neutral-200 shadow-lg">
+                                                        <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-white rounded p-0.5 border border-border shadow-sm">
                                                             <img src={dev.brandLogo} alt="Brand" className="w-full h-full object-contain" />
                                                         </div>
                                                     )}
                                                 </div>
                                             </div>
 
-                                            <div className="space-y-1">
-                                                <div className="space-y-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <p className="font-black text-white text-lg tracking-tight leading-none">{dev.name}</p>
-                                                        {dev.name.startsWith("NUEVO:") && (
-                                                            <Badge className="bg-amber-500 text-black font-black text-[9px] px-1.5 h-4 border-none animate-pulse">
-                                                                AUTO-DESCUBIERTO
-                                                            </Badge>
-                                                        )}
-                                                    </div>
+                                            <div className="space-y-1.5">
+                                                <div>
+                                                    <p className="font-semibold text-foreground text-sm leading-none">{dev.name}</p>
+                                                </div>
 
-                                                    <div className="flex items-center gap-3 pt-1">
+                                                    <div className="flex items-center gap-2 pt-0.5">
                                                         <div className={cn(
-                                                            "px-2.5 py-1 rounded-md flex items-center gap-1.5 transition-all duration-500 border text-[9px] font-black uppercase tracking-wider",
+                                                            "px-2 py-0.5 rounded flex items-center gap-1 transition-all duration-500 border text-[9px] font-bold uppercase tracking-wide",
                                                             dev.doorStatus === 'OPEN'
-                                                                ? "bg-red-500 border-red-400 text-white animate-pulse"
-                                                                : "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                                                                ? "bg-red-500/15 border-red-500/30 text-red-400 animate-pulse"
+                                                                : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                                                         )}>
                                                             {dev.doorStatus === 'OPEN' ? (
-                                                                <>
-                                                                    <Unlock size={10} strokeWidth={3} /> PUERTA: ABIERTA
-                                                                </>
+                                                                <><Unlock size={9} /> Abierta</>
                                                             ) : (
-                                                                <>
-                                                                    <Lock size={10} strokeWidth={3} /> PUERTA: CERRADA
-                                                                </>
+                                                                <><Lock size={9} /> Cerrada</>
                                                             )}
                                                         </div>
 
-                                                        {/* Quick Action: Open next to status */}
                                                         <TooltipProvider>
                                                             <Tooltip>
                                                                 <TooltipTrigger asChild>
@@ -400,13 +423,13 @@ export default function DevicesPage() {
                                                                         disabled={isOpening}
                                                                         size="icon"
                                                                         className={cn(
-                                                                            "h-8 w-8 rounded-lg transition-all border relative overflow-hidden",
+                                                                            "h-6 w-6 rounded transition-all border",
                                                                             isOpening
-                                                                                ? "bg-emerald-500 border-emerald-400 text-white"
-                                                                                : "bg-neutral-950 text-neutral-400 hover:text-emerald-400 hover:bg-emerald-500/10 border-neutral-800 hover:border-emerald-500/30"
+                                                                                ? "bg-emerald-500 border-emerald-400 text-foreground"
+                                                                                : "bg-card text-muted-foreground hover:text-emerald-400 hover:bg-emerald-500/10 border-border hover:border-emerald-500/30"
                                                                         )}
                                                                     >
-                                                                        {isOpening ? <Unlock className="animate-bounce" size={14} /> : <Zap size={14} />}
+                                                                        {isOpening ? <Unlock className="animate-bounce" size={11} /> : <Zap size={11} />}
                                                                     </Button>
                                                                 </TooltipTrigger>
                                                                 <TooltipContent><p>Accionar Relé</p></TooltipContent>
@@ -414,114 +437,89 @@ export default function DevicesPage() {
                                                         </TooltipProvider>
 
                                                         {isOpening && (
-                                                            <div className="flex items-center gap-2 text-blue-400 text-[9px] font-black uppercase tracking-wider animate-pulse">
-                                                                <RefreshCw size={10} className="animate-spin" /> PROCESANDO...
-                                                            </div>
+                                                            <span className="text-blue-400 text-[9px] font-semibold animate-pulse flex items-center gap-1">
+                                                                <RefreshCw size={9} className="animate-spin" /> Procesando
+                                                            </span>
                                                         )}
 
                                                         {dev.lastEvent && (
-                                                            <div className="flex flex-col gap-1.5 animate-in fade-in slide-in-from-left-2 duration-500 pl-2 border-l border-white/5">
-                                                                <div className="flex items-center gap-2">
-                                                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping" />
-                                                                    <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest bg-blue-500/10 px-2 py-1 rounded-md border border-blue-500/20">
-                                                                        {dev.lastEvent.user?.name || dev.lastEvent.plateDetected || "SISTEMA"}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
+                                                            <span className="text-[9px] font-semibold text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20 animate-in fade-in duration-500">
+                                                                {dev.lastEvent.user?.name || dev.lastEvent.plateDetected || "Sistema"}
+                                                            </span>
                                                         )}
                                                     </div>
-                                                </div>
                                             </div>
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/10 p-2 flex items-center justify-center overflow-hidden shrink-0">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="w-8 h-8 rounded bg-foreground/10 border border-border/40 p-1.5 flex items-center justify-center overflow-hidden shrink-0">
                                                 <img
-                                                    src={dev.brandLogo || brand.logoUrl || "/placeholder-brand.png"}
+                                                    src={dev.brandLogo || brand.logoUrl || PLACEHOLDER_BRAND}
                                                     alt={brand.label}
-                                                    className="max-w-full max-h-full object-contain group-hover:scale-110 transition-transform duration-500"
+                                                    className="max-w-full max-h-full object-contain"
                                                     onError={(e) => {
                                                         const target = e.target as HTMLImageElement;
-                                                        target.src = "/placeholder-brand.png";
+                                                        target.src = PLACEHOLDER_BRAND;
                                                     }}
                                                 />
                                             </div>
-                                            <div className="space-y-0.5">
-                                                <p className="text-[10px] font-black text-neutral-500 uppercase tracking-widest leading-none mb-1">{brand.label}</p>
-                                                <p className="text-[11px] font-black text-white uppercase tracking-tight">{dev.deviceModel || "Default"}</p>
+                                            <div>
+                                                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">{brand.label}</p>
+                                                <p className="text-xs font-semibold text-foreground">{dev.deviceModel || "Default"}</p>
                                             </div>
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <div className="space-y-1">
-                                            <div className="flex items-center gap-2 text-sm text-neutral-200 font-black font-mono">
-                                                <div className="w-1.5 h-1.5 rounded-full bg-indigo-500/40" />
-                                                {dev.ip}
-                                            </div>
+                                        <div className="space-y-0.5">
+                                            <p className="text-xs text-foreground font-mono font-medium">{dev.ip}</p>
                                             {dev.location ? (
-                                                <p className="text-[10px] text-blue-400 font-black uppercase tracking-tight pl-3.5 group-hover:text-blue-300 transition-colors flex items-center gap-1.5">
-                                                    <Globe size={10} /> {dev.location}
+                                                <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                                    <Globe size={10} className="text-blue-400/70" /> {dev.location}
                                                 </p>
                                             ) : (
-                                                <p className="text-[9px] text-neutral-600 font-black uppercase tracking-[0.2em] pl-3.5 group-hover:text-neutral-400 transition-colors">
-                                                    MAC: {dev.mac || "UNSPECIFIED"}
+                                                <p className="text-[10px] text-muted-foreground font-mono">
+                                                    {dev.mac || "—"}
                                                 </p>
                                             )}
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-center">
-                                        <div className="flex items-center justify-center gap-4">
-                                            {/* PULL Connection (Server -> Device) */}
+                                        <div className="flex items-center justify-center gap-2">
                                             <TooltipProvider>
                                                 <Tooltip>
                                                     <TooltipTrigger>
-                                                        <div className="flex flex-col items-center gap-1 group/pull cursor-help">
-                                                            <div className={cn(
-                                                                "w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-500 border",
-                                                                (dev.lastOnlinePull && (new Date().getTime() - new Date(dev.lastOnlinePull).getTime()) < 5 * 60 * 1000)
-                                                                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.1)]"
-                                                                    : "bg-neutral-900 border-neutral-800 text-neutral-700"
-                                                            )}>
-                                                                <DownloadCloud
-                                                                    size={14}
-                                                                    className={cn(
-                                                                        (dev.lastOnlinePull && (new Date().getTime() - new Date(dev.lastOnlinePull).getTime()) < 5 * 60 * 1000) && "animate-pulse"
-                                                                    )}
-                                                                />
-                                                            </div>
+                                                        <div className={cn(
+                                                            "w-7 h-7 rounded flex items-center justify-center transition-all border",
+                                                            (dev.lastOnlinePull && (new Date().getTime() - new Date(dev.lastOnlinePull).getTime()) < 5 * 60 * 1000)
+                                                                ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400"
+                                                                : "bg-card/50 border-border/50 text-muted-foreground"
+                                                        )}>
+                                                            <DownloadCloud size={13} />
                                                         </div>
                                                     </TooltipTrigger>
                                                     <TooltipContent>
-                                                        <p className="font-bold">Sincronización PULL (Servidor)</p>
-                                                        <p className="text-xs text-neutral-400 text-center">Última: {dev.lastOnlinePull ? new Date(dev.lastOnlinePull).toLocaleTimeString() : 'Nunca'}</p>
+                                                        <p className="font-semibold text-xs">PULL</p>
+                                                        <p className="text-[10px] text-muted-foreground">{dev.lastOnlinePull ? new Date(dev.lastOnlinePull).toLocaleTimeString() : 'Nunca'}</p>
                                                     </TooltipContent>
                                                 </Tooltip>
                                             </TooltipProvider>
 
-                                            {/* PUSH Connection (Device -> Server) */}
                                             <TooltipProvider>
                                                 <Tooltip>
                                                     <TooltipTrigger>
-                                                        <div className="flex flex-col items-center gap-1 group/push cursor-help">
-                                                            <div className={cn(
-                                                                "w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-500 border",
-                                                                (dev.lastOnlinePush && (new Date().getTime() - new Date(dev.lastOnlinePush).getTime()) < 5 * 60 * 1000)
-                                                                    ? "bg-blue-500/10 border-blue-500/20 text-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.1)]"
-                                                                    : "bg-neutral-900 border-neutral-800 text-neutral-700"
-                                                            )}>
-                                                                <UploadCloud
-                                                                    size={14}
-                                                                    className={cn(
-                                                                        (dev.lastOnlinePush && (new Date().getTime() - new Date(dev.lastOnlinePush).getTime()) < 5 * 60 * 1000) && "animate-bounce"
-                                                                    )}
-                                                                />
-                                                            </div>
+                                                        <div className={cn(
+                                                            "w-7 h-7 rounded flex items-center justify-center transition-all border",
+                                                            (dev.lastOnlinePush && (new Date().getTime() - new Date(dev.lastOnlinePush).getTime()) < 5 * 60 * 1000)
+                                                                ? "bg-blue-500/10 border-blue-500/25 text-blue-400"
+                                                                : "bg-card/50 border-border/50 text-muted-foreground"
+                                                        )}>
+                                                            <UploadCloud size={13} />
                                                         </div>
                                                     </TooltipTrigger>
                                                     <TooltipContent>
-                                                        <p className="font-bold">Sincronización PUSH (Dispositivo)</p>
-                                                        <p className="text-xs text-neutral-400 text-center">Última: {dev.lastOnlinePush ? new Date(dev.lastOnlinePush).toLocaleTimeString() : 'Nunca'}</p>
+                                                        <p className="font-semibold text-xs">PUSH</p>
+                                                        <p className="text-[10px] text-muted-foreground">{dev.lastOnlinePush ? new Date(dev.lastOnlinePush).toLocaleTimeString() : 'Nunca'}</p>
                                                     </TooltipContent>
                                                 </Tooltip>
                                             </TooltipProvider>
@@ -552,14 +550,14 @@ export default function DevicesPage() {
                                                             <Badge
                                                                 variant="outline"
                                                                 className={cn(
-                                                                    "text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full border-2 cursor-help",
+                                                                    "text-[9px] font-semibold uppercase tracking-wide px-2.5 py-0.5 rounded border cursor-help",
                                                                     isOnline
-                                                                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                                                                        : "bg-red-500/10 text-red-500 border-red-500/20"
+                                                                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
+                                                                        : "bg-red-500/10 text-red-400 border-red-500/25"
                                                                 )}
                                                             >
-                                                                <span className={cn("w-1.5 h-1.5 rounded-full mr-2", isOnline ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
-                                                                {isOnline ? "ONLINE" : "OFFLINE"}
+                                                                <span className={cn("w-1.5 h-1.5 rounded-full mr-1.5 inline-block", isOnline ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
+                                                                {isOnline ? "Online" : "Offline"}
                                                             </Badge>
                                                         </TooltipTrigger>
                                                         <TooltipContent>
@@ -570,38 +568,31 @@ export default function DevicesPage() {
                                             );
                                         })()}
                                     </TableCell>
-                                    <TableCell className="text-right pr-8">
-                                        <div className="flex justify-end items-center gap-4">
-                                            {/* Face/Tags Stats Badge - ONLY FOR NON-HIKVISION FACE TERMINALS */}
+                                    <TableCell className="text-right pr-5">
+                                        <div className="flex justify-end items-center gap-2">
+                                            {/* Face/Tags Stats Badge */}
                                             {dev.deviceType === 'FACE_TERMINAL' && dev.brand !== 'HIKVISION' && (
-                                                <div className="flex items-center gap-4 bg-neutral-950/50 p-1.5 rounded-xl border border-white/5 shadow-inner">
-                                                    <div className="flex flex-col items-center bg-purple-500/5 border border-purple-500/10 rounded-lg px-2 py-1 min-w-[45px]">
-                                                        <span className="text-[7px] text-purple-500/60 font-black uppercase tracking-widest leading-none mb-1">Faces</span>
-                                                        <span className="text-[10px] font-mono font-black text-purple-400">
+                                                <div className="flex items-center gap-2 bg-card/60 p-1 rounded-md border border-border/50">
+                                                    <div className="flex flex-col items-center bg-purple-500/8 border border-purple-500/15 rounded px-1.5 py-0.5 min-w-[36px]">
+                                                        <span className="text-[7px] text-purple-400/70 font-semibold uppercase tracking-wide leading-none">Faces</span>
+                                                        <span className="text-[10px] font-mono font-semibold text-purple-400">
                                                             {deviceStats[dev.id]?.faces ?? "--"}
                                                         </span>
                                                     </div>
-                                                    <div className="flex flex-col items-center bg-amber-500/5 border border-amber-500/10 rounded-lg px-2 py-1 min-w-[45px]">
-                                                        <span className="text-[7px] text-amber-500/60 font-black uppercase tracking-widest leading-none mb-1">Tags</span>
-                                                        <span className="text-[10px] font-mono font-black text-amber-400">
+                                                    <div className="flex flex-col items-center bg-amber-500/8 border border-amber-500/15 rounded px-1.5 py-0.5 min-w-[36px]">
+                                                        <span className="text-[7px] text-amber-400/70 font-semibold uppercase tracking-wide leading-none">Tags</span>
+                                                        <span className="text-[10px] font-mono font-semibold text-amber-400">
                                                             {deviceStats[dev.id]?.tags ?? "--"}
                                                         </span>
                                                     </div>
-                                                    <TooltipProvider>
-                                                        <Tooltip>
-                                                            <TooltipTrigger asChild>
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="icon"
-                                                                    onClick={() => handleRefreshStats(dev.id)}
-                                                                    className="h-7 w-7 rounded-md hover:bg-white/5 text-neutral-600 hover:text-white"
-                                                                >
-                                                                    <RefreshCw size={12} className={cn(loading ? "animate-spin" : "")} />
-                                                                </Button>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent><p className="text-[10px] uppercase font-black">Actualizar Estadísticas de Dispositivo</p></TooltipContent>
-                                                        </Tooltip>
-                                                    </TooltipProvider>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => handleRefreshStats(dev.id)}
+                                                        className="h-6 w-6 rounded hover:bg-accent text-muted-foreground hover:text-foreground"
+                                                    >
+                                                        <RefreshCw size={11} className={cn(loading ? "animate-spin" : "")} />
+                                                    </Button>
                                                 </div>
                                             )}
 
@@ -612,59 +603,51 @@ export default function DevicesPage() {
                                                             variant="ghost"
                                                             size="icon"
                                                             onClick={() => setViewingLive(dev)}
-                                                            className="h-9 w-9 rounded-xl bg-neutral-900/50 text-neutral-400 hover:text-indigo-400 hover:bg-indigo-500/10 border border-neutral-800 hover:border-indigo-500/30 transition-all"
+                                                            className="h-8 w-8 rounded-md bg-card/50 text-muted-foreground hover:text-indigo-400 hover:bg-indigo-500/10 border border-border/50 hover:border-indigo-500/30 transition-all"
                                                         >
-                                                            <Eye size={18} />
+                                                            <Eye size={15} />
                                                         </Button>
                                                     </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p>Ver en Vivo</p>
-                                                    </TooltipContent>
+                                                    <TooltipContent><p>Ver en Vivo</p></TooltipContent>
                                                 </Tooltip>
                                             </TooltipProvider>
 
-                                            {/* Dropdown for Secondary Actions */}
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5">
-                                                        <MoreHorizontal size={16} />
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent">
+                                                        <MoreHorizontal size={15} />
                                                     </Button>
                                                 </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end" className="w-48 bg-neutral-900 border-neutral-800 text-neutral-200">
-                                                    <DropdownMenuLabel className="text-xs font-black uppercase tracking-widest text-neutral-500">Gestión</DropdownMenuLabel>
+                                                <DropdownMenuContent align="end" className="w-48 bg-card border-border text-foreground">
+                                                    <DropdownMenuLabel className="text-xs font-black uppercase tracking-widest text-muted-foreground">Gestión</DropdownMenuLabel>
 
                                                     {dev.deviceType === 'FACE_TERMINAL' && (
-                                                        <>
-                                                            <DropdownMenuItem onClick={() => setManagingFaceList(dev)} className="cursor-pointer gap-2 text-xs font-bold hover:bg-white/5 hover:text-indigo-400 focus:bg-white/5 focus:text-indigo-400">
-                                                                <ScanFace size={14} /> Gestión de Usuarios
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem onClick={() => setManagingMemory(dev)} className="cursor-pointer gap-2 text-xs font-bold hover:bg-white/5 hover:text-indigo-400 focus:bg-white/5 focus:text-indigo-400">
-                                                                <Database size={14} /> Logs y Eventos
-                                                            </DropdownMenuItem>
-                                                        </>
+                                                        <DropdownMenuItem onClick={() => setManagingMemory(dev)} className="cursor-pointer gap-2 text-xs font-bold hover:bg-accent hover:text-indigo-400 focus:bg-foreground/10 focus:text-indigo-400">
+                                                            <Database size={14} /> Memoria Flash
+                                                        </DropdownMenuItem>
                                                     )}
 
                                                     {dev.deviceType === 'LPR_CAMERA' && dev.brand === 'HIKVISION' && (
-                                                        <DropdownMenuItem onClick={() => setManagingPlates(dev)} className="cursor-pointer gap-2 text-xs font-bold hover:bg-white/5 hover:text-blue-400 focus:bg-white/5 focus:text-blue-400">
-                                                            <Database size={14} /> Listas internas
+                                                        <DropdownMenuItem onClick={() => setManagingPlates(dev)} className="cursor-pointer gap-2 text-xs font-bold hover:bg-accent hover:text-blue-400 focus:bg-foreground/10 focus:text-blue-400">
+                                                            <Database size={14} /> Lista Blanca LPR
                                                         </DropdownMenuItem>
                                                     )}
 
                                                     {dev.brand === 'AKUVOX' && (
-                                                        <DropdownMenuItem onClick={() => setConfigActionUrl(dev)} className="cursor-pointer gap-2 text-xs font-bold hover:bg-white/5 hover:text-orange-400 focus:bg-white/5 focus:text-orange-400">
+                                                        <DropdownMenuItem onClick={() => setConfigActionUrl(dev)} className="cursor-pointer gap-2 text-xs font-bold hover:bg-accent hover:text-orange-400 focus:bg-foreground/10 focus:text-orange-400">
                                                             <Network size={14} /> Webhooks (Action URL)
                                                         </DropdownMenuItem>
                                                     )}
 
-                                                    <DropdownMenuSeparator className="bg-white/5" />
+                                                    <DropdownMenuSeparator className="bg-foreground/10" />
 
                                                     <DeviceFormDialog device={dev} groups={groups} onSuccess={loadData}>
-                                                        <div className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-xs font-bold outline-none transition-colors hover:bg-white/5 hover:text-blue-400 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 gap-2">
+                                                        <div className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-xs font-bold outline-none transition-colors hover:bg-accent hover:text-blue-400 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 gap-2">
                                                             <Settings2 size={14} /> Editar Configuración
                                                         </div>
                                                     </DeviceFormDialog>
 
-                                                    <DropdownMenuSeparator className="bg-white/5" />
+                                                    <DropdownMenuSeparator className="bg-foreground/10" />
 
                                                     <DeleteConfirmDialog
                                                         id={dev.id}
@@ -712,62 +695,58 @@ export default function DevicesPage() {
                 />
             )}
 
-            {managingFaceList && (
-                <DeviceFaceListDialog
-                    device={managingFaceList}
-                    open={!!managingFaceList}
-                    onOpenChange={(v) => !v && setManagingFaceList(null)}
-                />
-            )}
-
             {viewingLive && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
-                    <div className="bg-neutral-900 border border-neutral-800 rounded-3xl w-full max-w-4xl overflow-hidden shadow-2xl">
-                        <div className="p-6 border-b border-neutral-800 flex justify-between items-center bg-neutral-900/50">
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 bg-indigo-500/10 rounded-xl border border-indigo-500/20">
-                                    <Camera className="text-indigo-400" size={24} />
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-card border border-border rounded-lg w-full max-w-4xl overflow-hidden shadow-2xl">
+                        <div className="px-5 py-3 border-b border-border/60 flex justify-between items-center">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-indigo-500/10 rounded-md border border-indigo-500/20">
+                                    <Camera className="text-indigo-400" size={18} />
                                 </div>
                                 <div>
-                                    <h3 className="text-xl font-black text-white uppercase tracking-tight">{viewingLive.name}</h3>
-                                    <p className="text-xs text-neutral-500 font-bold tracking-widest uppercase">{viewingLive.ip} • LIVE STREAM</p>
+                                    <h3 className="text-sm font-semibold text-foreground">{viewingLive.name}</h3>
+                                    <p className="text-[10px] text-muted-foreground">{viewingLive.ip} · Live</p>
                                 </div>
                             </div>
                             <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => setViewingLive(null)}
-                                className="h-10 w-10 rounded-xl hover:bg-white/10 text-neutral-400"
+                                className="h-8 w-8 rounded-md hover:bg-accent text-muted-foreground"
                             >
-                                <Plus className="rotate-45" size={24} />
+                                <Plus className="rotate-45" size={18} />
                             </Button>
                         </div>
                         <div className="aspect-video bg-black flex items-center justify-center relative group">
-                            <img
-                                key={viewingLive.id}
-                                src={`${getApiUrl()}/api/live/${viewingLive.id}`}
-                                alt="Live View"
-                                className="max-w-full max-h-full object-contain"
-                            />
-                            <div className="absolute top-4 right-4 flex items-center gap-2">
-                                <span className="flex h-3 w-3 relative">
+                            {viewingLive.brand === "BOSCH" ? (
+                                <BoschLiveVideo ip={viewingLive.ip} />
+                            ) : (
+                                <img
+                                    key={viewingLive.id}
+                                    src={`/io/api/live/${viewingLive.id}`}
+                                    alt="Live View"
+                                    className="max-w-full max-h-full object-contain"
+                                />
+                            )}
+                            <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                                <span className="flex h-2.5 w-2.5 relative">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
                                 </span>
-                                <span className="text-[10px] font-black text-white uppercase tracking-widest drop-shadow-md">REC LIVE</span>
+                                <span className="text-[9px] font-bold text-foreground uppercase tracking-wide drop-shadow-md">Live</span>
                             </div>
-                            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Badge className="bg-neutral-950/80 backdrop-blur border-white/10 text-neutral-400 font-mono text-[10px]">
-                                    MJPEG PROXY STREAM • 5 FPS
+                            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Badge className="bg-background/80 backdrop-blur border-border text-muted-foreground font-mono text-[9px]">
+                                    {viewingLive.brand === "BOSCH" ? "go2rtc · MSE" : "MJPEG · 5 FPS"}
                                 </Badge>
                             </div>
                         </div>
-                        <div className="p-4 bg-neutral-950/50 flex justify-center gap-2">
+                        <div className="p-3 bg-background/50 flex justify-center">
                             <Button
                                 onClick={() => setViewingLive(null)}
-                                className="bg-neutral-800 hover:bg-neutral-700 text-white font-black px-8 rounded-xl h-11 uppercase text-xs"
+                                className="bg-muted hover:bg-muted text-foreground font-semibold px-6 rounded-md h-9 text-xs"
                             >
-                                Cerrar Visualización
+                                Cerrar
                             </Button>
                         </div>
                     </div>

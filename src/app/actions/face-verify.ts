@@ -27,7 +27,6 @@ export async function verifyFaceAction(
     }
 
     const start = Date.now();
-    console.log(`[Camera Native Logic] Processing: ${nativeName || eventSnapshot}`);
 
     try {
         let finalSubject = null;
@@ -72,7 +71,6 @@ export async function verifyFaceAction(
             } catch (dbErr) { console.warn("DB update delay", dbErr); }
         }
 
-        console.log(`[Camera Native Logic] Finished in ${Date.now() - start}ms. ID: ${finalSubject || 'Unidentified'}`);
 
         revalidatePath("/admin/dashboard-face");
         revalidatePath("/admin/history");
@@ -101,7 +99,6 @@ export async function searchByPhotoAction(photoData: Uint8Array | Buffer) {
     const start = Date.now();
 
     try {
-        console.log(`[Guard Search] Starting parallel biometric search...`);
 
         const search = async (apiKey: string) => {
             const form = new FormData();

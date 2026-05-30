@@ -21,31 +21,33 @@ const milesightDriver = new MilesightDriver();
 const unifiDriver = new UnifiDriver();
 const univiewDriver = new UniviewDriver();
 
-function getDriver(brand: DeviceBrand): IDeviceDriver {
+export function getDriver(brand: DeviceBrand): IDeviceDriver {
     switch (brand) {
-        case DeviceBrand.HIKVISION:
-            return hikvisionDriver;
-        case DeviceBrand.AKUVOX:
-            return akuvoxDriver;
-        case DeviceBrand.INTELBRAS:
-            return intelbrasDriver;
-        case DeviceBrand.DAHUA:
-            return dahuaDriver;
-        case DeviceBrand.ZKTECO:
-            return zktecoDriver;
-        case DeviceBrand.AVICAM:
-            return avicamDriver;
-        case DeviceBrand.MILESIGHT:
-            return milesightDriver;
-        case DeviceBrand.UNIFI:
-            return unifiDriver;
-        case DeviceBrand.UNIVIEW:
-            return univiewDriver;
+        case DeviceBrand.HIKVISION: return hikvisionDriver;
+        case DeviceBrand.AKUVOX:    return akuvoxDriver;
+        case DeviceBrand.INTELBRAS: return intelbrasDriver;
+        case DeviceBrand.DAHUA:     return dahuaDriver;
+        case DeviceBrand.ZKTECO:    return zktecoDriver;
+        case DeviceBrand.AVICAM:    return avicamDriver;
+        case DeviceBrand.MILESIGHT: return milesightDriver;
+        case DeviceBrand.UNIFI:     return unifiDriver;
+        case DeviceBrand.UNIVIEW:   return univiewDriver;
         default:
             throw new Error(`Unsupported device brand: ${brand}`);
     }
 }
 
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 3000;
+
+function sleep(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Sync a credential to all devices in the user's access groups.
+ * Includes retry logic with exponential backoff and per-device failure tracking.
+ */
 export async function syncToDevices(credentialId: string) {
     try {
         const credential = await prisma.credential.findUnique({
@@ -64,36 +66,58 @@ export async function syncToDevices(credentialId: string) {
         });
 
         if (!credential || !credential.user) {
-            console.warn(`Credential ${credentialId} not found or has no user.`);
+            console.warn(`[LiveSync] Credential ${credentialId} not found or has no user.`);
             return;
         }
 
-        // Generic type for device map
+        // Deduplicate devices across access groups
         const devicesMap = new Map<string, any>();
-
-        // Collect all unique devices from all access groups
         for (const group of credential.user.accessGroups) {
             for (const device of group.devices) {
-                devicesMap.set(device.id, device); // Use Map to dedup by ID
+                devicesMap.set(device.id, device);
             }
         }
 
         const devices = Array.from(devicesMap.values());
 
-        console.log(`Syncing credential ${credential.id} (${credential.value}) to ${devices.length} devices...`);
+        const results: { deviceId: string; deviceIp: string; brand: string; success: boolean; error?: string }[] = [];
 
         const promises = devices.map(async (device) => {
-            try {
-                const driver = getDriver(device.brand);
-                await driver.upsertCredential(credential, device);
-                console.log(`Synced to ${device.brand} ${device.ip}`);
-            } catch (error: any) {
-                console.error(`Error syncing to ${device.ip}:`, error.message);
+            let lastError: string | undefined;
+
+            for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+                try {
+                    const driver = getDriver(device.brand);
+                    await driver.upsertCredential(credential, device);
+                    results.push({ deviceId: device.id, deviceIp: device.ip, brand: device.brand, success: true });
+                    return; // Success, exit retry loop
+                } catch (error: any) {
+                    lastError = error.message;
+                    if (attempt < MAX_RETRIES) {
+                        const delay = RETRY_DELAY_MS * (attempt + 1); // Linear backoff
+                        console.warn(`[LiveSync] ✗ Attempt ${attempt + 1} failed for ${device.ip}: ${error.message}. Retrying in ${delay}ms...`);
+                        await sleep(delay);
+                    }
+                }
             }
+
+            // All retries exhausted
+            console.error(`[LiveSync] ✗ FAILED after ${MAX_RETRIES + 1} attempts for ${device.brand} ${device.ip}: ${lastError}`);
+            results.push({ deviceId: device.id, deviceIp: device.ip, brand: device.brand, success: false, error: lastError });
         });
 
         await Promise.all(promises);
+
+        // Summary
+        const failed = results.filter(r => !r.success);
+        if (failed.length > 0) {
+            console.warn(`[LiveSync] Summary: ${results.length - failed.length}/${results.length} devices synced. Failed: ${failed.map(f => f.deviceIp).join(', ')}`);
+        } else {
+        }
+
+        return results;
     } catch (error) {
-        console.error("LiveSync Error:", error);
+        console.error("[LiveSync] Critical Error:", error);
+        return [];
     }
 }

@@ -204,13 +204,13 @@ export function ExportHistoryDialog({ open, onOpenChange, filters }: ExportHisto
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[425px] bg-neutral-900 border-neutral-800 text-white">
+            <DialogContent className="sm:max-w-[425px] bg-card border-border text-foreground">
                 <DialogHeader>
                     <div className="mx-auto w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center mb-4 border border-red-500/20">
                         <FileSpreadsheet className="text-red-500" size={24} />
                     </div>
                     <DialogTitle className="text-xl font-black text-center uppercase tracking-tight">Exportar Reporte</DialogTitle>
-                    <DialogDescription className="text-neutral-500 text-center text-xs font-medium">
+                    <DialogDescription className="text-muted-foreground text-center text-xs font-medium">
                         Selecciona el rango de fechas para generar el reporte de accesos en formato Excel.
                     </DialogDescription>
                 </DialogHeader>
@@ -218,33 +218,33 @@ export function ExportHistoryDialog({ open, onOpenChange, filters }: ExportHisto
                 <div className="grid gap-6 py-4">
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                            <Label className="text-[10px] uppercase font-black text-neutral-500 tracking-widest pl-1">Desde</Label>
+                            <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest pl-1">Desde</Label>
                             <div className="relative">
-                                <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600" size={14} />
+                                <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
                                 <input
                                     type="date"
                                     value={startDate}
                                     onChange={(e) => setStartDate(e.target.value)}
-                                    className="w-full bg-neutral-950 border border-neutral-800 rounded-lg h-10 pl-9 text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-red-500/20 uppercase appearance-none"
+                                    className="w-full bg-background border border-border rounded-lg h-10 pl-9 text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-red-500/20 uppercase appearance-none"
                                 />
                             </div>
                         </div>
                         <div className="space-y-2">
-                            <Label className="text-[10px] uppercase font-black text-neutral-500 tracking-widest pl-1">Hasta</Label>
+                            <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest pl-1">Hasta</Label>
                             <div className="relative">
-                                <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-600" size={14} />
+                                <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
                                 <input
                                     type="date"
                                     value={endDate}
                                     onChange={(e) => setEndDate(e.target.value)}
-                                    className="w-full bg-neutral-950 border border-neutral-800 rounded-lg h-10 pl-9 text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-red-500/20 uppercase appearance-none"
+                                    className="w-full bg-background border border-border rounded-lg h-10 pl-9 text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-red-500/20 uppercase appearance-none"
                                 />
                             </div>
                         </div>
                     </div>
 
-                    <div className="p-3 bg-white/5 rounded-lg border border-white/5">
-                        <p className="text-[10px] text-neutral-400 leading-relaxed italic text-center">
+                    <div className="p-3 bg-foreground/10 rounded-lg border border-border">
+                        <p className="text-[10px] text-muted-foreground leading-relaxed italic text-center">
                             El archivo incluirá todos los eventos registrados dentro del periodo seleccionado, incluyendo detalles de vehículos y residentes.
                         </p>
                     </div>
@@ -255,14 +255,14 @@ export function ExportHistoryDialog({ open, onOpenChange, filters }: ExportHisto
                         type="button"
                         variant="ghost"
                         onClick={() => onOpenChange(false)}
-                        className="text-xs font-bold uppercase tracking-widest text-neutral-500 hover:text-white"
+                        className="text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground"
                     >
                         Cancelar
                     </Button>
                     <Button
                         onClick={handleExport}
                         disabled={isExporting}
-                        className="bg-red-600 hover:bg-red-500 text-white text-xs font-black uppercase tracking-widest h-10 px-8 shadow-lg shadow-red-900/20"
+                        className="bg-red-600 hover:bg-red-500 text-foreground text-xs font-black uppercase tracking-widest h-10 px-8 shadow-lg shadow-red-900/20"
                     >
                         {isExporting ? (
                             <>

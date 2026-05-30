@@ -186,14 +186,22 @@ export async function getBucketStats(bucketName: string) {
         const client = await getS3InternalClient();
         let totalSize = 0;
         let fileCount = 0;
+        let pages = 0;
+        const MAX_PAGES = 50;
+        let truncated = false;
 
         const fetchObjects = async (token?: string): Promise<void> => {
+            if (pages >= MAX_PAGES) {
+                truncated = true;
+                return;
+            }
             const cmd = new ListObjectsV2Command({
                 Bucket: bucketName,
                 ContinuationToken: token,
             });
 
             const res = await client.send(cmd);
+            pages++;
 
             if (res.Contents) {
                 fileCount += res.Contents.length;
@@ -202,8 +210,10 @@ export async function getBucketStats(bucketName: string) {
                 }
             }
 
-            if (res.IsTruncated && res.NextContinuationToken) {
+            if (res.IsTruncated && res.NextContinuationToken && pages < MAX_PAGES) {
                 await fetchObjects(res.NextContinuationToken);
+            } else if (res.IsTruncated) {
+                truncated = true;
             }
         };
 
@@ -212,10 +222,11 @@ export async function getBucketStats(bucketName: string) {
         return {
             success: true,
             size: totalSize,
-            count: fileCount
+            count: fileCount,
+            truncated
         };
     } catch (error: any) {
-        console.error(`Error getting stats for bucket ${bucketName}:`, error);
+        console.error("Error getting stats for bucket " + bucketName + ":", error);
         return { success: false, message: error.message };
     }
 }
@@ -782,4 +793,76 @@ export async function saveGuardBranding(settings: Record<string, string>) {
         console.error("Error saving guard branding:", error);
         return { success: false, message: error.message };
     }
+}
+
+// ─── App Branding (login) ──────────────────────────────────────────────────
+const APP_BRAND_KEYS = ["APP_BRAND_NAME", "APP_BRAND_SUBTITLE", "APP_BRAND_LOGO_URL", "APP_BRAND_LOGIN_BG_URL", "APP_BRAND_PRIMARY"];
+
+export async function getAppBranding() {
+    const rows = await prisma.setting.findMany({ where: { key: { in: APP_BRAND_KEYS } } });
+    const map: Record<string, string> = {};
+    for (const r of rows) map[r.key] = r.value;
+    return {
+        name: map.APP_BRAND_NAME || "OmniAccess",
+        subtitle: map.APP_BRAND_SUBTITLE || "Plataforma unificada de control de acceso",
+        logoUrl: map.APP_BRAND_LOGO_URL || "",
+        loginBgUrl: map.APP_BRAND_LOGIN_BG_URL || "",
+        primary: map.APP_BRAND_PRIMARY || "",
+    };
+}
+
+export async function saveAppBranding(settings: Record<string, string>) {
+    try {
+        await prisma.$transaction(
+            Object.entries(settings).map(([key, value]) =>
+                prisma.setting.upsert({ where: { key }, update: { value }, create: { key, value } })
+            )
+        );
+        revalidatePath("/login");
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error saving app branding:", error);
+        return { success: false, message: error.message };
+    }
+}
+
+// --- PWA icon upload (resizes to 192/512/maskable into public/iconos) ---
+export async function savePwaIcon(formData: FormData, pwa: string = "filas") {
+    try {
+        const file = formData.get("file") as File;
+        if (!file) throw new Error("No se proporcionó ningún archivo");
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const sharp = (await import("sharp")).default;
+        const dir = path.join(process.cwd(), "public", "iconos");
+        await fs.mkdir(dir, { recursive: true });
+        const safe = pwa.replace(/[^a-z0-9]/gi, "") || "filas";
+        await sharp(buffer).resize(192, 192, { fit: "cover" }).png().toFile(path.join(dir, `${safe}-192.png`));
+        await sharp(buffer).resize(512, 512, { fit: "cover" }).png().toFile(path.join(dir, `${safe}-512.png`));
+        await sharp(buffer).resize(512, 512, { fit: "cover" }).png().toFile(path.join(dir, `${safe}-512-maskable.png`));
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error saving PWA icon:", error);
+        return { success: false, message: error.message };
+    }
+}
+
+// --- S3/MinIO browser actions ---
+export async function listBuckets() {
+    try {
+        const client = await getS3InternalClient();
+        const { ListBucketsCommand } = await import("@aws-sdk/client-s3");
+        const res: any = await client.send(new ListBucketsCommand({}));
+        return { success: true, buckets: (res.Buckets || []).map((b: any) => ({ name: b.Name, created: b.CreationDate })) };
+    } catch (e: any) { console.error("listBuckets", e.message); return { success: false, message: e.message, buckets: [] as any[] }; }
+}
+
+export async function listBucketObjects(bucket: string, prefix: string = "", token?: string) {
+    try {
+        const client = await getS3InternalClient();
+        const { ListObjectsV2Command } = await import("@aws-sdk/client-s3");
+        const res: any = await client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, Delimiter: "/", MaxKeys: 200, ContinuationToken: token }));
+        const folders = (res.CommonPrefixes || []).map((p: any) => p.Prefix as string);
+        const objects = (res.Contents || []).filter((o: any) => o.Key !== prefix).map((o: any) => ({ key: o.Key as string, size: (o.Size || 0) as number, lastModified: o.LastModified as Date }));
+        return { success: true, folders, objects, nextToken: res.IsTruncated ? (res.NextContinuationToken as string) : null };
+    } catch (e: any) { console.error("listBucketObjects", e.message); return { success: false, message: e.message, folders: [] as string[], objects: [] as any[], nextToken: null }; }
 }

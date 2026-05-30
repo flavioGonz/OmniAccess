@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { getAccessEvents } from "@/app/actions/history";
+import { getEnabledModules } from "@/app/actions/modules";
+import { getQueueEvents } from "@/app/actions/queue";
 import {
     ChevronLeft,
     ChevronRight,
@@ -61,6 +63,11 @@ export default function CalendarPage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [visibleCount, setVisibleCount] = useState(50);
+    const [mode, setMode] = useState<"LPR" | "FACE" | "QUEUE">("LPR");
+
+    useEffect(() => {
+        getEnabledModules().then((m: any) => setMode(m.MODULE_QUEUE ? "QUEUE" : m.MODULE_FACE ? "FACE" : "LPR")).catch(() => {});
+    }, []);
 
     useEffect(() => {
         setVisibleCount(50);
@@ -85,7 +92,7 @@ export default function CalendarPage() {
 
     useEffect(() => {
         loadMonthEvents();
-    }, [year, month]);
+    }, [year, month, mode]);
 
     async function loadMonthEvents() {
         setLoading(true);
@@ -93,16 +100,33 @@ export default function CalendarPage() {
             const start = new Date(year, month, 1);
             const end = new Date(year, month + 1, 0, 23, 59, 59, 999);
 
-            // Fetch ALL events for this month - Optimized with omitEnrichment
-            const data = await getAccessEvents({
-                from: start,
-                to: end,
-                take: 50000,
-                omitEnrichment: true
-            });
-
-            // getAccessEvents returns { events, total }
-            setEvents(Array.isArray(data.events) ? data.events : []);
+            if (mode === "QUEUE") {
+                // Queue mode: show ONLY aforo (occupancy) count events
+                const data = await getQueueEvents({ from: start, to: end, channelName: "Aforo", take: 50000 });
+                const mapped = (data.events || []).map((q: any) => ({
+                    id: q.id,
+                    timestamp: q.timestamp,
+                    device: q.device || null,
+                    accessType: "QUEUE",
+                    decision: "GRANT",
+                    peopleCount: q.peopleCount,
+                    channelName: q.channelName,
+                    user: null,
+                    plateDetected: null,
+                    _queue: true,
+                }));
+                setEvents(mapped as any);
+            } else {
+                // LPR mode → only PLATE events; Face mode → only FACE events
+                const data = await getAccessEvents({
+                    from: start,
+                    to: end,
+                    take: 50000,
+                    omitEnrichment: true,
+                    type: mode === "FACE" ? "FACE" : "PLATE",
+                });
+                setEvents(Array.isArray(data.events) ? data.events : []);
+            }
         } catch (error) {
             console.error("Error loading events:", error);
             setEvents([]);
@@ -215,22 +239,22 @@ export default function CalendarPage() {
     return (
         <div className="p-6 flex flex-col xl:flex-row h-screen gap-6 animate-in fade-in duration-700 overflow-hidden">
             {/* Calendar Section */}
-            <div className="flex-1 bg-neutral-900/50 rounded-2xl p-6 shadow-2xl backdrop-blur-xl flex flex-col">
+            <div className="flex-1 bg-card/50 rounded-2xl p-6 shadow-2xl backdrop-blur-xl flex flex-col">
                 <header className="flex justify-between items-center mb-6">
                     <div className="flex items-center gap-6">
-                        <h1 className="text-2xl font-black uppercase tracking-tight text-white flex items-center gap-3">
+                        <h1 className="text-2xl font-black uppercase tracking-tight text-foreground flex items-center gap-3">
                             <CalendarIcon className="text-orange-500" />
-                            {monthNames[month]} <span className="text-neutral-600">{year}</span>
+                            {monthNames[month]} <span className="text-muted-foreground">{year}</span>
                         </h1>
 
-                        <div className="flex bg-neutral-900 rounded-lg p-1 border border-neutral-800">
+                        <div className="flex bg-card rounded-lg p-1 border border-border">
                             {(['month', 'week', 'day'] as const).map((v) => (
                                 <button
                                     key={v}
                                     onClick={() => setView(v)}
                                     className={cn(
                                         "px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-md transition-all",
-                                        view === v ? "bg-neutral-800 text-white shadow" : "text-neutral-500 hover:text-neutral-300"
+                                        view === v ? "bg-muted text-foreground shadow" : "text-muted-foreground hover:text-muted-foreground"
                                     )}
                                 >
                                     {v === 'month' ? 'Mes' : v === 'week' ? 'Semana' : 'Día'}
@@ -240,14 +264,14 @@ export default function CalendarPage() {
                     </div>
 
                     <div className="flex gap-2">
-                        <Button variant="ghost" size="icon" onClick={toggleFullscreen} className="text-neutral-500 hover:text-white">
+                        <Button variant="ghost" size="icon" onClick={toggleFullscreen} className="text-muted-foreground hover:text-foreground">
                             {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
                         </Button>
-                        <div className="w-px h-8 bg-neutral-800 mx-2" />
-                        <Button variant="outline" size="icon" onClick={prevPeriod} className="bg-neutral-800 border-neutral-700 hover:bg-neutral-700 hover:text-white">
+                        <div className="w-px h-8 bg-muted mx-2" />
+                        <Button variant="outline" size="icon" onClick={prevPeriod} className="bg-muted border-border hover:bg-muted hover:text-foreground">
                             <ChevronLeft size={18} />
                         </Button>
-                        <Button variant="outline" size="icon" onClick={nextPeriod} className="bg-neutral-800 border-neutral-700 hover:bg-neutral-700 hover:text-white">
+                        <Button variant="outline" size="icon" onClick={nextPeriod} className="bg-muted border-border hover:bg-muted hover:text-foreground">
                             <ChevronRight size={18} />
                         </Button>
                     </div>
@@ -256,7 +280,7 @@ export default function CalendarPage() {
                 <div className={cn("grid gap-2 flex-1", view === 'month' ? "grid-cols-7" : view === 'week' ? "grid-cols-7" : "grid-cols-1")}>
                     {/* Weekdays Header - Hide in Day view? */}
                     {view !== 'day' && ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"].map(day => (
-                        <div key={day} className="text-center font-bold text-xs uppercase tracking-widest text-neutral-500 py-2">
+                        <div key={day} className="text-center font-bold text-xs uppercase tracking-widest text-muted-foreground py-2">
                             {day}
                         </div>
                     ))}
@@ -270,11 +294,11 @@ export default function CalendarPage() {
                             {loading ? (
                                 // Skeleton loader for calendar grid
                                 Array.from({ length: daysInMonth }).map((_, i) => (
-                                    <div key={`skeleton-${i}`} className="relative p-2 rounded-xl min-h-[80px] bg-neutral-800/30 animate-pulse">
-                                        <Skeleton className="h-6 w-8 bg-neutral-700/50 rounded" />
+                                    <div key={`skeleton-${i}`} className="relative p-2 rounded-xl min-h-[80px] bg-muted/30 animate-pulse">
+                                        <Skeleton className="h-6 w-8 bg-muted/50 rounded" />
                                         <div className="mt-4 space-y-1">
-                                            <Skeleton className="h-1.5 w-full bg-neutral-700/30 rounded-full" />
-                                            <Skeleton className="h-3 w-16 bg-neutral-700/20 rounded" />
+                                            <Skeleton className="h-1.5 w-full bg-muted/30 rounded-full" />
+                                            <Skeleton className="h-3 w-16 bg-muted/20 rounded" />
                                         </div>
                                     </div>
                                 ))
@@ -287,6 +311,7 @@ export default function CalendarPage() {
                                     const isToday = day === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
                                     const grants = dayEvents.filter(e => e.decision === 'GRANT').length;
                                     const denies = dayEvents.filter(e => e.decision === 'DENY').length;
+                                    const maxAforo = dayEvents.reduce((m: number, e: any) => Math.max(m, e.peopleCount || 0), 0);
 
                                     return (
                                         <DayCell
@@ -298,6 +323,8 @@ export default function CalendarPage() {
                                             grants={grants}
                                             denies={denies}
                                             eventCount={dayEvents.length}
+                                            mode={mode}
+                                            maxAforo={maxAforo}
                                             onClick={() => setSelectedDate(day)}
                                         />
                                     );
@@ -311,13 +338,13 @@ export default function CalendarPage() {
                         loading ? (
                             // Skeleton loader for week view
                             Array.from({ length: 7 }).map((_, i) => (
-                                <div key={`week-skeleton-${i}`} className="relative p-3 rounded-xl min-h-[200px] bg-neutral-800/30 animate-pulse flex flex-col">
-                                    <Skeleton className="h-8 w-10 bg-neutral-700/50 rounded mb-4" />
+                                <div key={`week-skeleton-${i}`} className="relative p-3 rounded-xl min-h-[200px] bg-muted/30 animate-pulse flex flex-col">
+                                    <Skeleton className="h-8 w-10 bg-muted/50 rounded mb-4" />
                                     <div className="flex-1 space-y-2">
-                                        <Skeleton className="h-2 w-full bg-neutral-700/30 rounded-full" />
-                                        <Skeleton className="h-2 w-3/4 bg-neutral-700/20 rounded-full" />
+                                        <Skeleton className="h-2 w-full bg-muted/30 rounded-full" />
+                                        <Skeleton className="h-2 w-3/4 bg-muted/20 rounded-full" />
                                     </div>
-                                    <Skeleton className="h-4 w-20 bg-neutral-700/20 rounded mt-auto" />
+                                    <Skeleton className="h-4 w-20 bg-muted/20 rounded mt-auto" />
                                 </div>
                             ))
                         ) : (
@@ -339,6 +366,7 @@ export default function CalendarPage() {
 
                                 const grants = dayEvents.filter(e => e.decision === 'GRANT').length;
                                 const denies = dayEvents.filter(e => e.decision === 'DENY').length;
+                                const maxAforo = dayEvents.reduce((m: number, e: any) => Math.max(m, e.peopleCount || 0), 0);
 
                                 return (
                                     <DayCell
@@ -350,6 +378,8 @@ export default function CalendarPage() {
                                         grants={grants}
                                         denies={denies}
                                         eventCount={dayEvents.length}
+                                        mode={mode}
+                                        maxAforo={maxAforo}
                                         onClick={() => { setSelectedDate(day); setCurrentDate(slotDate); }}
                                         className="h-full min-h-[200px]"
                                     />
@@ -362,19 +392,19 @@ export default function CalendarPage() {
                     {view === 'day' && (
                         loading ? (
                             // Skeleton loader for day view
-                            <div className="h-full flex items-center justify-center p-10 bg-neutral-800/20 rounded-2xl border border-dashed border-neutral-800 animate-pulse">
+                            <div className="h-full flex items-center justify-center p-10 bg-muted/20 rounded-2xl border border-dashed border-border animate-pulse">
                                 <div className="text-center space-y-4">
-                                    <Skeleton className="h-12 w-16 mx-auto bg-neutral-700/50 rounded" />
-                                    <Skeleton className="h-6 w-32 mx-auto bg-neutral-700/30 rounded" />
-                                    <Skeleton className="h-4 w-48 mx-auto bg-neutral-700/20 rounded mt-4" />
+                                    <Skeleton className="h-12 w-16 mx-auto bg-muted/50 rounded" />
+                                    <Skeleton className="h-6 w-32 mx-auto bg-muted/30 rounded" />
+                                    <Skeleton className="h-4 w-48 mx-auto bg-muted/20 rounded mt-4" />
                                 </div>
                             </div>
                         ) : (
-                            <div className="h-full flex items-center justify-center p-10 bg-neutral-800/20 rounded-2xl border border-dashed border-neutral-800">
+                            <div className="h-full flex items-center justify-center p-10 bg-muted/20 rounded-2xl border border-dashed border-border">
                                 <div className="text-center">
-                                    <h2 className="text-4xl font-black text-white">{currentDate.getDate()}</h2>
-                                    <p className="text-xl text-neutral-500 uppercase font-bold">{monthNames[currentDate.getMonth()]}</p>
-                                    <p className="mt-4 text-xs text-neutral-600">Vista detallada disponible en el panel lateral.</p>
+                                    <h2 className="text-4xl font-black text-foreground">{currentDate.getDate()}</h2>
+                                    <p className="text-xl text-muted-foreground uppercase font-bold">{monthNames[currentDate.getMonth()]}</p>
+                                    <p className="mt-4 text-xs text-muted-foreground">Vista detallada disponible en el panel lateral.</p>
                                 </div>
                             </div>
                         )
@@ -384,35 +414,55 @@ export default function CalendarPage() {
 
             {/* Sidebar Details for Selected Date */}
             <div className="w-full xl:w-[400px] bg-[#0c0c0c] rounded-2xl p-0 flex flex-col shadow-2xl overflow-hidden relative">
-                <div className="p-6 bg-neutral-900 border-b border-neutral-800/50">
-                    <h2 className="text-lg font-bold text-white uppercase tracking-tight flex items-center gap-2">
-                        <Clock className="text-neutral-500" size={18} />
+                <div className="p-6 bg-card border-b border-border/50">
+                    <h2 className="text-lg font-bold text-foreground uppercase tracking-tight flex items-center gap-2">
+                        <Clock className="text-muted-foreground" size={18} />
                         {selectedDate
-                            ? `Accesos del día ${selectedDate}`
+                            ? (mode === "QUEUE" ? `Aforo del día ${selectedDate}` : `Accesos del día ${selectedDate}`)
                             : "Selecciona un día"
                         }
                     </h2>
-                    {selectedDate && (
+                    {selectedDate && (mode === "QUEUE" ? (
+                        (() => {
+                            const counts = selectedDayEvents.map((e: any) => e.peopleCount || 0);
+                            const pico = counts.length ? Math.max(...counts) : 0;
+                            const prom = counts.length ? Math.round((counts.reduce((a: number, b: number) => a + b, 0) / counts.length) * 10) / 10 : 0;
+                            return (
+                                <div className="flex gap-5 mt-4">
+                                    <div className="flex items-center gap-2">
+                                        <UserIcon size={13} className="text-violet-400" />
+                                        <span className="text-xs text-muted-foreground font-bold">Pico <span className="text-violet-400 tabular-nums">{pico}</span></span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-muted-foreground font-bold">Promedio <span className="text-sky-400 tabular-nums">{prom}</span></span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-muted-foreground font-bold">Lecturas <span className="text-foreground/70 tabular-nums">{counts.length}</span></span>
+                                    </div>
+                                </div>
+                            );
+                        })()
+                    ) : (
                         <div className="flex gap-4 mt-4">
                             <div className="flex items-center gap-2">
                                 <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                                <span className="text-xs text-neutral-400 font-bold">{selectedDayEvents.filter(e => e.decision === 'GRANT').length} Permitidos</span>
+                                <span className="text-xs text-muted-foreground font-bold">{selectedDayEvents.filter(e => e.decision === 'GRANT').length} Permitidos</span>
                             </div>
                             <div className="flex items-center gap-2">
                                 <div className="w-2 h-2 rounded-full bg-red-500" />
-                                <span className="text-xs text-neutral-400 font-bold">{selectedDayEvents.filter(e => e.decision === 'DENY').length} Denegados</span>
+                                <span className="text-xs text-muted-foreground font-bold">{selectedDayEvents.filter(e => e.decision === 'DENY').length} Denegados</span>
                             </div>
                         </div>
-                    )}
+                    ))}
 
                     {/* Search Bar */}
                     <div className="mt-6 relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" size={14} />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
                         <Input
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             placeholder="Buscar en este día..."
-                            className="h-9 pl-9 bg-neutral-950 border-neutral-800 rounded-lg text-xs"
+                            className="h-9 pl-9 bg-background border-border rounded-lg text-xs"
                         />
                     </div>
                 </div>
@@ -430,23 +480,40 @@ export default function CalendarPage() {
                         // Skeleton loader for events list
                         <div className="space-y-3">
                             {Array.from({ length: 8 }).map((_, i) => (
-                                <div key={`event-skeleton-${i}`} className="bg-neutral-900/50 p-3 rounded-xl flex items-start gap-3 animate-pulse">
-                                    <Skeleton className="w-4 h-4 rounded-full bg-neutral-700/50 mt-1" />
+                                <div key={`event-skeleton-${i}`} className="bg-card/50 p-3 rounded-xl flex items-start gap-3 animate-pulse">
+                                    <Skeleton className="w-4 h-4 rounded-full bg-muted/50 mt-1" />
                                     <div className="flex-1 space-y-2">
                                         <div className="flex justify-between">
-                                            <Skeleton className="h-4 w-32 bg-neutral-700/50 rounded" />
-                                            <Skeleton className="h-3 w-12 bg-neutral-700/30 rounded" />
+                                            <Skeleton className="h-4 w-32 bg-muted/50 rounded" />
+                                            <Skeleton className="h-3 w-12 bg-muted/30 rounded" />
                                         </div>
-                                        <Skeleton className="h-3 w-48 bg-neutral-700/30 rounded" />
+                                        <Skeleton className="h-3 w-48 bg-muted/30 rounded" />
                                     </div>
                                 </div>
                             ))}
                         </div>
                     ) : selectedDate ? (
                         selectedDayEvents.length > 0 ? (
-                            selectedDayEvents.slice(0, visibleCount).map(evt => (
+                            selectedDayEvents.slice(0, visibleCount).map(evt => {
+                                if ((evt as any)._queue) {
+                                    return (
+                                        <div key={evt.id} className="bg-card/50 p-3 rounded-xl flex items-start gap-3 border border-transparent">
+                                            <div className="mt-1"><UserIcon size={16} className="text-violet-500" /></div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex justify-between items-start gap-2">
+                                                    <span className="text-xs font-black text-foreground truncate">Aforo: {(evt as any).peopleCount}</span>
+                                                    <span className="text-[10px] font-mono text-muted-foreground shrink-0">{new Date(evt.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                                                </div>
+                                                <p className="text-[10px] text-muted-foreground mt-0.5 truncate uppercase flex items-center gap-1">
+                                                    <HardDrive size={10} className="shrink-0" /> {evt.device?.name || "Cámara de conteo"}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    );
+                                }
+                                return (
                                 <EventDetailsDialog key={evt.id} event={evt}>
-                                    <div className="group bg-neutral-900/50 hover:bg-neutral-800 p-3 rounded-xl cursor-pointer transition-all flex items-start gap-3 border border-transparent hover:border-neutral-700/50">
+                                    <div className="group bg-card/50 hover:bg-muted p-3 rounded-xl cursor-pointer transition-all flex items-start gap-3 border border-transparent hover:border-border/50">
                                         <div className="mt-1">
                                             {evt.decision === 'GRANT'
                                                 ? <CheckCircle2 size={16} className="text-emerald-500" />
@@ -462,7 +529,7 @@ export default function CalendarPage() {
                                                     {evt.accessType === 'TAG' && <CreditCard size={12} className="text-amber-400 shrink-0" />}
                                                     {(evt.accessType as string) === 'DOOR' && <DoorOpen size={12} className="text-emerald-400 shrink-0" />}
 
-                                                    <span className="text-xs font-black text-white truncate">
+                                                    <span className="text-xs font-black text-foreground truncate">
                                                         {evt.accessType === 'PLATE' && evt.plateDetected
                                                             ? `${evt.plateDetected}`
                                                             : evt.accessType === 'FACE' && evt.user?.name
@@ -475,11 +542,11 @@ export default function CalendarPage() {
                                                         }
                                                     </span>
                                                 </div>
-                                                <span className="text-[10px] font-mono text-neutral-500 shrink-0">
+                                                <span className="text-[10px] font-mono text-muted-foreground shrink-0">
                                                     {new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                 </span>
                                             </div>
-                                            <p className="text-[10px] text-neutral-400 mt-0.5 truncate uppercase flex items-center gap-1">
+                                            <p className="text-[10px] text-muted-foreground mt-0.5 truncate uppercase flex items-center gap-1">
                                                 <HardDrive size={10} className="shrink-0" />
                                                 {evt.device?.name || "Dispositivo"} •
                                                 <span className={evt.device?.direction === 'ENTRY' ? 'text-emerald-500' : 'text-orange-500'}>
@@ -489,7 +556,8 @@ export default function CalendarPage() {
                                         </div>
                                     </div>
                                 </EventDetailsDialog>
-                            ))
+                                );
+                            })
                         ) : (
                             <div className="text-center py-20 opacity-30">
                                 <Clock size={40} className="mx-auto mb-2" />
@@ -526,7 +594,7 @@ export default function CalendarPage() {
     );
 }
 
-function DayCell({ day, isSelected, isToday, hasEvents, grants, denies, eventCount, onClick, className }: any) {
+function DayCell({ day, isSelected, isToday, hasEvents, grants, denies, eventCount, onClick, className, mode, maxAforo }: any) {
     return (
         <button
             onClick={onClick}
@@ -534,19 +602,19 @@ function DayCell({ day, isSelected, isToday, hasEvents, grants, denies, eventCou
                 "relative p-2 rounded-xl flex flex-col items-start justify-between min-h-[80px] hover:scale-[1.02] transition-all",
                 isSelected
                     ? "bg-orange-500/10 shadow-[0_0_20px_rgba(249,115,22,0.1)] ring-1 ring-orange-500/50"
-                    : "bg-neutral-800/30 hover:bg-neutral-800",
+                    : "bg-muted/30 hover:bg-muted",
                 isToday && !isSelected && "bg-blue-500/5 ring-1 ring-blue-500/50",
                 className
             )}
         >
             <span className={cn(
                 "text-lg font-black font-mono",
-                isSelected ? "text-orange-400" : isToday ? "text-blue-400" : "text-neutral-500"
+                isSelected ? "text-orange-400" : isToday ? "text-blue-400" : "text-muted-foreground"
             )}>
                 {day}
             </span>
 
-            {hasEvents && (
+            {hasEvents && mode !== "QUEUE" && (
                 <div className="flex gap-1 mt-2 w-full">
                     {grants > 0 && (
                         <div className="flex-1 h-1.5 rounded-full bg-emerald-500/20 flex overflow-hidden">
@@ -562,9 +630,16 @@ function DayCell({ day, isSelected, isToday, hasEvents, grants, denies, eventCou
             )}
 
             {hasEvents && (
-                <span className="text-[9px] font-bold text-neutral-500 mt-1">
-                    {eventCount} eventos
-                </span>
+                mode === "QUEUE" ? (
+                    <span className="mt-1 flex items-baseline gap-1">
+                        <span className="text-base font-black text-violet-400 tabular-nums leading-none">{maxAforo}</span>
+                        <span className="text-[9px] font-bold text-muted-foreground">aforo máx</span>
+                    </span>
+                ) : (
+                    <span className="text-[9px] font-bold text-muted-foreground mt-1">
+                        {eventCount} eventos
+                    </span>
+                )
             )}
         </button>
     )

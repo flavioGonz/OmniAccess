@@ -107,10 +107,10 @@ export default function FaceDashboardMap({
         <div ref={mapRef} className="relative w-full h-full bg-[#050505] overflow-hidden rounded-[2rem]" onContextMenu={handleContextMenu}>
             <div className="absolute inset-0 w-full h-full">
                 {contextMenu && (
-                    <div className="absolute z-[100] bg-[#0A0A0A] border border-white/10 rounded-xl shadow-2xl py-2 min-w-[220px] backdrop-blur-xl" style={{ top: contextMenu.y, left: contextMenu.x }}>
-                        <div className="px-4 py-2 border-b border-white/5 mb-2"><p className="text-[8px] font-black uppercase text-neutral-500 tracking-widest">UBICAR DISPOSITIVO</p></div>
+                    <div className="absolute z-[100] bg-[#0A0A0A] border border-border rounded-xl shadow-2xl py-2 min-w-[220px] backdrop-blur-xl" style={{ top: contextMenu.y, left: contextMenu.x }}>
+                        <div className="px-4 py-2 border-b border-border mb-2"><p className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">UBICAR DISPOSITIVO</p></div>
                         {allFaceDevices.map(device => (
-                            <button key={device.id} onClick={() => placeCamera(device.id)} className="w-full text-left px-4 py-3 text-[10px] font-black text-neutral-400 uppercase tracking-widest hover:bg-[#B20D30] hover:text-white transition-all flex items-center justify-between group">
+                            <button key={device.id} onClick={() => placeCamera(device.id)} className="w-full text-left px-4 py-3 text-[10px] font-black text-muted-foreground uppercase tracking-widest hover:bg-[#B20D30] hover:text-foreground transition-all flex items-center justify-between group">
                                 {device.name} <Camera size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                             </button>
                         ))}
@@ -123,8 +123,8 @@ export default function FaceDashboardMap({
                     <img src={currentFloorPlan.imagePath} className="absolute inset-0 w-full h-full object-cover opacity-40 grayscale sepia-[0.2] hue-rotate-[320deg]" alt="Floor Plan" />
                 ) : (
                     <div className="absolute inset-0 flex flex-col items-center justify-center opacity-20 gap-4">
-                        <ImageIcon size={64} className="text-neutral-500" />
-                        <p className="text-[10px] font-black uppercase tracking-[0.5em] text-neutral-500">No Floor Plan Configured</p>
+                        <ImageIcon size={64} className="text-muted-foreground" />
+                        <p className="text-[10px] font-black uppercase tracking-[0.5em] text-muted-foreground">No Floor Plan Configured</p>
                     </div>
                 )}
 
@@ -169,16 +169,16 @@ export default function FaceDashboardMap({
                                     )}>
                                         {relevantBlacklist ? (
                                             <div className="w-full h-full flex items-center justify-center">
-                                                <Ban size={12} className="text-white" />
+                                                <Ban size={12} className="text-foreground" />
                                             </div>
                                         ) : (
-                                            <Camera size={12} className="text-white" />
+                                            <Camera size={12} className="text-foreground" />
                                         )}
                                     </div>
 
                                     <div className="absolute top-full mt-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
                                         <div className="bg-black/90 border border-white/10 px-3 py-1.5 rounded-lg text-center shadow-xl">
-                                            <p className="text-[10px] font-black text-white uppercase">{cam.name}</p>
+                                            <p className="text-[10px] font-black text-foreground uppercase">{cam.name}</p>
                                             <p className={cn("text-[7px] font-bold uppercase mt-0.5", isEntry ? "text-emerald-500" : "text-orange-500")}>
                                                 {isEntry ? "ENTRADA" : "SALIDA"}
                                             </p>
@@ -216,22 +216,22 @@ function BlacklistPopup({ event, onClose }: { event: any, onClose: () => void })
             exit={{ opacity: 0, scale: 0, y: 10 }}
             className="absolute bottom-full mb-2 w-28 bg-black/95 backdrop-blur-md border border-red-600 rounded-xl shadow-[0_0_40px_rgba(220,38,38,0.4)] z-[60] p-1.5"
         >
-            <div className="relative aspect-[4/3] w-full rounded-lg overflow-hidden bg-neutral-900 border border-white/10 mb-1.5 group/pop">
+            <div className="relative aspect-[4/3] w-full rounded-lg overflow-hidden bg-card border border-border mb-1.5 group/pop">
                 <img src={getImagePath(event.snapshotPath) || ""} className="w-full h-full object-cover" alt="Blacklist" />
                 <div className="absolute inset-0 bg-gradient-to-t from-red-900/40 to-transparent opacity-0 group-hover/pop:opacity-100 transition-opacity" />
 
                 {/* Smaller Close Button */}
                 <button
                     onClick={(e) => { e.stopPropagation(); onClose(); }}
-                    className="absolute top-1 right-1 h-5 w-5 bg-red-600 text-white rounded-full flex items-center justify-center hover:bg-red-700 shadow-xl pointer-events-auto transition-transform hover:scale-110"
+                    className="absolute top-1 right-1 h-5 w-5 bg-red-600 text-foreground rounded-full flex items-center justify-center hover:bg-red-700 shadow-xl pointer-events-auto transition-transform hover:scale-110"
                 >
                     <X size={10} />
                 </button>
 
                 {/* Multi-capture hint icon */}
                 <div className="absolute bottom-1 right-1 flex gap-0.5">
-                    <div className="w-1 h-1 rounded-full bg-white/40" />
-                    <div className="w-1 h-1 rounded-full bg-white/40" />
+                    <div className="w-1 h-1 rounded-full bg-foreground/10" />
+                    <div className="w-1 h-1 rounded-full bg-foreground/10" />
                     <div className="w-1 h-1 rounded-full bg-red-600 animate-pulse" />
                 </div>
             </div>
@@ -242,8 +242,8 @@ function BlacklistPopup({ event, onClose }: { event: any, onClose: () => void })
                     <span className="text-[8px] font-black text-red-500 uppercase tracking-widest leading-none">ALERTA ROJA</span>
                 </div>
                 <div className="flex items-center gap-1 mt-1 opacity-40">
-                    <Clock size={7} className="text-white" />
-                    <span className="text-[7px] font-mono text-white tracking-widest">{elapsed}</span>
+                    <Clock size={7} className="text-foreground" />
+                    <span className="text-[7px] font-mono text-foreground tracking-widest">{elapsed}</span>
                 </div>
             </div>
 

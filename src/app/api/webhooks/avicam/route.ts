@@ -5,7 +5,6 @@ import { AccessDecision } from "@prisma/client";
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
-        console.log("[Webhook Avicam] JSON Event:", body);
 
         // Registro básico de evento para Avicam RF-2002f4
         // Payload típico de webhooks puede variar según configuración del dispositivo

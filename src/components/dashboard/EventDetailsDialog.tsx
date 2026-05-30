@@ -1,3 +1,4 @@
+"use client";
 
 import React, { useState, useEffect } from "react";
 import {
@@ -6,7 +7,6 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
 import {
     Clock,
     User as UserIcon,
@@ -19,719 +19,471 @@ import {
     Calendar,
     Building2,
     Hash,
-    Fingerprint,
     Edit2,
     Save,
-    X as XIcon,
     AlertCircle,
     Activity,
     CreditCard,
     Key,
-    FileText
+    FileText,
+    Camera,
+    ScanFace,
+    Fingerprint,
+    Eye,
+    ChevronRight,
+    Layers,
+    Zap,
+    X,
+    Radio,
+    Shield,
+    ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { getCarLogo } from "@/lib/car-logos";
 import { getRelatedSessionEvents } from "@/app/actions/history";
-import { getQuickCreateData } from "@/app/actions/users";
-import { UserFormDialog } from "@/components/UserFormDialog";
-import { UserPlus, Loader2 } from "lucide-react";
-import { sileo as toast } from "sileo";
-import { Unit, AccessGroup } from "@prisma/client";
 import { getImagePath } from "@/lib/image-path";
+import { getVehicleBrandName } from "@/lib/hikvision-codes";
 
 interface EventDetailsDialogProps {
     event: any;
-    children?: React.ReactNode;
+    children: React.ReactNode;
     timeStatus?: { label: string; value: string; color: string } | null;
-    open?: boolean;
-    onOpenChange?: (open: boolean) => void;
 }
 
-export function EventDetailsDialog({ event, children, timeStatus, open, onOpenChange }: EventDetailsDialogProps) {
+export function EventDetailsDialog({ event, children, timeStatus }: EventDetailsDialogProps) {
     const router = useRouter();
+    const [isOpen, setIsOpen] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editedUser, setEditedUser] = useState(event.user?.name || "");
     const [editedUnit, setEditedUnit] = useState(event.user?.unit?.name || "");
-    const [isImageHovered, setIsImageHovered] = useState(false);
-    const [showPlateActionModal, setShowPlateActionModal] = useState(false);
     const [plateHistory, setPlateHistory] = useState<any[]>([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
-    const [isOpen, setIsOpen] = useState(false);
-    const [dateFilter, setDateFilter] = useState("");
-
-    // Session / Sequence State
     const [sessionEvents, setSessionEvents] = useState<any[]>([]);
     const [loadingSession, setLoadingSession] = useState(false);
-
-    // Quick Create States
-    const [showQuickCreate, setShowQuickCreate] = useState(false);
-    const [quickCreateData, setQuickCreateData] = useState<{
-        units: Unit[];
-        groups: AccessGroup[];
-        devices: any[];
-        parkingSlots: any[];
-    } | null>(null);
-    const [loadingQuickCreateData, setLoadingQuickCreateData] = useState(false);
+    const [expandImage, setExpandImage] = useState(false);
 
     const isGrant = event.decision === "GRANT";
+    const isLPR = event.accessType === "PLATE" || (!event.accessType && event.plateDetected && event.plateDetected !== "unknown");
+    const isFace = event.accessType === "FACE";
+    const accessType = event.accessType || (isLPR ? "PLATE" : "OTHER");
 
-    // Determine Type
-    const isLPR = event.accessType === 'PLATE' || (!event.accessType && event.plateDetected && event.plateDetected !== 'unknown');
-    const accessType = event.accessType || (isLPR ? 'PLATE' : 'OTHER');
-
-    const plateText = event.plateDetected?.toLowerCase() === 'unknown' || !event.plateDetected || event.plateDetected === 'NO_LEIDA'
-        ? "No Leída"
+    const plateText = event.plateDetected?.toLowerCase() === "unknown" || !event.plateDetected || event.plateDetected === "NO_LEIDA"
+        ? "No Leida"
         : event.plateDetected;
 
-    // Load data when modal opens
-    useEffect(() => {
-        if (!isOpen) return;
-
-        // 1. Load Plate History if LPR
-        if (isLPR && event.plateDetected && event.plateDetected !== 'unknown' && plateHistory.length === 0) {
-            setLoadingHistory(true);
-            fetch(`/api/events?plate=${event.plateDetected}&limit=10`)
-                .then(res => res.json())
-                .then(data => {
-                    const history = (data.events || [])
-                        .filter((e: any) => e.id !== event.id)
-                        .sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-                    setPlateHistory(history);
-                })
-                .catch(err => console.error('Error loading plate history:', err))
-                .finally(() => setLoadingHistory(false));
-        }
-
-        // 2. Load Session Sequence (Related events)
-        setLoadingSession(true);
-        getRelatedSessionEvents(event.id)
-            .then(events => {
-                setSessionEvents(events);
-            })
-            .catch(err => console.error("Error loading session:", err))
-            .finally(() => setLoadingSession(false));
-
-    }, [isOpen, event.id, event.plateDetected, isLPR, plateHistory.length]);
-
-    // Helper to parse details
     const parseDetails = (details: string | null) => {
         if (!details) return {};
-        const parts = details.split(',').map(p => p.trim());
         const data: any = {};
-        parts.forEach(p => {
-            const [k, v] = p.split(':').map(s => s.trim());
+        details.split(",").forEach(p => {
+            const [k, v] = p.split(":").map(s => s.trim());
             if (k && v) data[k] = v;
         });
         return data;
     };
-
-    // Helper to get proper image URL from MinIO
-    const getImageUrl = (path: string | null | undefined): string => {
-        return getImagePath(path) || "/placeholder-camera.jpg";
-    };
-
     const meta = parseDetails(event.details);
 
-    // Parse Similarity and Mode
-    let cleanSim = meta.Similitud || '';
-    let detectedMode = 'Estándar';
+    const getImg = (path: string | null | undefined): string | null => {
+        return getImagePath(path);
+    };
 
-    // Extract percentage with potential whitespace
-    const simMatch = cleanSim.match(/(\d+)\s*%/);
-    if (simMatch) {
-        cleanSim = `${simMatch[1]}%`;
-    } else {
-        // Fallback: extract digits if present
-        const digitMatch = cleanSim.match(/(\d+)/);
-        if (digitMatch && parseInt(digitMatch[1]) > 50) {
-            cleanSim = `${digitMatch[1]}%`;
-        }
+    let cleanSim = "";
+    let simNum = 0;
+    let detectedMode = "Estandar";
+    const simStr = meta.Similitud || "";
+    const simMatch = simStr.match(/(\d+)\s*%/);
+    if (simMatch) { cleanSim = `${simMatch[1]}%`; simNum = parseInt(simMatch[1]); }
+    else {
+        const digitMatch = simStr.match(/(\d+)/);
+        if (digitMatch && parseInt(digitMatch[1]) > 50) { cleanSim = `${digitMatch[1]}%`; simNum = parseInt(digitMatch[1]); }
     }
-
-    // Robust Mode Extraction (looking for "Modo:" or "Modo")
-    if (event.user?.role === 'BLACKLISTED') detectedMode = 'Lista Negra - PELIGRO';
-    else if (meta.Similitud && (meta.Similitud.includes('Modo') || meta.Similitud.includes('whitelist') || meta.Similitud.includes('blacklist'))) {
-        const lower = meta.Similitud.toLowerCase();
-        if (lower.includes('whitelist') || lower.includes('lista blanca')) detectedMode = 'Lista Blanca';
-        else if (lower.includes('blacklist') || lower.includes('lista negra')) detectedMode = 'Lista Negra';
-        else if (lower.includes('modo:')) {
-            const m = meta.Similitud.match(/Modo:?\s*(\w+)/i);
-            if (m) detectedMode = m[1];
-        }
-    }
+    if (simStr.toLowerCase().includes("whitelist") || simStr.toLowerCase().includes("lista blanca")) detectedMode = "Lista Blanca";
+    else if (simStr.toLowerCase().includes("blacklist") || simStr.toLowerCase().includes("lista negra")) detectedMode = "Lista Negra";
 
     const logoUrl = isLPR ? getCarLogo(meta.Marca) : null;
-    const eventImageUrl = getImageUrl(event.imagePath || event.snapshotPath || (event.accessType !== 'PLATE' ? event.user?.cara : null)) || "/placeholder-camera.jpg";
-    const userImageUrl = event.user?.cara ? getImageUrl(event.user.cara) : null;
+
+    const mainImage = getImg(event.imagePath) || getImg(event.snapshotPath);
+    const userImage = getImg(event.user?.cara);
+    const faceImage = getImg(meta.FaceImage);
+    const displayImage = mainImage || faceImage || userImage;
+    const profileImage = userImage || faceImage || getImg(event.snapshotPath);
 
     const dateObj = new Date(event.timestamp);
-    const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const dateStr = dateObj.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const timeStr = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const dateStr = dateObj.toLocaleDateString("es-UY", { day: "2-digit", month: "short", year: "numeric" });
 
-    const handleQuickCreateClick = async () => {
-        if (quickCreateData) {
-            setShowQuickCreate(true);
-            return;
-        }
+    let brandName = meta.Marca || "";
+    if (brandName.startsWith("Brand ")) brandName = getVehicleBrandName(brandName.replace("Brand ", ""));
 
-        setLoadingQuickCreateData(true);
-        try {
-            const data = await getQuickCreateData();
-            // @ts-ignore - parkingSlots added to action but not strictly typed here yet
-            setQuickCreateData(data);
-            setShowQuickCreate(true);
-        } catch (error) {
-            console.error("Error fetching quick create data:", error);
-            toast.error({ title: "Error al cargar datos de creación rápida" });
-        } finally {
-            setLoadingQuickCreateData(false);
-        }
-    };
+    const personName = event.user?.name || meta.Rostro || "Desconocido";
+    const unitName = event.user?.unit?.name || "Externo";
+    const isVerified = !!event.user;
+    const isBlacklist = detectedMode === "Lista Negra";
+    const isWhitelist = detectedMode === "Lista Blanca";
 
-    // Sync internal state with external if provided
+    const modeLabel = isFace ? "Facial" : isLPR ? "LPR" : accessType === "TAG" ? "RFID" : "Estandar";
+
+    const extraMeta = Object.entries(meta).filter(([key]) =>
+        !["Marca", "Color", "Tipo", "Modelo", "FaceImage", "Similitud", "Rostro", "Modo", "Persona"].includes(key)
+    );
+
     useEffect(() => {
-        if (open !== undefined) {
-            setIsOpen(open);
+        if (!isOpen) return;
+        if (isLPR && event.plateDetected && event.plateDetected !== "unknown" && plateHistory.length === 0) {
+            setLoadingHistory(true);
+            fetch(`/api/events?plate=${event.plateDetected}&limit=10`)
+                .then(res => res.json())
+                .then(data => {
+                    const h = (data.events || []).filter((e: any) => e.id !== event.id).sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+                    setPlateHistory(h);
+                })
+                .catch(() => {})
+                .finally(() => setLoadingHistory(false));
         }
-    }, [open]);
+        setLoadingSession(true);
+        getRelatedSessionEvents(event.id)
+            .then(evts => setSessionEvents(evts))
+            .catch(() => {})
+            .finally(() => setLoadingSession(false));
+    }, [isOpen]);
 
-    const handleOpenChange = (newOpen: boolean) => {
-        setIsOpen(newOpen);
-        if (onOpenChange) onOpenChange(newOpen);
+    const getVehicleColor = (colorName: string) => {
+        const c = (colorName || "").toLowerCase();
+        if (c.includes("blanc") || c.includes("white")) return { bg: "#ffffff", light: true };
+        if (c.includes("plat") || c.includes("silver")) return { bg: "#d1d5db", light: true };
+        if (c.includes("gris") || c.includes("gray")) return { bg: "#4b5563", light: false };
+        if (c.includes("neg") || c.includes("black")) return { bg: "#000000", light: false };
+        if (c.includes("roj") || c.includes("red")) return { bg: "#dc2626", light: false };
+        if (c.includes("azu") || c.includes("blue")) return { bg: "#2563eb", light: false };
+        if (c.includes("amar") || c.includes("yellow")) return { bg: "#facc15", light: true };
+        if (c.includes("verd") || c.includes("green")) return { bg: "#16a34a", light: false };
+        return { bg: "#171717", light: false };
     };
+
+    // Alert color system
+    const alertColor = isBlacklist
+        ? { border: "border-red-500/40", bg: "bg-red-500/10", text: "text-red-400", pulse: "bg-red-500", glow: "shadow-red-500/20" }
+        : !isGrant
+        ? { border: "border-amber-500/40", bg: "bg-amber-500/10", text: "text-amber-400", pulse: "bg-amber-500", glow: "shadow-amber-500/20" }
+        : { border: "border-emerald-500/30", bg: "bg-emerald-500/10", text: "text-emerald-400", pulse: "bg-emerald-500", glow: "shadow-emerald-500/10" };
 
     return (
-        <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-            {children && <DialogTrigger asChild>{children}</DialogTrigger>}
-            <DialogContent className="p-0 bg-neutral-950 border border-neutral-800 overflow-hidden rounded-2xl shadow-[0_20px_80px_rgba(0,0,0,0.9)] w-[95vw] max-w-5xl" aria-describedby="event-description">
-                <DialogTitle className="sr-only">Ficha de Evento de Acceso</DialogTitle>
-                <p id="event-description" className="sr-only">Detalles del evento</p>
+        <Dialog onOpenChange={setIsOpen}>
+            <DialogTrigger asChild>{children}</DialogTrigger>
+            <DialogContent className={cn("p-0 bg-background border overflow-hidden rounded-lg shadow-2xl w-[95vw] max-w-[850px] max-h-[90vh]", alertColor.border, alertColor.glow)} aria-describedby="evt-desc">
+                <DialogTitle className="sr-only">Evento de Acceso</DialogTitle>
+                <p id="evt-desc" className="sr-only">Detalles del evento</p>
 
+                {/* Fullscreen image overlay */}
+                {expandImage && displayImage && (
+                    <div className="absolute inset-0 z-50 bg-black/95 flex items-center justify-center cursor-pointer" onClick={() => setExpandImage(false)}>
+                        <button className="absolute top-3 right-3 p-2 rounded-full bg-muted/80 text-foreground hover:bg-muted transition-colors z-10">
+                            <X size={18} />
+                        </button>
+                        <img src={displayImage} alt="Evidencia" className="max-w-full max-h-full object-contain" />
+                    </div>
+                )}
 
-                <div className="flex flex-col lg:flex-row w-full bg-neutral-950 relative h-full max-h-[90vh]">
+                <div className="flex flex-col max-h-[90vh] overflow-hidden">
 
-                    {/* FULLSCREEN IMAGE OVERLAY */}
-                    {isImageHovered && (
-                        <div
-                            className="absolute inset-0 z-50 bg-black flex items-center justify-center p-8"
-                            onMouseLeave={() => setIsImageHovered(false)}
-                        >
-                            <div className="relative w-full h-full flex items-center justify-center">
-                                <div className="relative w-full" style={{ aspectRatio: isLPR ? '16/9' : 'auto', maxHeight: '100%' }}>
-                                    <img src={eventImageUrl} alt="Vista" className={cn("w-full h-full object-contain", !isLPR && "max-w-[400px] mx-auto")} />
-                                </div>
-                            </div>
+                    {/* ─── STATUS BAR ─── */}
+                    <div className={cn("px-6 py-2 flex justify-between items-center border-b", alertColor.bg, alertColor.border)}>
+                        <div className="flex items-center gap-3">
+                            <span className={cn("w-2 h-2 rounded-full animate-pulse", alertColor.pulse)} />
+                            <span className={cn("text-[10px] font-bold uppercase tracking-[0.15em]", alertColor.text)}>
+                                {isBlacklist ? "ALERTA: ENTIDAD EN LISTA NEGRA" : !isGrant ? "ACCESO DENEGADO" : "ACCESO AUTORIZADO"}
+                            </span>
                         </div>
-                    )}
-
-                    {/* LEFT: VISUAL EVIDENCE (Dynamic Width based on content) */}
-                    <div className={cn("relative flex flex-col overflow-y-auto custom-scrollbar bg-neutral-900 border-r border-neutral-800", (isLPR || event.accessType === 'FACE') ? "w-full lg:w-[60%]" : "w-full lg:w-[45%]")}>
-
-                        {/* Main Image Container */}
-                        <div
-                            className={cn(
-                                "relative bg-black cursor-pointer group shrink-0 flex items-center justify-center overflow-hidden",
-                                isLPR ? "w-full aspect-video" :
-                                    event.accessType === 'FACE' ? "w-full h-[500px] lg:h-auto lg:flex-1" : // Face takes full available height
-                                        "w-full p-8 aspect-square bg-neutral-950"
+                        <div className="flex items-center gap-4">
+                            <span className="text-[9px] font-bold text-muted-foreground tracking-[0.15em]">
+                                {dateStr} {timeStr}
+                            </span>
+                            {timeStatus && (
+                                <span className={cn("text-[9px] font-bold tracking-wide", timeStatus.color)}>
+                                    {timeStatus.label}: {timeStatus.value}
+                                </span>
                             )}
-                            onMouseEnter={() => accessType !== 'FACE' && setIsImageHovered(true)}
-                        >
-                            <img
-                                src={eventImageUrl}
-                                alt="Evidencia"
-                                className={cn(
-                                    "w-full h-full",
-                                    (isLPR || event.accessType === 'FACE') ? "object-cover" : "object-contain max-h-[400px] max-w-[400px] rounded-lg shadow-2xl border border-neutral-800"
-                                )}
-                            />
-
-                            {/* Overlay Gradient for readability */}
-                            {(isLPR || event.accessType === 'FACE') && (
-                                <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/90 pointer-events-none" />
-                            )}
-
-                            {/* FACE SPECIFIC OVERLAYS */}
-                            {event.accessType === 'FACE' && (
-                                <>
-                                    {/* Direction - Top Left */}
-                                    <div className="absolute top-6 left-6 z-30">
-                                        {/* Direction Badge - Rectangular, no rounded */}
-                                        <div className={cn(
-                                            "flex items-center gap-2 px-4 py-2 backdrop-blur-xl shadow-lg",
-                                            event.direction === 'ENTRY'
-                                                ? "bg-blue-600/80 text-white"
-                                                : "bg-orange-600/80 text-white"
-                                        )}>
-                                            {event.direction === 'ENTRY' ? <LogIn size={16} strokeWidth={3} /> : <LogOut size={16} strokeWidth={3} />}
-                                            <span className="text-xs font-black uppercase tracking-widest">
-                                                {event.direction === 'ENTRY' ? 'Entrada' : 'Salida'}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    {/* Decision & DateTime - Center */}
-                                    <div className="absolute inset-0 flex flex-col items-center justify-center z-20 pointer-events-none gap-4">
-                                        {/* Decision */}
-                                        <div className="flex items-center gap-3">
-                                            {isGrant ? <ShieldCheck size={48} strokeWidth={2.5} className="text-emerald-400 drop-shadow-[0_0_20px_rgba(52,211,153,0.5)]" /> : <AlertCircle size={48} strokeWidth={2.5} className="text-red-400 drop-shadow-[0_0_20px_rgba(248,113,113,0.5)]" />}
-                                            <span className={cn(
-                                                "text-5xl font-black uppercase tracking-tight drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]",
-                                                isGrant ? "text-emerald-400" : "text-red-400"
-                                            )}>
-                                                {isGrant ? "PERMITIDO" : "DENEGADO"}
-                                            </span>
-                                        </div>
-
-                                        {/* Date & Time */}
-                                        <div className="bg-black/70 px-4 py-2 backdrop-blur-md rounded">
-                                            <p className="text-sm font-mono text-white font-bold">{dateStr} • {timeStr}</p>
-                                        </div>
-                                    </div>
-
-                                    {/* Name & Mode Info (Bottom Left) */}
-                                    <div className="absolute bottom-8 left-8 z-30 max-w-[70%]">
-                                        <h1 className="text-4xl font-black text-white uppercase tracking-tight leading-none drop-shadow-xl mb-3">
-                                            {event.user?.name || meta.Rostro || "Desconocido"}
-                                        </h1>
-                                        {detectedMode !== 'Estándar' && (
-                                            <div className={cn(
-                                                "inline-block px-3 py-1.5 rounded-lg backdrop-blur-md border text-xs font-black uppercase tracking-widest shadow-lg",
-                                                detectedMode.includes('Negra') ? "bg-red-600 border-red-400 text-white" : "bg-white/90 border-white/30 text-black"
-                                            )}>
-                                                {detectedMode}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Face Crop (Bottom Right) - No similarity badge */}
-                                    {(meta.FaceImage || event.user?.cara) && (getImageUrl(meta.FaceImage || event.user?.cara) !== eventImageUrl) && (
-                                        <div className="absolute bottom-8 right-8 z-40 w-32 h-32 rounded-xl overflow-hidden border-2 border-white/50 shadow-2xl bg-black transition-transform hover:scale-110 origin-bottom-right group-hover:border-white">
-                                            <img
-                                                src={getImageUrl(meta.FaceImage || event.user?.cara)}
-                                                className="w-full h-full object-cover"
-                                                alt="Rostro"
-                                            />
-                                        </div>
-                                    )}
-                                </>
-                            )}
-
-
-                            {/* TOP RIGHT: MODE BADGE (Only for LPR, removed for FACE) */}
-                            {isLPR && (
-                                <div className="absolute top-6 right-6 z-30">
-                                    <div className="px-3 py-1 rounded-full bg-black/50 backdrop-blur-md border border-white/10 text-white shadow-xl">
-                                        <p className="text-[10px] font-bold uppercase tracking-widest">
-                                            LPR MONITOR
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-
-
-
-                            {/* LPR Direction Badge (Existing Style preserved if needed, or unify?) 
-                                Converting LPR to new simple pill style for consistency if LPR */
-                            }
-                            {/* Top Left Stack: Duration & Direction */}
-                            {/* LPR Direction (Side, Solid, Loop) */}
-                            {isLPR && (
-                                <div className={cn(
-                                    "absolute inset-x-12 top-1/2 -translate-y-1/2 z-10 flex pointer-events-none",
-                                    event.direction === 'ENTRY' ? "justify-end" : "justify-start"
-                                )}>
-                                    <div className={cn(
-                                        "flex flex-col items-center animate-pulse",
-                                        event.direction === 'ENTRY' ? "text-blue-500" : "text-orange-500"
-                                    )}>
-                                        {event.direction === 'ENTRY' ? <LogIn size={50} strokeWidth={2} /> : <LogOut size={50} strokeWidth={2} />}
-                                        <h1 className="text-2xl font-black uppercase tracking-tighter leading-none mt-2 drop-shadow-md">
-                                            {event.direction === 'ENTRY' ? 'ENTRADA' : 'SALIDA'}
-                                        </h1>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Top Left Stack: Duration Only (Direction moved to center for LPR) */}
-                            <div className="absolute top-6 left-6 z-20 flex flex-col items-start gap-2">
-                                {timeStatus && (
-                                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full backdrop-blur-md border shadow-sm bg-neutral-900/80 border-white/20 text-white animate-in zoom-in slide-in-from-left-2 shadow-xl">
-                                        <Clock size={14} className={timeStatus.color} />
-                                        <span className="text-[10px] font-bold uppercase tracking-wider">
-                                            <span className={timeStatus.color}>{timeStatus.label}</span> <span className="text-neutral-500 mx-1">•</span> {timeStatus.value}
-                                        </span>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* LPR Only: Plate Display */}
-                            {isLPR && (() => {
-                                const colorName = meta.Color?.toLowerCase() || '';
-                                let bgStyle = '#171717'; // Default Neutral-900 like
-                                let isLight = false;
-
-                                // Color Mapping Logic
-                                if (colorName.includes('blanc') || colorName.includes('white')) { bgStyle = '#ffffff'; isLight = true; }
-                                else if (colorName.includes('plat') || colorName.includes('silver')) { bgStyle = '#d1d5db'; isLight = true; } // Gray-300
-                                else if (colorName.includes('gris') || colorName.includes('gray')) { bgStyle = '#4b5563'; isLight = false; } // Gray-600
-                                else if (colorName.includes('neg') || colorName.includes('black')) { bgStyle = '#000000'; isLight = false; }
-                                else if (colorName.includes('roj') || colorName.includes('red')) { bgStyle = '#dc2626'; isLight = false; } // Red-600
-                                else if (colorName.includes('azu') || colorName.includes('blue')) { bgStyle = '#2563eb'; isLight = false; } // Blue-600
-                                else if (colorName.includes('amar') || colorName.includes('yellow')) { bgStyle = '#facc15'; isLight = true; } // Yellow-400
-                                else if (colorName.includes('verd') || colorName.includes('green')) { bgStyle = '#16a34a'; isLight = false; } // Green-600
-                                else if (colorName.includes('naran') || colorName.includes('orange')) { bgStyle = '#ea580c'; isLight = false; } // Orange-600
-
-                                return (
-                                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-stretch gap-2 origin-bottom">
-                                        {/* 1. LOGO (White Box) - Smaller */}
-                                        {logoUrl && (
-                                            <div className="bg-white rounded-lg w-14 flex items-center justify-center shadow-2xl border border-white/50 shrink-0 p-1">
-                                                <div className="relative w-8 h-8">
-                                                    <img src={logoUrl} alt="Marca" className="w-full h-full object-contain" />
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* 2. PLATE (Vehicle Color) - Smaller */}
-                                        <div
-                                            className={cn(
-                                                "px-4 py-1 rounded-lg shadow-2xl cursor-pointer transition-all hover:scale-105 group/plate flex flex-col justify-center border min-w-[100px]",
-                                                isLight ? "text-black border-black/10" : "text-white border-white/20"
-                                            )}
-                                            style={{ backgroundColor: plateText === 'No Leída' ? '#dc2626' : bgStyle }}
-                                            onClick={(e) => { e.stopPropagation(); setShowPlateActionModal(true); }}
-                                        >
-                                            <p className={cn("text-[8px] font-bold uppercase tracking-widest leading-none mb-0.5 opacity-70",
-                                                plateText === 'No Leída' ? "text-white" : ""
-                                            )}>
-                                                MATRÍCULA
-                                            </p>
-                                            <h3 className={cn("text-2xl font-black font-mono tracking-wider leading-none",
-                                                plateText === 'No Leída' ? "text-white" : (isLight ? "text-black" : "text-white")
-                                            )}>
-                                                {plateText}
-                                            </h3>
-                                        </div>
-
-                                        {/* 3. STATUS (Right of Plate) - Smaller */}
-                                        <div className={cn(
-                                            "px-2 rounded-lg shadow-xl backdrop-blur-xl border flex flex-col items-center justify-center gap-0.5 min-w-[60px]",
-                                            isGrant ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300" : "bg-red-500/20 border-red-500/40 text-red-300"
-                                        )}>
-                                            {isGrant ? <ShieldCheck size={16} strokeWidth={2.5} /> : <AlertCircle size={16} strokeWidth={2.5} />}
-                                            <span className="text-[7px] font-black uppercase tracking-wider leading-none text-center">
-                                                {isGrant ? "AUTORIZADO" : "DENEGADO"}
-                                            </span>
-                                        </div>
-                                    </div>
-                                );
-                            })()}
                         </div>
-
-                        {/* CONTENT BELOW IMAGE */}
-                        {isLPR ? (
-                            /* LPR SPECIFIC CONTENT */
-                            <>
-                                <div className="bg-neutral-900 border-t border-neutral-800 p-4">
-                                    <div className="grid grid-cols-3 gap-4">
-                                        <div className="flex items-center gap-2">
-                                            <Car size={16} className="text-neutral-500" />
-                                            <div>
-                                                <p className="text-[9px] font-bold text-neutral-600 uppercase">Marca</p>
-                                                <p className="text-sm font-black text-white uppercase">{meta.Marca || '---'}</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-4 h-4 rounded-full border-2 border-neutral-700"
-                                                style={{ backgroundColor: meta.Color?.toLowerCase() === 'blanco' ? '#fff' : meta.Color?.toLowerCase() === 'negro' ? '#000' : meta.Color || '#444' }} />
-                                            <div>
-                                                <p className="text-[9px] font-bold text-neutral-600 uppercase">Color</p>
-                                                <p className="text-sm font-black text-white uppercase">{meta.Color || '---'}</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <Hash size={16} className="text-neutral-500" />
-                                            <div>
-                                                <p className="text-[9px] font-bold text-neutral-600 uppercase">Tipo</p>
-                                                <p className="text-sm font-black text-white uppercase">{meta.Tipo || 'Vehículo'}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="border-t border-neutral-800 p-4">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div className="flex items-center gap-2">
-                                            <Clock size={14} className="text-neutral-500" />
-                                            <h3 className="text-xs font-black text-neutral-400 uppercase tracking-widest">Historial LPR</h3>
-                                        </div>
-                                        <button
-                                            onClick={() => router.push(`/admin/history?q=${plateText}`)}
-                                            className="flex items-center gap-1.5 px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-md transition-colors text-[10px] font-bold text-neutral-300 uppercase tracking-wider"
-                                        >
-                                            <FileText size={12} /> Reporte Instantáneo
-                                        </button>
-                                    </div>
-
-                                    {loadingHistory ? <p className="text-xs text-neutral-600 text-center">Cargando...</p> : (
-                                        <div className="space-y-2 max-h-[128px] overflow-y-auto custom-scrollbar">
-                                            {plateHistory.slice(0, 3).map((hist: any) => (
-                                                <div key={hist.id} className="flex items-center gap-3 p-2 bg-neutral-900/50 rounded-lg border border-neutral-800/50">
-                                                    <div className="text-xs text-neutral-400 font-mono">{new Date(hist.timestamp).toLocaleTimeString()}</div>
-                                                    <Badge variant={hist.decision === 'GRANT' ? 'default' : 'destructive'} className="text-[9px] h-5">{hist.decision}</Badge>
-                                                    <div className="text-[10px] text-neutral-500">{hist.device?.name}</div>
-                                                </div>
-                                            ))}
-                                            {plateHistory.length === 0 && <p className="text-xs text-neutral-600 text-center">Sin historial reciente</p>}
-                                        </div>
-                                    )}
-                                </div>
-                            </>
-                        ) : (
-                            /* NON-LPR SPECIFIC CONTENT (FACE / RFID / PIN) 
-                               If FACE, this sits below the flex-1 image. 
-                            */
-                            <div className="p-4 bg-neutral-900 border-t border-neutral-800 shrink-0">
-                                {/* Credential Info Block */}
-                                <div className="bg-neutral-950 rounded-xl p-4 border border-neutral-800 flex items-center gap-4">
-                                    <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-800 shrink-0">
-                                        {accessType === 'FACE' || event.accessType === 'FACE' ? <UserIcon size={24} className="text-blue-400" /> :
-                                            accessType === 'TAG' ? <CreditCard size={24} className="text-purple-400" /> :
-                                                accessType === 'PIN' ? <Hash size={24} className="text-orange-400" /> :
-                                                    <ShieldCheck size={24} className="text-emerald-400" />}
-                                    </div>
-                                    <div>
-                                        <h3 className="text-[10px] font-black text-neutral-500 uppercase tracking-widest leading-none mb-1">
-                                            Credencial Utilizada
-                                        </h3>
-                                        <p className="text-sm font-black text-white uppercase tracking-tight">
-                                            {accessType === 'FACE' || event.accessType === 'FACE' ? 'Reconocimiento Facial' :
-                                                accessType === 'TAG' ? 'Tarjeta RFID / Tag' :
-                                                    accessType === 'PIN' ? 'Código PIN' : 'Acceso Estándar'}
-                                        </p>
-                                        <p className="text-xs text-neutral-500 font-mono mt-0.5 break-all">
-                                            {event.credentialId ? `Ref: ${event.credentialId}` : 'ID de Acceso Seguro'}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-
                     </div>
 
-                    {/* RIGHT: IDENTITY & DATA (Dynamic Width) */}
-                    <div className={cn("bg-neutral-950 flex flex-col overflow-y-auto custom-scrollbar border-l border-neutral-800", (isLPR || event.accessType === 'FACE') ? "w-full lg:w-[40%]" : "w-full lg:w-[55%]")}>
-                        {/* Header */}
-                        <div className="bg-neutral-900 border-b border-neutral-800 p-4 shrink-0">
-                            <h2 className="text-base font-black text-white uppercase tracking-tight mb-0.5">Información del Evento</h2>
-                            <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">Sistema de Control de Acceso</p>
-                        </div>
+                    {/* ─── MAIN GRID: 5/7 columns ─── */}
+                    <div className="grid grid-cols-12 flex-1 overflow-hidden">
 
-                        {/* User Profile */}
-                        <div className="p-6 border-b border-neutral-800 shrink-0">
-                            <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center gap-2">
-                                    <UserIcon size={12} className="text-neutral-500" />
-                                    <h3 className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">Sujeto Identificado</h3>
-                                </div>
-                                {event.user && (
-                                    <button onClick={() => setIsEditing(!isEditing)} className={cn("p-2 rounded-lg transition-colors", isEditing ? "text-emerald-400 bg-emerald-500/10" : "text-neutral-400 bg-neutral-800")}>
-                                        {isEditing ? <Save size={14} /> : <Edit2 size={14} />}
-                                    </button>
+                        {/* LEFT: Subject Visual */}
+                        <div className="col-span-6 border-r border-border/60 p-5 flex flex-col gap-3 overflow-y-auto">
+                            {/* Photo with reticle */}
+                            <div
+                                className="relative group rounded-lg overflow-hidden border border-border/50 cursor-pointer"
+                                onClick={() => displayImage && setExpandImage(true)}
+                            >
+                                {/* Reticle corners */}
+                                <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-emerald-500/60 z-10" />
+                                <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-emerald-500/60 z-10" />
+                                <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-emerald-500/60 z-10" />
+                                <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-emerald-500/60 z-10" />
+
+                                {displayImage ? (
+                                    <img
+                                        src={displayImage}
+                                        alt="Evidencia"
+                                        className={cn(
+                                            "w-full object-cover transition-all duration-700",
+                                            isFace ? "aspect-[4/5]" : "aspect-video",
+                                            "grayscale group-hover:grayscale-0"
+                                        )}
+                                    />
+                                ) : (
+                                    <div className={cn("w-full flex items-center justify-center bg-card", isFace ? "aspect-[4/5]" : "aspect-video")}>
+                                        <Camera className="w-12 h-12 text-muted-foreground" />
+                                    </div>
                                 )}
-                            </div>
 
-                            {(event.user || (accessType === 'FACE' && (meta.Rostro || meta.FaceImage || event.snapshotPath))) ? (
-                                <div className="bg-neutral-900 rounded-xl p-5 border border-neutral-800">
-                                    <div className="flex items-start gap-4">
-                                        <div className="relative w-20 h-20 rounded-lg overflow-hidden border-2 border-neutral-700 bg-neutral-800 shrink-0">
-                                            {(userImageUrl || (meta.FaceImage && getImageUrl(meta.FaceImage)) || getImageUrl(event.snapshotPath)) ? (
-                                                <img
-                                                    src={userImageUrl || getImageUrl(meta.FaceImage) || getImageUrl(event.snapshotPath)}
-                                                    alt="Usuario"
-                                                    className={cn("w-full h-full object-cover", event.user?.role === 'BLACKLISTED' && "sepia-[0.5] hue-rotate-[-50deg]")}
-                                                />
-                                            ) : (
-                                                <div className="w-full h-full flex items-center justify-center"><UserIcon size={32} className="text-neutral-600" /></div>
-                                            )}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            {isEditing ? (
-                                                <div className="space-y-2">
-                                                    <input value={editedUser} onChange={(e) => setEditedUser(e.target.value)} className="w-full bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-sm text-white" placeholder="Nombre" />
-                                                    <input value={editedUnit} onChange={(e) => setEditedUnit(e.target.value)} className="w-full bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-sm text-blue-400" placeholder="Unidad" />
-                                                </div>
-                                            ) : (
-                                                <>
-                                                    <h4 className="text-lg font-black text-white uppercase truncate">{editedUser || event.user?.name || meta.Rostro || "Desconocido"}</h4>
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <Building2 size={12} className="text-blue-400" />
-                                                        <p className="text-sm font-bold text-blue-400 uppercase truncate">{editedUnit || event.user?.unit?.name || 'Externo'}</p>
-                                                    </div>
-                                                    <div className="flex gap-2">
-                                                        <Badge className={cn("text-[9px]", event.user?.role === 'BLACKLISTED' ? "bg-red-600 text-white" : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20")}>
-                                                            {event.user?.role === 'BLACKLISTED' ? "LISTA NEGRA" : event.user ? "VERIFICADO" : "DETECTADO"}
-                                                        </Badge>
-                                                    </div>
-                                                </>
-                                            )}
-                                        </div>
+                                {/* Zoom hint */}
+                                <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                                    <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-black/60 backdrop-blur-sm text-white text-[9px] font-semibold">
+                                        <Eye size={10} /> Ampliar
                                     </div>
                                 </div>
-                            ) : (
-                                <div className="bg-neutral-900 rounded-xl p-8 border border-dashed border-neutral-800 text-center">
-                                    <UserIcon size={40} className="text-neutral-700 mx-auto mb-3" />
-                                    <p className="text-sm font-bold text-neutral-600 uppercase mb-4">Desconocido</p>
-                                    <button
-                                        onClick={handleQuickCreateClick}
-                                        disabled={loadingQuickCreateData}
-                                        className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95"
-                                    >
-                                        {loadingQuickCreateData ? (
-                                            <Loader2 size={14} className="animate-spin" />
-                                        ) : (
-                                            <UserPlus size={14} />
-                                        )}
-                                        Registrar Nuevo Usuario
-                                    </button>
-                                </div>
-                            )}
-                        </div>
 
-                        {/* Details List */}
-                        <div className="p-5 flex-1 space-y-4">
-                            <div className="flex items-start gap-3">
-                                <Calendar size={16} className="text-neutral-500 mt-1" />
-                                <div>
-                                    <p className="text-[10px] font-bold text-neutral-600 uppercase mb-1">Fecha</p>
-                                    <p className="text-base font-black text-white font-mono">{dateStr} {timeStr}</p>
+                                {/* Match badge */}
+                                {isFace && cleanSim && (
+                                    <div className="absolute bottom-3 right-3 z-10">
+                                        <div className={cn(
+                                            "px-2.5 py-1 rounded text-[11px] font-black shadow-lg",
+                                            simNum >= 80 ? "bg-emerald-500 text-foreground" : simNum >= 60 ? "bg-amber-500 text-black" : "bg-red-500 text-foreground"
+                                        )}>
+                                            {cleanSim} MATCH
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* LPR Plate overlay */}
+                                {isLPR && (() => {
+                                    const vc = getVehicleColor(meta.Color);
+                                    return (
+                                        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-stretch gap-1.5">
+                                            {logoUrl && (
+                                                <div className="bg-white rounded w-10 flex items-center justify-center p-0.5 shadow-lg">
+                                                    <img src={logoUrl} alt="" className="w-6 h-6 object-contain" />
+                                                </div>
+                                            )}
+                                            <div
+                                                className={cn("px-3 py-1.5 rounded shadow-lg border flex flex-col justify-center", vc.light ? "text-black border-black/10" : "text-foreground border-border")}
+                                                style={{ backgroundColor: plateText === "No Leida" ? "#dc2626" : vc.bg }}
+                                            >
+                                                <p className="text-[7px] font-bold uppercase tracking-widest opacity-60">Matricula</p>
+                                                <h3 className="text-lg font-bold font-mono tracking-wider leading-tight">{plateText}</h3>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+
+                            {/* Mini info chips below photo */}
+                            <div className="grid grid-cols-2 gap-2">
+                                <div className="bg-muted/40 p-2 rounded-lg border border-border/30">
+                                    <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-tight">Direccion</p>
+                                    <p className={cn("text-sm font-semibold", event.direction === "ENTRY" ? "text-blue-400" : "text-orange-400")}>
+                                        {event.direction === "ENTRY" ? "Entrada" : "Salida"}
+                                    </p>
+                                </div>
+                                <div className="bg-muted/40 p-2 rounded-lg border border-border/30">
+                                    <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-tight">Credencial</p>
+                                    <p className="text-sm font-semibold text-foreground">{modeLabel}</p>
                                 </div>
                             </div>
-                            <div className="flex items-start gap-3">
-                                <div className="w-8 h-8 bg-white rounded-md border border-white/10 p-1 flex items-center justify-center shrink-0 mt-1">
-                                    {event.device?.brand === 'HIKVISION' ? (
-                                        <img src="/logos/hikvision.png" alt="H" className="w-full h-full object-contain" />
-                                    ) : event.device?.brand === 'AKUVOX' ? (
-                                        <img src="/logos/akuvox.png" alt="A" className="w-full h-full object-contain" />
-                                    ) : (
-                                        <MapPin size={16} className="text-neutral-500" />
+
+                            {/* LPR vehicle chips */}
+                            {isLPR && (brandName || meta.Color || meta.Tipo) && (
+                                <div className="grid grid-cols-3 gap-2">
+                                    {brandName && (
+                                        <div className="bg-muted/40 p-2 rounded-lg border border-border/30">
+                                            <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-tight">Marca</p>
+                                            <p className="text-xs font-semibold text-foreground">{brandName}</p>
+                                        </div>
+                                    )}
+                                    {meta.Color && (
+                                        <div className="bg-muted/40 p-2 rounded-lg border border-border/30">
+                                            <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-tight">Color</p>
+                                            <div className="flex items-center gap-1.5 mt-0.5">
+                                                <div className="w-2.5 h-2.5 rounded-full border border-border" style={{ backgroundColor: getVehicleColor(meta.Color).bg }} />
+                                                <p className="text-xs font-semibold text-foreground">{meta.Color}</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {meta.Tipo && (
+                                        <div className="bg-muted/40 p-2 rounded-lg border border-border/30">
+                                            <p className="text-[9px] text-muted-foreground uppercase font-bold tracking-tight">Tipo</p>
+                                            <p className="text-xs font-semibold text-foreground">{meta.Tipo}</p>
+                                        </div>
                                     )}
                                 </div>
-                                <div>
-                                    <p className="text-[10px] font-bold text-neutral-600 uppercase mb-1">Dispositivo</p>
-                                    <p className="text-sm font-black text-white uppercase">{event.device?.name || '---'}</p>
-                                    <p className="text-xs text-neutral-500 mt-1">{event.device?.location || '---'}</p>
-                                </div>
-                            </div>
-
-                            {/* DYNAMIC EXTRA DETAILS (e.g. Call Destination) */}
-                            {Object.entries(meta).map(([key, value]) => {
-                                if (['Marca', 'Color', 'Tipo', 'Modelo', 'FaceImage'].includes(key)) return null;
-                                return (
-                                    <div key={key} className="flex items-start gap-3 animate-in fade-in slide-in-from-left-2">
-                                        <AlertCircle size={16} className="text-indigo-500 mt-1" />
-                                        <div>
-                                            <p className="text-[10px] font-bold text-neutral-600 uppercase mb-1">{key}</p>
-                                            <p className="text-sm font-black text-white">{value as string}</p>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                            {/* BITACORA SECTION */}
-                            {event.bitacora && (
-                                <div className="mt-4 p-4 bg-emerald-500/5 rounded-2xl border border-emerald-500/20 space-y-4 animate-in fade-in slide-in-from-bottom-2">
-                                    <div className="flex items-center justify-between">
-                                        <div className="p-1 px-3 bg-emerald-500 rounded-lg text-[10px] font-black text-white uppercase tracking-widest">
-                                            Bitácora de Guardia
-                                        </div>
-                                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-neutral-900 border border-neutral-800">
-                                            <span className="text-[8px] font-black text-neutral-600 uppercase">Guardia:</span>
-                                            <span className="text-[9px] font-black text-white uppercase">{event.bitacora.guardName || "Sistema"}</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex gap-4">
-                                        {event.bitacora.photoPath && (
-                                            <div className="relative w-32 h-32 rounded-xl overflow-hidden border-2 border-emerald-500/30 shrink-0 shadow-lg">
-                                                <img
-                                                    src={getImageUrl(event.bitacora.photoPath)}
-                                                    alt="Guard Capture"
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            </div>
-                                        )}
-                                        <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-3">
-                                            <div className="col-span-2 pb-1 border-b border-white/5">
-                                                <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-tight mb-1">Notas / Observaciones</p>
-                                                <p className="text-sm font-black text-emerald-400 italic leading-tight">
-                                                    "{event.bitacora.notes || "S/ Observaciones"}"
-                                                </p>
-                                            </div>
-
-                                            <div>
-                                                <p className="text-[8px] font-black text-neutral-600 uppercase tracking-widest">Visitante</p>
-                                                <p className="text-[11px] font-black text-white uppercase truncate">{event.bitacora.name || "---"}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[8px] font-black text-neutral-600 uppercase tracking-widest">Empresa</p>
-                                                <p className="text-[11px] font-black text-white uppercase truncate">{event.bitacora.company || "---"}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[8px] font-black text-neutral-600 uppercase tracking-widest">Cédula / ID</p>
-                                                <p className="text-[11px] font-bold text-neutral-400 font-mono">{event.bitacora.dni || "---"}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[8px] font-black text-neutral-600 uppercase tracking-widest">Destino</p>
-                                                <p className="text-[11px] font-black text-blue-400 uppercase truncate">{event.bitacora.destination || "---"}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
                             )}
                         </div>
 
+                        {/* RIGHT: High-Density Metadata */}
+                        <div className="col-span-6 p-5 flex flex-col overflow-y-auto">
+                            {/* Identity header */}
+                            <div className="mb-5 flex justify-between items-start gap-3">
+                                <div className="flex items-start gap-3 min-w-0">
+                                    {/* Profile photo */}
+                                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-border/50 bg-muted shrink-0">
+                                        {profileImage ? (
+                                            <img src={profileImage} alt="Perfil" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center">
+                                                <UserIcon size={20} className="text-muted-foreground" />
+                                            </div>
+                                        )}
+                                        {isVerified && (
+                                            <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-[#0a0f1a] flex items-center justify-center">
+                                                <ShieldCheck size={7} className="text-foreground" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="min-w-0">
+                                        {isEditing ? (
+                                            <div className="space-y-1.5">
+                                                <input value={editedUser} onChange={e => setEditedUser(e.target.value)} className="w-full bg-muted border border-border rounded px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500/50" />
+                                                <input value={editedUnit} onChange={e => setEditedUnit(e.target.value)} className="w-full bg-muted border border-border rounded px-2 py-1 text-xs text-blue-400 focus:outline-none focus:ring-1 focus:ring-emerald-500/50" />
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <h2 className="text-2xl font-bold text-foreground leading-tight truncate">{editedUser || personName}</h2>
+                                                <p className={cn("text-[11px] font-bold tracking-[0.12em] uppercase", isVerified ? "text-emerald-400" : "text-amber-400")}>
+                                                    {editedUnit || unitName} / {isVerified ? "Autorizado" : "No Registrado"}
+                                                </p>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    {event.user && (
+                                        <button onClick={() => setIsEditing(!isEditing)} className={cn("p-1.5 rounded transition-colors", isEditing ? "text-emerald-400 bg-emerald-500/10" : "text-muted-foreground hover:text-foreground hover:bg-muted")}>
+                                            {isEditing ? <Save size={14} /> : <Edit2 size={14} />}
+                                        </button>
+                                    )}
+                                    <div className={cn(
+                                        "px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.1em]",
+                                        isGrant ? "bg-emerald-500 text-foreground" : isBlacklist ? "bg-red-500 text-foreground" : "bg-amber-500 text-black"
+                                    )}>
+                                        {isGrant ? "AUTORIZADO" : isBlacklist ? "LISTA NEGRA" : "DENEGADO"}
+                                    </div>
+                                </div>
+                            </div>
 
-                        {/* Footer */}
-                        <div className="bg-neutral-900 border-t border-neutral-800 p-4 text-center shrink-0">
-                            <p className="text-[9px] font-black text-neutral-700 uppercase tracking-widest">LPR Omniaccess v3.0</p>
+                            {/* Data Grid — 2 columns with underlined labels */}
+                            <div className="grid grid-cols-2 gap-y-3 gap-x-5 mb-5">
+                                <div>
+                                    <p className="text-[10px] text-muted-foreground uppercase font-bold border-b border-border/50 pb-1 mb-1">Dispositivo</p>
+                                    <p className="text-sm font-medium text-foreground">{event.device?.name || "---"}</p>
+                                    {event.device?.location && <p className="text-[10px] text-muted-foreground mt-0.5">{event.device.location}</p>}
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-muted-foreground uppercase font-bold border-b border-border/50 pb-1 mb-1">Timestamp</p>
+                                    <p className="text-sm font-medium text-foreground font-mono">{dateStr} {timeStr}</p>
+                                </div>
+                                {isFace && cleanSim && (
+                                    <>
+                                        <div>
+                                            <p className="text-[10px] text-muted-foreground uppercase font-bold border-b border-border/50 pb-1 mb-1">Similitud</p>
+                                            <p className={cn("text-sm font-bold", simNum >= 80 ? "text-emerald-400" : simNum >= 60 ? "text-amber-400" : "text-red-400")}>{cleanSim}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] text-muted-foreground uppercase font-bold border-b border-border/50 pb-1 mb-1">Modo Deteccion</p>
+                                            <p className={cn("text-sm font-medium", isBlacklist ? "text-red-400" : isWhitelist ? "text-emerald-400" : "text-foreground")}>{detectedMode}</p>
+                                        </div>
+                                    </>
+                                )}
+                                {event.credentialId && (
+                                    <div>
+                                        <p className="text-[10px] text-muted-foreground uppercase font-bold border-b border-border/50 pb-1 mb-1">Credencial ID</p>
+                                        <p className="text-sm font-medium text-foreground font-mono">{event.credentialId}</p>
+                                    </div>
+                                )}
+                                {/* Extra metadata in grid */}
+                                {extraMeta.map(([key, value]) => (
+                                    <div key={key}>
+                                        <p className="text-[10px] text-muted-foreground uppercase font-bold border-b border-border/50 pb-1 mb-1">{key}</p>
+                                        <p className="text-sm font-medium text-foreground">{value as string}</p>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Detection History mini-table */}
+                            {((isLPR && plateHistory.length > 0) || sessionEvents.length > 0) && (
+                                <div className="flex-1 mb-4">
+                                    <p className="text-[10px] font-bold text-muted-foreground uppercase mb-2 tracking-wide">
+                                        {isLPR ? "Historial LPR" : "Secuencia de Eventos"}
+                                    </p>
+                                    <div className="border border-border/40 rounded-lg overflow-hidden text-[11px]">
+                                        {/* Table header */}
+                                        <div className="bg-muted/50 grid grid-cols-4 px-3 py-1.5 text-[9px] font-bold text-muted-foreground uppercase tracking-wide">
+                                            <div>Hora</div>
+                                            <div>Dispositivo</div>
+                                            <div>Conf</div>
+                                            <div className="text-right">Estado</div>
+                                        </div>
+                                        {/* Table rows */}
+                                        {isLPR ? (
+                                            plateHistory.slice(0, 4).map((h: any) => (
+                                                <div key={h.id} className="grid grid-cols-4 px-3 py-2 border-t border-border/20 hover:bg-muted/30 transition-colors">
+                                                    <div className="text-muted-foreground font-mono">{new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+                                                    <div className="text-muted-foreground font-medium truncate">{h.device?.name || "—"}</div>
+                                                    <div className="text-muted-foreground">—</div>
+                                                    <div className={cn("text-right font-bold", h.decision === "GRANT" ? "text-emerald-400" : "text-red-400")}>
+                                                        {h.decision === "GRANT" ? "OK" : "DENY"}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            sessionEvents.slice(0, 4).map((se: any) => (
+                                                <div key={se.id} className="grid grid-cols-4 px-3 py-2 border-t border-border/20 hover:bg-muted/30 transition-colors">
+                                                    <div className="text-muted-foreground font-mono">{new Date(se.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+                                                    <div className="text-muted-foreground font-medium truncate">{se.device?.name || "—"}</div>
+                                                    <div className="text-muted-foreground">—</div>
+                                                    <div className={cn("text-right font-bold", se.decision === "GRANT" ? "text-emerald-400" : "text-red-400")}>
+                                                        {se.decision === "GRANT" ? "OK" : "DENY"}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Action Footer */}
+                            <div className="mt-auto flex gap-3 pt-3 border-t border-border/50">
+                                {isLPR && plateText !== "No Leida" && (
+                                    <button
+                                        onClick={() => { setIsOpen(false); router.push(`/admin/history?q=${plateText}`); }}
+                                        className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-foreground font-bold text-[11px] uppercase tracking-[0.1em] py-2.5 rounded-lg transition-all active:scale-[0.98] shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2"
+                                    >
+                                        <FileText size={14} /> Ver Historial Completo
+                                    </button>
+                                )}
+                                {isFace && !isVerified && (
+                                    <button
+                                        onClick={() => {
+                                            setIsOpen(false);
+                                            const faceParam = encodeURIComponent(faceImage || displayImage || "");
+                                            router.push(`/admin/users?action=create&face=${faceParam}`);
+                                        }}
+                                        className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-foreground font-bold text-[11px] uppercase tracking-[0.1em] py-2.5 rounded-lg transition-all active:scale-[0.98] shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2"
+                                    >
+                                        <UserIcon size={14} /> Registrar Rostro
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => setIsOpen(false)}
+                                    className="bg-muted hover:bg-muted text-muted-foreground border border-border/50 font-bold text-[11px] uppercase tracking-[0.1em] px-5 py-2.5 rounded-lg transition-all active:scale-[0.98]"
+                                >
+                                    Cerrar
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
-
-                {/* Plate Action Modal */}
-                {showPlateActionModal && (
-                    <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center" onClick={() => setShowPlateActionModal(false)}>
-                        <div className="bg-neutral-900 border border-neutral-700 rounded-xl p-8 max-w-md w-[90vw]" onClick={(e) => e.stopPropagation()}>
-                            <h3 className="text-xl font-black text-white uppercase mb-4">Acciones para {plateText}</h3>
-                            <button className="w-full p-4 bg-neutral-800 hover:bg-neutral-700 rounded text-center text-white font-bold" onClick={() => setShowPlateActionModal(false)}>Cerrar</button>
-                        </div>
-                    </div>
-                )}
-
-                {/* Quick Create User Dialog */}
-                {quickCreateData && (
-                    <UserFormDialog
-                        open={showQuickCreate}
-                        onOpenChange={setShowQuickCreate}
-                        units={quickCreateData.units}
-                        groups={quickCreateData.groups}
-                        devices={quickCreateData.devices}
-                        parkingSlots={quickCreateData.parkingSlots}
-                        onSuccess={() => {
-                            setShowQuickCreate(false);
-                            toast.success({ title: "Usuario creado con éxito" });
-                            // Ideally refresh the current view or mark as identified
-                        }}
-                        initialData={{
-                            plate: plateText !== 'No Leída' ? plateText : undefined,
-                            cara: event.snapshotPath || meta.FaceImage,
-                            name: meta.Rostro || undefined
-                        }}
-                    />
-                )}
             </DialogContent>
         </Dialog>
     );

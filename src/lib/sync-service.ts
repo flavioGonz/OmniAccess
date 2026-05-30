@@ -1,50 +1,64 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "./prisma";
+import { DeviceBrand } from "@prisma/client";
 import { HikvisionDriver } from "./drivers/HikvisionDriver";
+import { isLprDriver } from "./drivers/IDeviceDriver";
 
-const prisma = new PrismaClient();
-const driver = new HikvisionDriver();
+// Use shared driver instances (same as liveSync.ts)
+const hikvisionDriver = new HikvisionDriver();
 
+function getLprDriver(brand: DeviceBrand) {
+    switch (brand) {
+        case DeviceBrand.HIKVISION:
+            return hikvisionDriver;
+        default:
+            return null; // Only Hikvision has LPR implemented for now
+    }
+}
+
+/**
+ * Bi-directional plate sync: removes "zombie" plates from devices
+ * that no longer exist in the database.
+ * Uses the shared Prisma singleton and the driver interface system.
+ */
 export async function syncPlates() {
-    console.log("=== Starting Bi-directional Plate Sync ===");
 
-    // 1. Get all LPR devices
     const devices = await prisma.device.findMany({
         where: { deviceType: "LPR_CAMERA" }
     });
 
     if (devices.length === 0) {
-        console.log("No LPR devices found to sync.");
         return;
     }
 
-    // 2. Get all valid credentials from DB
     const dbCredentials = await prisma.credential.findMany({
         where: { type: "PLATE" }
     });
     const dbPlates = new Set(dbCredentials.map(c => c.value));
 
     for (const device of devices) {
-        console.log(`Syncing device: ${device.name} (${device.ip})`);
-
-        // 3. Get plates from Device
-        const devicePlates = await driver.getPlates(device);
-
-        let removedCount = 0;
-
-        // 4. Find zombies (on device but not in DB)
-        for (const plate of devicePlates) {
-            if (!dbPlates.has(plate)) {
-                await driver.deleteCredential(plate, device);
-                removedCount++;
-            }
+        const driver = getLprDriver(device.brand);
+        if (!driver || !isLprDriver(driver)) {
+            continue;
         }
 
-        console.log(`Device ${device.ip}: Removed ${removedCount} zombie plates.`);
 
-        // 5. Push missing (in DB but not on device) -> upsertCredential handles this if called explicitly
-        // This script focuses on CLEANUP (Sanity Check) as requested, but we could also push.
-        // Let's rely on the manual "Save" action for pushing new ones for now to avoid massive traffic bursts,
-        // or we could iterate dbPlates and check if not in devicePlates.
+        try {
+            const devicePlates = await driver.getPlates(device);
+            let removedCount = 0;
+
+            for (const plate of devicePlates) {
+                if (!dbPlates.has(plate)) {
+                    try {
+                        await driver.deleteCredential(plate, device);
+                        removedCount++;
+                    } catch (e: any) {
+                        console.error(`Failed to remove plate ${plate} from ${device.ip}: ${e.message}`);
+                    }
+                }
+            }
+
+        } catch (e: any) {
+            console.error(`Failed to sync device ${device.ip}: ${e.message}`);
+        }
     }
-    console.log("=== Sync Complete ===");
 }

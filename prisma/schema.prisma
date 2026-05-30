@@ -143,6 +143,8 @@ model Device {
   callEvents      CallEvent[]
   floorPlan       FloorPlan?       @relation(fields: [floorPlanId], references: [id])
   hardwareMirrors HardwareMirror[]
+  queueEvents     QueueEvent[]
+  queueAlerts     QueueAlert[]
   accessGroups    AccessGroup[]    @relation("AccessGroupToDevice")
 }
 
@@ -263,7 +265,56 @@ model WahaRequestLog {
   responseDetails String?
 }
 
+// ─── Queue / Line Counting Module ────────────────────────────────
+model QueueEvent {
+  id           String   @id @default(cuid())
+  timestamp    DateTime @default(now())
+  deviceId     String
+  device       Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  channelName  String?
+  channelId    Int?
+  peopleCount  Int
+  regionId     String?
+  snapshotPath String?
+  metadata     String?
+  createdAt    DateTime @default(now())
+
+  @@index([deviceId])
+  @@index([timestamp])
+  @@index([deviceId, channelName])
+}
+
+model QueueAlert {
+  id          String    @id @default(cuid())
+  name        String
+  deviceId    String?
+  device      Device?   @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  channelName String?
+  threshold   Int
+  enabled     Boolean   @default(true)
+  cooldownMin Int       @default(5)
+  cooldownSec Int?
+  lastFiredAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([deviceId])
+}
+
+
+model PendingRegistration {
+  id        String   @id @default(cuid())
+  type      String
+  data      Json
+  guardName String
+  status    String   @default("PENDING")
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 enum VehicleType {
+
   SEDAN
   SUV
   PICKUP
@@ -314,6 +365,7 @@ enum DeviceType {
   FACE_TERMINAL
   ACCESS_CONTROL
   DOOR_INTERCOM
+  QUEUE_COUNTER
 }
 
 enum DeviceBrand {
@@ -326,6 +378,8 @@ enum DeviceBrand {
   MILESIGHT
   UNIFI
   UNIVIEW
+  BOSCH
+  AXIS
 }
 
 enum AuthType {
@@ -348,4 +402,131 @@ enum DeviceDirection {
 enum AccessDecision {
   GRANT
   DENY
+}
+
+// ─── Notification Channels ───────────────────────────────
+model NotificationChannel {
+  id        String   @id @default(cuid())
+  name      String
+  type      String   // TELEGRAM, EMAIL, SLACK, WEBHOOK
+  config    String   // JSON: { token, chatId } | { email } | { webhookUrl } | { slackUrl }
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  logs NotificationLog[]
+
+  @@index([type])
+}
+
+model NotificationLog {
+  id        String   @id @default(cuid())
+  channelId String
+  channel   NotificationChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  alertId   String?
+  message   String
+  status    String   // SENT, FAILED, PENDING
+  error     String?
+  metadata  String?  // JSON with extra context
+  createdAt DateTime @default(now())
+
+  @@index([channelId])
+  @@index([createdAt])
+  @@index([status])
+}
+
+model QueueSchedule {
+  id          String    @id @default(cuid())
+  name        String
+  deviceId    String?
+  daysOfWeek  String    @default("1,2,3,4,5,6,7")
+  openTime    String    @default("08:00")
+  closeTime   String    @default("20:00")
+  resetOnOpen Boolean   @default(true)
+  enabled     Boolean   @default(true)
+  lastResetAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model CameraOutage {
+  id          String    @id @default(cuid())
+  deviceId    String
+  startedAt   DateTime  @default(now())
+  endedAt     DateTime?
+  durationSec Int?
+  lastValue   Int?
+  createdAt   DateTime  @default(now())
+
+  @@index([deviceId])
+  @@index([startedAt])
+  @@index([deviceId, endedAt])
+}
+
+// ── Notificaciones: reglas/criterios de notificación (config) ──────────────
+model NotificationRule {
+  id          String    @id @default(cuid())
+  name        String
+  enabled     Boolean   @default(true)
+  deviceId    String?   // null = todas las cámaras
+  channelName String?   // zona/canal ("Aforo","Entrada","Salida"); null = cualquiera
+  metric      String    @default("aforo") // aforo | entrada | salida
+  operator    String    @default(">=")    // >= | > | == | <=
+  threshold   Int       @default(1)
+  daysOfWeek  String    @default("1,2,3,4,5,6,7")
+  startTime   String    @default("00:00")
+  endTime     String    @default("23:59")
+  channels    String    @default("telegram") // csv: telegram,email,...
+  minSeverity String?   // ok | warn | full | critico (gate opcional)
+  cooldownSec Int       @default(60)
+  dedupe      Boolean   @default(true)
+  lastFiredAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([enabled])
+  @@index([deviceId])
+}
+
+// ── Despachos: cola/outbox de envíos con estado y reintentos ───────────────
+model DispatchJob {
+  id          String    @id @default(cuid())
+  type        String    // ALERT | REPORT
+  channel     String    // telegram | email | ...
+  status      String    @default("PENDING") // PENDING|PROCESSING|SENT|FAILED|CANCELLED
+  payload     Json
+  ruleId      String?
+  deviceId    String?
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  lastError   String?
+  scheduledAt DateTime  @default(now())
+  startedAt   DateTime?
+  sentAt      DateTime?
+  bullJobId   String?   // id del job en BullMQ para correlación
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status])
+  @@index([type])
+  @@index([scheduledAt])
+  @@index([createdAt])
+}
+
+// ── Reportes programados (config, autogestionable desde la UI) ──────────────
+model ReportSchedule {
+  id        String    @id @default(cuid())
+  name      String
+  enabled   Boolean   @default(true)
+  frequency String    @default("daily") // daily | weekly
+  time      String    @default("22:00") // HH:MM hora de envío
+  dayOfWeek Int       @default(7)        // 1-7 (solo weekly; 7=domingo)
+  period    String    @default("daily")  // ventana del reporte: daily | weekly
+  deviceId  String?
+  channel   String    @default("telegram")
+  lastRunAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([enabled])
 }

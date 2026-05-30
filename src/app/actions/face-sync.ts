@@ -7,7 +7,6 @@ import axios from "axios";
 import { registerFaceInCompereFace } from "./face-verify";
 
 export async function syncFaceToAllDevicesAction(userId: string) {
-    console.log(`[Face Sync] Starting global sync for user: ${userId}`);
     try {
         const user = await prisma.user.findUnique({
             where: { id: userId },
@@ -52,7 +51,6 @@ export async function syncFaceToAllDevicesAction(userId: string) {
 }
 
 export async function syncAllBlacklistAction() {
-    console.log(`[Full Sync] Starting global blacklist synchronization...`);
     try {
         const blacklist = await prisma.user.findMany({
             where: { role: 'BLACKLISTED' },
@@ -75,7 +73,6 @@ export async function syncAllBlacklistAction() {
         const results = [];
 
         for (const user of blacklist) {
-            console.log(`[Full Sync] Syncing ${user.name}...`);
 
             // 1. Sync to Devices
             for (const device of devices) {

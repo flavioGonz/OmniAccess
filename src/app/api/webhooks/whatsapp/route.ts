@@ -43,25 +43,31 @@ export async function POST(req: Request) {
     try {
         const body = await req.json();
 
-        // WAHA webhook structure: payload.body is the message
-        // Adjust based on actual WAHA payload (docs vary, usually payload.body for text)
-        messageBody = body.payload?.body || "";
-        from = body.payload?.from || "unknown"; // e.g. "123456789@c.us"
+        // Support OpenWA ({ event, data:{...} }) and legacy WAHA ({ payload:{...} }) shapes.
+        const evtName: string = body.event || body.type || "";
+        const msg: any = body.data || body.payload || body.message || body || {};
 
-        if (!from || !messageBody) {
+        messageBody = msg.body || msg.text || msg.content || msg.caption || msg.message?.body || "";
+        from = msg.from || msg.chatId || msg.author || msg.sender || "unknown";
+        const fromMe: boolean = (msg.fromMe ?? msg.self ?? body.fromMe) || false;
+
+        // Only react to inbound messages; ignore ack/qr/status/sent events.
+        if (evtName && !/message\.received|message\.any|onmessage|message$/i.test(evtName)) {
+            return NextResponse.json({ status: 'ignored', reason: 'event:' + evtName });
+        }
+
+        if (!from || from === "unknown" || !messageBody) {
             await logToHistory(from, messageBody, 'ignored', 'Missing from or messageBody');
             return NextResponse.json({ status: 'ignored' });
         }
 
         // Avoid infinite loops (bot replying to itself)
-        // WAHA usually handles this, but good practice 'fromMe' check if available in payload
-        if (body.payload.fromMe) {
+        if (fromMe) {
             await logToHistory(from, messageBody, 'ignored', 'Message from self (fromMe)');
             return NextResponse.json({ status: 'ignored' });
         }
 
         const lowerMsg = messageBody.toLowerCase().trim();
-        console.log(`[WAHA-DEBUG] Msg: "${lowerMsg}" | From: ${from}`);
 
         // ---------------------------------------------------------
         // 0. URGENT TRIGGERS (Direct Commands)
@@ -70,7 +76,6 @@ export async function POST(req: Request) {
         // Use regex for more robust matching
         const addPlateRegex = /^(?:agregar|añadir|nuevo|nueva)\s+(?:matricula|matrícula|vehiculo|vehículo)/i;
         if (addPlateRegex.test(lowerMsg)) {
-            console.log(`[WAHA-DEBUG] MATCH: ADD_PLATE command detected`);
             await prisma.whatsAppSession.upsert({
                 where: { phoneNumber: from },
                 create: { phoneNumber: from, step: 'ADD_PLATE_PLATE' },
@@ -88,7 +93,6 @@ export async function POST(req: Request) {
 
         // Check for active session
         const session = await prisma.whatsAppSession.findUnique({ where: { phoneNumber: from } });
-        if (session) console.log(`[WAHA-DEBUG] Active session found: ${session.step}`);
 
         // A. TRIGGER: "matricula [XXX]"
         if (lowerMsg.startsWith("matricula ") && lowerMsg.split(" ").length > 1) {
@@ -109,7 +113,6 @@ export async function POST(req: Request) {
                     `3. 📤 Consultar Salidas\n` +
                     `5. ➕ Agregar al Sistema (LPR)`;
 
-                console.log(`[WAHA-DEBUG] Match: matricula management menu`);
                 await sendWahaText(from, menu);
                 await logToHistory(from, messageBody, 'replied', `Menú de gestión para ${cleanPlate}`);
                 return NextResponse.json({ status: 'replied' });

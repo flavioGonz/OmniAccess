@@ -58,9 +58,7 @@ export const DRIVER_MODELS = {
         { value: "VIP 5450 Z LPR", label: "VIP 5450 Z LPR", category: "LPR Camera", photo: "" },
         { value: "SS 3510 MF", label: "SS 3510 MF", category: "Face Terminal", photo: "" },
     ],
-    AVICAM: [
-        { value: "RF-2002f4", label: "RF-2002f4 Face Terminal", category: "Face Terminal", photo: "https://images.tcdn.com.br/img/img_prod/1029778/terminal_de_reconhecimento_facial_tela_4_3_2xcameras_2mp_20_000_faces_wifi_3d_ip54_velocidade_0_2s_a_2761_1_7804121b83a80cba714e4d4c324eec4c.jpg" },
-    ],
+    AVICAM: [],
     MILESIGHT: [],
     UNIFI: [
         { value: "UVC-G4-PRO", label: "UVC-G4-PRO", category: "Camera", photo: "" },
@@ -68,6 +66,11 @@ export const DRIVER_MODELS = {
     ],
     UNIVIEW: [
         { value: "IPC6222ER-X20P-VG", label: "IPC6222ER-X20P-VG", category: "LPR Camera", photo: "" },
+    ],
+    BOSCH: [
+        { value: "NBE-7604-AL-OC", label: "DINION inteox 7100i IR (OC)", category: "Queue Counter", photo: "https://media.boschsecurity.com/fs/media/pb/images/products/IP_cameras/nbe-7604-al/nbe-7604-al_f_sp.png" },
+        { value: "NBE-7604-AL", label: "DINION inteox 7100i IR", category: "IVA Camera", photo: "https://media.boschsecurity.com/fs/media/pb/images/products/IP_cameras/nbe-7604-al/nbe-7604-al_f_sp.png" },
+        { value: "NDE-7604-AL", label: "FLEXIDOME inteox 7100i IR", category: "Queue Counter", photo: "" },
     ],
 } as const;
 
@@ -79,10 +82,11 @@ export const BRAND_LOGOS: Record<string, string> = {
     ZKTECO: "https://www.zkteco.com/static/img/logo.png",
     AXIS: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8a/Axis_Communications_logo.svg/2560px-Axis_Communications_logo.svg.png",
     INTELBRAS: "https://www.intelbras.com/sites/default/files/2021-09/logo-intelbras.png",
-    AVICAM: "https://avicam.com.br/wp-content/uploads/2023/09/4b0ccfdb5b60-Logo_AVICAM_Curvas-1-300x212.png",
+    AVICAM: "",
     MILESIGHT: "",
     UNIFI: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Ubiquiti_Networks_Logo.svg/2560px-Ubiquiti_Networks_Logo.svg.png",
     UNIVIEW: "",
+    BOSCH: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Bosch-logo.svg/2560px-Bosch-logo.svg.png",
 };
 
 export const DEVICE_MODELS: Record<string, Record<string, string>> = {
@@ -103,9 +107,9 @@ export const DEVICE_MODELS: Record<string, Record<string, string>> = {
         LPR_CAMERA: "https://material.dahuasecurity.com/uploads/image/20230227/29b9f7c00e6a4b1d9bf5b8f6c6d6c4d6.png",
         DEFAULT: "https://material.dahuasecurity.com/uploads/image/20230227/29b9f7c00e6a4b1d9bf5b8f6c6d6c4d6.png"
     },
-    AVICAM: {
-        FACE_TERMINAL: "https://avicam.com.br/wp-content/uploads/2023/09/4b0ccfdb5b60-Logo_AVICAM_Curvas-1-300x212.png",
-        DEFAULT: "https://avicam.com.br/wp-content/uploads/2023/09/4b0ccfdb5b60-Logo_AVICAM_Curvas-1-300x212.png"
+    BOSCH: {
+        QUEUE_COUNTER: "https://media.boschsecurity.com/fs/media/pb/images/products/IP_cameras/nbe-7604-al/nbe-7604-al_f_sp.png",
+        DEFAULT: "https://media.boschsecurity.com/fs/media/pb/images/products/IP_cameras/nbe-7604-al/nbe-7604-al_f_sp.png"
     }
 };
 

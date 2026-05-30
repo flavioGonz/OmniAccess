@@ -1,106 +1,50 @@
-import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
-import crypto from "crypto";
-import { IDeviceDriver } from "./IDeviceDriver";
+import axios from "axios";
+import { IDeviceDriver, ILprDriver, IFaceDriver, ILogDriver } from "./IDeviceDriver";
 import { Device, Credential, CredentialType, AuthType } from "@prisma/client";
-import * as https from "https";
+import {
+    authenticatedRequest,
+    parseWWWAuthenticate,
+    buildDigestHeader,
+    httpsAgent,
+    DigestAuthDevice
+} from "../digest-auth";
+import crypto from "crypto";
 
-const httpsAgent = new https.Agent({
-    rejectUnauthorized: false,
-});
-
-export class HikvisionDriver implements IDeviceDriver {
-    // Simple Digest Auth Implementation
+export class HikvisionDriver implements ILprDriver, IFaceDriver, ILogDriver {
+    /**
+     * JSON request with automatic Basic/Digest auth via shared module.
+     * Includes Hikvision-specific fallback: retry with path-only URI if query params cause 401.
+     */
     private async request(
         method: "GET" | "POST" | "PUT" | "DELETE",
         url: string,
         data: any,
         device: Device
     ): Promise<any> {
-        const username = device.username || "admin";
-        const password = device.password || "12345";
-
-        // Ensure IP doesn't already have a protocol to avoid double http://
-        const host = (device.ip || "").replace(/^https?:\/\//, "");
-        const baseURL = `http://${host}`;
-        const headers: any = { "Content-Type": "application/json" };
-
-        if (device.authType === AuthType.BASIC) {
-            const token = Buffer.from(`${username}:${password}`).toString("base64");
-            headers["Authorization"] = `Basic ${token}`;
-        }
-
-        const executeRequest = async (authHeader?: string) => {
-            return axios.request({
-                method,
-                baseURL,
-                url,
-                data,
-                headers: {
-                    ...headers,
-                    ...(authHeader ? { Authorization: authHeader } : {}),
-                    "Accept": "application/json"
-                },
-                httpsAgent,
-                timeout: 10000,
-            });
+        const authDevice: DigestAuthDevice = {
+            ip: device.ip,
+            username: device.username || "admin",
+            password: device.password || "12345",
+            authType: device.authType,
         };
 
         try {
-            // 1. Initial Attempt (or Basic)
-            const response = await executeRequest(headers["Authorization"]);
-            return response.data;
+            return await authenticatedRequest(method, url, authDevice, {
+                data,
+                contentType: "application/json",
+                accept: "application/json",
+                timeout: 10000,
+            });
         } catch (error: any) {
-            const authHeader = error.response?.headers["www-authenticate"];
-            if (error.response?.status === 401 && authHeader) {
-                console.log(`[Hikvision JSON] 401 Unauthorized. WWW-Authenticate: ${authHeader}`);
-
-                const getVal = (key: string) => {
-                    const match = authHeader.match(new RegExp(`${key}="?([^",]+)"?`));
-                    return match ? match[1].trim() : null;
-                };
-
-                const realm = getVal("realm");
-                const nonce = getVal("nonce");
-                const qop = getVal("qop");
-                const opaque = getVal("opaque");
-                const algorithm = (getVal("algorithm") || "MD5").toUpperCase();
-
-                if (!realm || !nonce) throw error;
-
-                const nc = "00000001";
-                const cnonce = crypto.randomBytes(8).toString("hex");
-
-                const calculateDigest = (uri: string) => {
-                    let ha1 = crypto.createHash("md5").update(`${username}:${realm}:${password}`).digest("hex");
-                    if (algorithm === "MD5-SESS") {
-                        ha1 = crypto.createHash("md5").update(`${ha1}:${nonce}:${cnonce}`).digest("hex");
-                    }
-                    const ha2 = crypto.createHash("md5").update(`${method}:${uri}`).digest("hex");
-                    let response = "";
-                    if (qop === "auth") {
-                        response = crypto.createHash("md5").update(`${ha1}:${nonce}:${nc}:${cnonce}:${qop}:${ha2}`).digest("hex");
-                    } else {
-                        response = crypto.createHash("md5").update(`${ha1}:${nonce}:${ha2}`).digest("hex");
-                    }
-                    return `Digest username="${username}", realm="${realm}", nonce="${nonce}", uri="${uri}", algorithm="${algorithm}", response="${response}"${opaque ? `, opaque="${opaque}"` : ""}${qop ? `, qop=${qop}, nc=${nc}, cnonce="${cnonce}"` : ""}`;
-                };
-
-                // Try 1: Full URL
-                try {
-                    const res = await executeRequest(calculateDigest(url));
-                    console.log(`[Hikvision JSON Retry Success] ${method} ${url}`);
-                    return res.data;
-                } catch (retryError: any) {
-                    // Try 2: Path only (Some Hikvision cameras require this if query params exist)
-                    if (retryError.response?.status === 401 && url.includes('?')) {
-                        const pathOnly = url.split('?')[0];
-                        const res = await executeRequest(calculateDigest(pathOnly));
-                        console.log(`[Hikvision JSON Retry Success - Path Only] ${method} ${url}`);
-                        return res.data;
-                    }
-                    console.warn(`[Hikvision JSON Retry Failed] ${method} ${url}: ${retryError.message}`);
-                    throw retryError;
-                }
+            // Hikvision-specific: some cameras need path-only URI (no query params) for digest
+            if (error.response?.status === 401 && url.includes("?")) {
+                const pathOnly = url.split("?")[0];
+                return await authenticatedRequest(method, pathOnly, authDevice, {
+                    data,
+                    contentType: "application/json",
+                    accept: "application/json",
+                    timeout: 15000,
+                });
             }
             throw error;
         }
@@ -128,7 +72,6 @@ export class HikvisionDriver implements IDeviceDriver {
             };
 
             try {
-                console.log(`[Hikvision LPR] Deleting plate ${credentialValue} from ${device.ip}`);
                 await this.request("PUT", url, payload, device);
                 return;
             } catch (e: any) {
@@ -138,7 +81,6 @@ export class HikvisionDriver implements IDeviceDriver {
 
         // 2. Try UserInfo Delete (Access Control Terminals)
         try {
-            console.log(`[Hikvision AC] Deleting user ${credentialValue} from ${device.ip}`);
             await this.request("PUT", `/ISAPI/AccessControl/UserInfo/Delete?format=json`, {
                 UserInfoDelCond: {
                     EmployeeNoList: [{ employeeNo: credentialValue }]
@@ -164,7 +106,6 @@ export class HikvisionDriver implements IDeviceDriver {
         let keep_fetching = true;
         let total_matches = 0;
 
-        console.log(`[Hikvision LPR] Starting exhaustive fetch for ${device.ip} with searchId: ${searchId}`);
 
         while (keep_fetching) {
             const url = `/ISAPI/Traffic/channels/1/searchLPListAudit`;
@@ -177,29 +118,24 @@ export class HikvisionDriver implements IDeviceDriver {
 
                 if (start_position === 0) {
                     total_matches = result.totalMatches;
-                    console.log(`[Hikvision LPR] Hardware reports totalMatches: ${total_matches}`);
                 }
 
                 if (plates.length === 0 && result.numOfMatches === 0) {
-                    console.log("[Hikvision LPR] No records in this page. Stopping.");
                     keep_fetching = false;
                 } else {
-                    all_plates = [...all_plates, ...plates];
+                    all_plates.push(...plates);
 
                     const advancedBy = result.numOfMatches > 0 ? result.numOfMatches : plates.length;
                     start_position += advancedBy;
 
-                    console.log(`[Hikvision LPR] Page Pos ${start_position - advancedBy}: Found ${plates.length} plates. Total collected: ${all_plates.length}/${total_matches}.`);
 
                     // Stop condition: Check for "OK" status (end of results) or if we got less than requested
                     const isLastPage = response.includes("<responseStatusStrg>OK</responseStatusStrg>") ||
                         (result.numOfMatches < page_size && result.numOfMatches >= 0);
 
                     if (isLastPage) {
-                        console.log(`[Hikvision LPR] End of data reached (Status OK or partial page).`);
                         keep_fetching = false;
                     } else if (total_matches > 0 && start_position >= total_matches) {
-                        console.log("[Hikvision LPR] Reached reported totalMatches. Stopping.");
                         keep_fetching = false;
                     }
                 }
@@ -213,7 +149,6 @@ export class HikvisionDriver implements IDeviceDriver {
 
         // Return all plates as found (Raw). This ensures the UI matches the hardware count.
         // We handle deduplication only when importing or syncing.
-        console.log(`[Hikvision LPR] Finished exhaustive fetch. Total raw records: ${all_plates.length}`);
         return all_plates;
     }
 
@@ -254,7 +189,6 @@ export class HikvisionDriver implements IDeviceDriver {
         };
 
         try {
-            console.log(`[Hikvision LPR] Clearing all plates from ${device.ip}...`);
             await this.request("PUT", url, payload, device);
         } catch (error: any) {
             console.error(`[Hikvision LPR] Failed to clear whitelist on ${device.ip}:`, error.message);
@@ -321,7 +255,6 @@ export class HikvisionDriver implements IDeviceDriver {
         const numOfMatchesMatch = xml.match(/<(?:[^:>\s]+:)?numOfMatches[^>]*>(\d+)<\/(?:[^:>\s]+:)?numOfMatches>/i);
         const numOfMatches = numOfMatchesMatch ? parseInt(numOfMatchesMatch[1]) : plates.length;
 
-        console.log(`[Hikvision LPR Parser] XML Metadata -> totalMatches: ${totalMatches}, numOfMatches in this page: ${numOfMatches}`);
 
         return {
             plates,
@@ -351,102 +284,51 @@ export class HikvisionDriver implements IDeviceDriver {
         }
 
         const uniquePlates = Array.from(new Set(plates));
-        console.log(`[Hikvision XML Processor] Found ${uniquePlates.length} valid plates in response.`);
         return uniquePlates;
     }
 
+    /**
+     * XML request with automatic Basic/Digest auth via shared module.
+     * Returns raw text response for XML parsing.
+     */
     private async requestXML(
         method: "GET" | "POST" | "PUT" | "DELETE",
         url: string,
-        data: string | null, // Allow null for GET requests
+        data: string | null,
         device: Device
     ): Promise<string> {
-        const username = device.username || "admin";
-        const password = device.password || "12345";
-
-        // Ensure IP doesn't already have a protocol 
-        const host = (device.ip || "").replace(/^https?:\/\//, "");
-        const baseURL = `http://${host}`;
-
-        const executeRequestXML = async (authHeader?: string) => {
-            return axios.request({
-                method,
-                baseURL,
-                url,
-                data,
-                headers: {
-                    "Content-Type": "application/xml", // Primary Content-Type for XML
-                    ...(authHeader ? { Authorization: authHeader } : {}),
-                    "Accept": "application/xml"
-                },
-                httpsAgent,
-                timeout: 20000,
-                responseType: 'text'
-            });
+        const authDevice: DigestAuthDevice = {
+            ip: device.ip,
+            username: device.username || "admin",
+            password: device.password || "12345",
+            authType: device.authType,
         };
 
         try {
-            const res = await executeRequestXML();
-            return res.data;
+            return await authenticatedRequest(method, url, authDevice, {
+                data,
+                contentType: "application/xml",
+                accept: "application/xml",
+                responseType: "text",
+                timeout: 20000,
+            });
         } catch (error: any) {
-            const authHeader = error.response?.headers["www-authenticate"];
-            if (error.response?.status === 401 && authHeader) {
-                console.log(`[Hikvision XML] 401 Unauthorized. WWW-Authenticate: ${authHeader}`);
-                // Parse WWW-Authenticate header
-                const getVal = (key: string) => {
-                    const match = authHeader.match(new RegExp(`${key}="?([^",]+)"?`));
-                    return match ? match[1].trim() : null;
-                };
-
-                const realm = getVal("realm");
-                const nonce = getVal("nonce");
-                const qop = getVal("qop");
-                const opaque = getVal("opaque");
-                const algorithm = (getVal("algorithm") || "MD5").toUpperCase();
-
-                if (!realm || !nonce) throw error;
-
-                const nc = "00000001";
-                const cnonce = crypto.randomBytes(8).toString("hex");
-
-                const calculateDigest = (uri: string) => {
-                    let ha1 = crypto.createHash("md5").update(`${username}:${realm}:${password}`).digest("hex");
-                    if (algorithm === "MD5-SESS") {
-                        ha1 = crypto.createHash("md5").update(`${ha1}:${nonce}:${cnonce}`).digest("hex");
-                    }
-                    const ha2 = crypto.createHash("md5").update(`${method}:${uri}`).digest("hex");
-                    let response = "";
-                    if (qop === "auth") {
-                        response = crypto.createHash("md5").update(`${ha1}:${nonce}:${nc}:${cnonce}:${qop}:${ha2}`).digest("hex");
-                    } else {
-                        response = crypto.createHash("md5").update(`${ha1}:${nonce}:${ha2}`).digest("hex");
-                    }
-                    return `Digest username="${username}", realm="${realm}", nonce="${nonce}", uri="${uri}", algorithm="${algorithm}", response="${response}"${opaque ? `, opaque="${opaque}"` : ""}${qop ? `, qop=${qop}, nc=${nc}, cnonce="${cnonce}"` : ""}`;
-                };
-
-                try {
-                    const digest = calculateDigest(url);
-                    const res = await executeRequestXML(digest);
-                    console.log(`[Hikvision XML Retry] ${method} ${url} -> Status ${res.status}`);
-                    return res.data;
-                } catch (retryError: any) {
-                    console.error(`[Hikvision XML Retry Failed] ${method} ${url}: ${retryError.message} (Status: ${retryError.response?.status})`);
-                    if (retryError.response?.status === 401 && url.includes('?')) {
-                        // Strategy: Strip query params for Digest URI
-                        const uriPath = url.split('?')[0];
-                        const res = await executeRequestXML(calculateDigest(uriPath));
-                        console.log(`[Hikvision XML Retry - Path Only] ${method} ${url} -> Status ${res.status}`);
-                        return res.data;
-                    }
-                    throw retryError;
-                }
+            // Hikvision-specific: retry with path-only URI
+            if (error.response?.status === 401 && url.includes("?")) {
+                const pathOnly = url.split("?")[0];
+                return await authenticatedRequest(method, pathOnly, authDevice, {
+                    data,
+                    contentType: "application/xml",
+                    accept: "application/xml",
+                    responseType: "text",
+                    timeout: 25000,
+                });
             }
             throw error;
         }
     }
 
     async getFacesFromCamera(device: Device): Promise<any[]> {
-        console.log(`[Hikvision Face] Starting face fetch for ${device.ip}`);
         const allFaces: any[] = [];
         let position = 0;
         const maxResults = 50;
@@ -489,7 +371,6 @@ export class HikvisionDriver implements IDeviceDriver {
                 if (matches.length > 0) {
                     allFaces.push(...matches);
                     position += matches.length;
-                    console.log(`[Hikvision Face] Fetched ${matches.length} items. Total: ${allFaces.length}`);
 
                     if (matches.length < maxResults) keepFetching = false;
                 } else {
@@ -505,7 +386,6 @@ export class HikvisionDriver implements IDeviceDriver {
         }
 
         if (allFaces.length === 0) {
-            console.log(`[Hikvision Face] No faces found via UserInfo. Trying FDSearch fallback...`);
             return this.getFacesFromFDSearch(device);
         }
 
@@ -513,13 +393,11 @@ export class HikvisionDriver implements IDeviceDriver {
     }
 
     private async getFacesFromFDSearch(device: Device): Promise<any[]> {
-        console.log(`[Hikvision Face] Exhaustive FDSearch for ${device.ip}`);
 
         const foundFDIDs: string[] = [];
         // Attempt to list libraries first to find valid UUIDs or IDs
         try {
             const libData = await this.request("GET", "/ISAPI/Intelligent/FDLib?format=json", null, device);
-            console.log(`[Hikvision Face] FDLib List Raw:`, JSON.stringify(libData).slice(0, 200));
             if (libData?.FDLibList?.FDLib && Array.isArray(libData.FDLibList.FDLib)) {
                 libData.FDLibList.FDLib.forEach((l: any) => {
                     const id = l.FDID || l.id || l.ID || l.uuid;
@@ -537,7 +415,6 @@ export class HikvisionDriver implements IDeviceDriver {
 
         // Add common FDIDs and a small range for discovery if listing failed
         const commonFDIDs = [...new Set([...foundFDIDs, "1", "0", "999", "2", "3", "4", "5"])];
-        console.log(`[Hikvision Face] Using FDIDs for search: ${commonFDIDs.join(', ')}`);
 
         const searchId = "sid_" + Date.now().toString(16).slice(-8);
 
@@ -549,21 +426,19 @@ export class HikvisionDriver implements IDeviceDriver {
                 if (xmlRes && (xmlRes.includes('<name>') || xmlRes.includes('<FaceInfo>') || xmlRes.includes('<FaceRecord>'))) {
                     const results = this.parseFaceXML(xmlRes);
                     if (results.length > 0) {
-                        console.log(`[Hikvision Face] Found ${results.length} faces in FDID ${fdid} (Strategy J.1 - XML GET)`);
                         return results;
                     }
                 }
-            } catch (e) { }
+            } catch (e) { /* silenced */ }
 
             // Strategy J.2: Direct GET /picture?format=json (Listing) 
             try {
                 const data = await this.request("GET", `/ISAPI/Intelligent/FDLib/${fdid}/picture?format=json`, null, device);
                 let matches = this.extractMatches(data);
                 if (matches.length > 0) {
-                    console.log(`[Hikvision Face] Found ${matches.length} faces in FDID ${fdid} (Strategy J.2 - JSON GET)`);
                     return matches;
                 }
-            } catch (e) { }
+            } catch (e) { /* silenced */ }
 
             // Strategy A: JSON FDSearch (Standard envelope)
             try {
@@ -572,10 +447,9 @@ export class HikvisionDriver implements IDeviceDriver {
                 }, device);
                 let matches = this.extractMatches(data);
                 if (matches.length > 0) {
-                    console.log(`[Hikvision Face] Found ${matches.length} faces in FDID ${fdid} (Strategy A)`);
                     return matches;
                 }
-            } catch (e) { }
+            } catch (e) { /* silenced */ }
 
             // Strategy B: JSON FDSearch (Flat envelope)
             try {
@@ -587,10 +461,9 @@ export class HikvisionDriver implements IDeviceDriver {
                 }, device);
                 let matches = this.extractMatches(data);
                 if (matches.length > 0) {
-                    console.log(`[Hikvision Face] Found ${matches.length} faces in FDID ${fdid} (Strategy B)`);
                     return matches;
                 }
-            } catch (e) { }
+            } catch (e) { /* silenced */ }
 
             // Strategy C: FaceDataRecord Search (Alternative intelligent path)
             try {
@@ -604,10 +477,9 @@ export class HikvisionDriver implements IDeviceDriver {
                 }, device);
                 let matches = this.extractMatches(data);
                 if (matches.length > 0) {
-                    console.log(`[Hikvision Face] Found ${matches.length} faces via FaceDataRecord (Strategy C, FDID ${fdid})`);
                     return matches;
                 }
-            } catch (e) { }
+            } catch (e) { /* silenced */ }
         }
 
         // --- PHASE 2: Access Control Search (Terminals) ---
@@ -622,10 +494,9 @@ export class HikvisionDriver implements IDeviceDriver {
             }, device);
             let matches = this.extractMatches(data);
             if (matches.length > 0) {
-                console.log(`[Hikvision Face] Found ${matches.length} faces via UserInfo Search (Strategy L)`);
                 return matches;
             }
-        } catch (e) { }
+        } catch (e) { /* silenced */ }
 
         // --- PHASE 3: Face Record Search (Advanced modern terminals) ---
         try {
@@ -638,10 +509,9 @@ export class HikvisionDriver implements IDeviceDriver {
             }, device);
             let matches = this.extractMatches(data);
             if (matches.length > 0) {
-                console.log(`[Hikvision Face] Found ${matches.length} faces via Face Record Search (Strategy M)`);
                 return matches;
             }
-        } catch (e) { }
+        } catch (e) { /* silenced */ }
 
         // --- PHASE 4: Bulk Listing & Fallbacks ---
 
@@ -650,40 +520,36 @@ export class HikvisionDriver implements IDeviceDriver {
             const data = await this.request("GET", "/ISAPI/Intelligent/FDLib/FaceDataRecordList?format=json", null, device);
             let matches = this.extractMatches(data);
             if (matches.length > 0) {
-                console.log(`[Hikvision Face] Found ${matches.length} faces via Direct GET FaceDataRecordList (Strategy G)`);
                 return matches;
             }
-        } catch (e) { }
+        } catch (e) { /* silenced */ }
 
         // Strategy H: GET Direct FaceRecordList
         try {
             const data = await this.request("GET", "/ISAPI/Intelligent/FDLib/FaceRecordList?format=json", null, device);
             let matches = this.extractMatches(data);
             if (matches.length > 0) {
-                console.log(`[Hikvision Face] Found ${matches.length} faces via Direct GET FaceRecordList (Strategy H)`);
                 return matches;
             }
-        } catch (e) { }
+        } catch (e) { /* silenced */ }
 
         // Strategy E: Direct FaceDataRecord GET
         try {
             const data = await this.request("GET", "/ISAPI/Intelligent/FDLib/FaceDataRecord?format=json", null, device);
             let matches = this.extractMatches(data);
             if (matches.length > 0) {
-                console.log(`[Hikvision Face] Found ${matches.length} faces via Direct GET FaceDataRecord (Strategy E)`);
                 return matches;
             }
-        } catch (e) { }
+        } catch (e) { /* silenced */ }
 
         // Strategy F: Direct UserInfo GET (Some terminals allow simple list)
         try {
             const data = await this.request("GET", "/ISAPI/AccessControl/UserInfo?format=json", null, device);
             let matches = this.extractMatches(data);
             if (matches.length > 0) {
-                console.log(`[Hikvision Face] Found ${matches.length} faces via Direct GET UserInfo (Strategy F)`);
                 return matches;
             }
-        } catch (e) { }
+        } catch (e) { /* silenced */ }
 
         // --- PHASE 4: XML Fallbacks (Old/Legacy/Specialized) ---
         const fdidToTry = ["1", "0"];
@@ -702,11 +568,10 @@ export class HikvisionDriver implements IDeviceDriver {
                 if (xmlRes) {
                     const results = this.parseFaceXML(xmlRes);
                     if (results.length > 0) {
-                        console.log(`[Hikvision Face] Found ${results.length} faces via XML parsing fallback (Strategy D, FDID ${fdid})`);
                         return results;
                     }
                 }
-            } catch (e: any) { }
+            } catch (e: any) { /* silenced */ }
         }
 
         return [];
@@ -720,7 +585,7 @@ export class HikvisionDriver implements IDeviceDriver {
             if (data?.FaceDataRecord?.faceData) {
                 return Buffer.from(data.FaceDataRecord.faceData, 'base64');
             }
-        } catch (e) { }
+        } catch (e) { /* silenced */ }
 
         // Strategy 2: Access Control (Terminals/MinMoe)
         try {
@@ -738,7 +603,7 @@ export class HikvisionDriver implements IDeviceDriver {
                 const record = data.FaceRecordSearch.FaceRecord[0];
                 if (record.faceData) return Buffer.from(record.faceData, 'base64');
             }
-        } catch (e) { }
+        } catch (e) { /* silenced */ }
 
         return null;
     }
@@ -806,18 +671,15 @@ export class HikvisionDriver implements IDeviceDriver {
 
         const matches = findRecordArray(data);
         if (matches) {
-            console.log(`[Hikvision Extract] Found ${matches.length} items in data structure.`);
             return matches;
         }
 
-        console.log(`[Hikvision Extract] No record array found in Response:`, JSON.stringify(data).slice(0, 200));
         return [];
     }
 
     async getDoorlog(device: Device, num: number = 50, offset: number = 0): Promise<any[]> {
         // Mode 1: Access Control Search (Terminals)
         try {
-            console.log(`[Hikvision Log] Access Control strategy for ${device.ip}...`);
             const payload = {
                 AcsEventSearchDescription: {
                     searchID: "log_" + Date.now().toString(16).slice(-8),
@@ -843,7 +705,6 @@ export class HikvisionDriver implements IDeviceDriver {
 
         // Mode 2: LPR Audit Search (ANPR Cameras)
         try {
-            console.log(`[Hikvision Log] LPR strategy for ${device.ip}...`);
             // We use requestXML because searchLPListAudit often requires direct XML
             const xml = `<?xml version="1.0" encoding="UTF-8"?><LPSearchCond><searchID>${Date.now()}</searchID><maxResult>${num}</maxResult><searchResultPosition>${offset}</searchResultPosition></LPSearchCond>`;
             const res = await this.requestXML("POST", "/ISAPI/Traffic/channels/1/searchLPListAudit", xml, device);
@@ -876,7 +737,6 @@ export class HikvisionDriver implements IDeviceDriver {
     }
 
     async syncUserWithFace(user: any, device: Device): Promise<void> {
-        console.log(`[Hikvision Sync] User: ${user.name} (ID: ${user.id}) -> ${device.ip}`);
 
         // Generate a 4-7 digit EmployeeNo from the DB ID
         const employeeNo = this.getNumericId(user.id);
@@ -899,9 +759,7 @@ export class HikvisionDriver implements IDeviceDriver {
 
         try {
             await this.request("POST", "/ISAPI/AccessControl/UserInfo/Record?format=json", userPayload, device);
-            console.log(`[Hikvision Sync] User info saved for ${user.name}`);
         } catch (e: any) {
-            console.log(`[Hikvision Sync] User info POST failed (likely exists), trying PUT...`);
             await this.request("PUT", "/ISAPI/AccessControl/UserInfo/Modify?format=json", userPayload, device).catch(() => { });
         }
 
@@ -944,14 +802,12 @@ export class HikvisionDriver implements IDeviceDriver {
                             faceData: base64Face
                         }
                     }, device).catch(async () => {
-                        console.log(`[Hikvision Sync] Face record failed, trying legacy/Snapshot URI...`);
                         // Legacy/Snapshot variation
                         await this.request("POST", "/ISAPI/AccessControl/Snapshot/Face?format=json", {
                             employeeNo: employeeNo,
                             faceData: base64Face
                         }, device).catch(e => console.error("Final face sync failure", e.message));
                     });
-                    console.log(`[Hikvision Sync] Face image data sent for ${user.name}`);
                 }
             } catch (e: any) {
                 console.error(`[Hikvision Sync] Face image download/sync failed:`, e.message);

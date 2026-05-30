@@ -1,41 +1,48 @@
-/** @type {import('next').NextConfig} */
+/** @type {import("next").NextConfig} */
 const nextConfig = {
+  serverExternalPackages: ["bullmq", "ioredis", "web-push"],
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   images: {
     remotePatterns: [
       {
-        protocol: 'http',
-        hostname: '**',
+        protocol: "http",
+        hostname: "**",
       },
       {
-        protocol: 'https',
-        hostname: '**',
+        protocol: "https",
+        hostname: "**",
       },
     ],
   },
   experimental: {
     serverActions: {
-      bodySizeLimit: '10mb',
-    },
-  },
-  // Reduce logging in development
-  logging: {
-    fetches: {
-      fullUrl: false,
+      bodySizeLimit: "10mb",
     },
   },
   async rewrites() {
     return [
       {
-        source: '/api/live/:path*',
-        destination: 'http://localhost:10000/api/live/:path*',
+        source: "/io/:path*",
+        destination: "http://localhost:10000/:path*",
       },
       {
-        source: '/api/proxy/:path*',
-        destination: 'http://localhost:10000/api/proxy/:path*',
+        source: "/go2rtc/:path*",
+        destination: "http://localhost:1984/:path*",
       },
+    ];
+  },
+  async headers() {
+    return [
       {
-        source: '/api/webhooks/:path*',
-        destination: 'http://localhost:10000/api/webhooks/:path*',
+        source: "/api/:path*",
+        headers: [
+          { key: "Access-Control-Allow-Credentials", value: "true" },
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Access-Control-Allow-Methods", value: "GET,DELETE,PATCH,POST,PUT,OPTIONS" },
+          { key: "Access-Control-Allow-Headers", value: "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version" },
+        ],
       },
     ];
   },

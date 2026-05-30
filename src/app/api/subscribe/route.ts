@@ -26,9 +26,7 @@ export async function POST(request: Request) {
         if (!exists) {
             subs.push(subscription);
             await fs.writeFile(SUBS_FILE, JSON.stringify(subs, null, 2));
-            console.log(`[PUSH] New subscription saved. Total: ${subs.length}`);
         } else {
-            console.log(`[PUSH] Subscription already exists. Total: ${subs.length}`);
         }
 
         return NextResponse.json({ success: true });

@@ -62,11 +62,11 @@ export default function WhitelistPage() {
     return (
         <div className="min-h-screen bg-black text-white p-8 space-y-8 animate-in fade-in duration-700">
             {/* Elegant Top Bar */}
-            <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-8 border-b border-white/5 relative">
+            <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-8 border-b border-border relative">
                 <div className="flex items-center gap-6">
                     <Link
                         href="/admin/dashboard-face"
-                        className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-emerald-600 hover:border-emerald-600 transition-all group shadow-xl"
+                        className="w-12 h-12 rounded-2xl bg-foreground/10 border border-border flex items-center justify-center hover:bg-emerald-600 hover:border-emerald-600 transition-all group shadow-xl"
                     >
                         <ChevronLeft className="group-hover:-translate-x-1 transition-transform" />
                     </Link>
@@ -75,7 +75,7 @@ export default function WhitelistPage() {
                             <h1 className="text-4xl font-black uppercase tracking-tight leading-none text-emerald-50">Lista Blanca</h1>
                             <Badge className="bg-emerald-600/20 text-emerald-500 border-emerald-600/30 font-black">PREMIUM</Badge>
                         </div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-500 mt-2 flex items-center gap-2">
+                        <p className="text-[10px] font-black uppercase tracking-[0.4em] text-muted-foreground mt-2 flex items-center gap-2">
                             <Star size={12} className="text-emerald-600 fill-emerald-600" />
                             Gestión de Acceso Preferencial
                         </p>
@@ -84,21 +84,21 @@ export default function WhitelistPage() {
 
                 <div className="flex items-center gap-3">
                     <div className="relative group">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500 group-focus-within:text-emerald-500 transition-colors" size={16} />
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-emerald-500 transition-colors" size={16} />
                         <input
                             type="text"
                             placeholder="Buscar por nombre o DNI..."
                             value={filter}
                             onChange={(e) => setFilter(e.target.value)}
-                            className="w-full md:w-80 h-12 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-6 text-sm outline-none focus:border-emerald-600/50 transition-all font-bold placeholder:text-neutral-700 shadow-inner"
+                            className="w-full md:w-80 h-12 bg-foreground/10 border border-border rounded-2xl pl-12 pr-6 text-sm outline-none focus:border-emerald-600/50 transition-all font-bold placeholder:text-muted-foreground shadow-inner"
                         />
                     </div>
-                    <div className="flex h-12 bg-white/5 rounded-2xl p-1 border border-white/10">
+                    <div className="flex h-12 bg-foreground/10 rounded-2xl p-1 border border-border">
                         <button
                             onClick={() => setViewMode('grid')}
                             className={cn(
                                 "flex-1 px-4 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all",
-                                viewMode === 'grid' ? "bg-emerald-600 text-white shadow-lg" : "text-neutral-500 hover:text-white"
+                                viewMode === 'grid' ? "bg-emerald-600 text-foreground shadow-lg" : "text-muted-foreground hover:text-foreground"
                             )}
                         >
                             Perfiles
@@ -107,7 +107,7 @@ export default function WhitelistPage() {
                             onClick={() => setViewMode('history')}
                             className={cn(
                                 "flex-1 px-4 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all",
-                                viewMode === 'history' ? "bg-emerald-600 text-white shadow-lg" : "text-neutral-500 hover:text-white"
+                                viewMode === 'history' ? "bg-emerald-600 text-foreground shadow-lg" : "text-muted-foreground hover:text-foreground"
                             )}
                         >
                             Detecciones
@@ -149,11 +149,11 @@ export default function WhitelistPage() {
                     <p className="text-[10px] font-black uppercase tracking-[0.5em] text-emerald-600 animate-pulse">Neural Sync In Progress</p>
                 </div>
             ) : filteredList.length === 0 ? (
-                <div className="text-center py-32 border border-dashed border-white/5 rounded-[3rem] bg-white/[0.02] backdrop-blur-sm">
-                    <div className="w-24 h-24 rounded-full bg-white/5 mx-auto flex items-center justify-center text-neutral-800 mb-8 border border-white/5 shadow-inner">
+                <div className="text-center py-32 border border-dashed border-border rounded-[3rem] bg-foreground/[0.04] backdrop-blur-sm">
+                    <div className="w-24 h-24 rounded-full bg-foreground/10 mx-auto flex items-center justify-center text-muted-foreground mb-8 border border-border shadow-inner">
                         <CheckCircle2 size={48} />
                     </div>
-                    <p className="text-sm font-black uppercase tracking-[0.3em] text-neutral-600">No hay perfiles registrados en la lista especial</p>
+                    <p className="text-sm font-black uppercase tracking-[0.3em] text-muted-foreground">No hay perfiles registrados en la lista especial</p>
                 </div>
             ) : viewMode === 'grid' ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -179,14 +179,14 @@ function WhitelistCard({ user, onRemove, idx }: { user: any, onRemove: () => voi
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: idx * 0.05 }}
-            className="group relative bg-[#0A0A0A] border border-white/5 rounded-[2.5rem] overflow-hidden hover:border-emerald-600/30 transition-all duration-500 hover:shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
+            className="group relative bg-[#0A0A0A] border border-border rounded-[2.5rem] overflow-hidden hover:border-emerald-600/30 transition-all duration-500 hover:shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
         >
             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-600/5 blur-[50px] -z-10 group-hover:bg-emerald-600/10 transition-all duration-500" />
 
             <div className="p-8 space-y-8">
                 {/* Header Identity */}
                 <div className="flex gap-6 items-start">
-                    <div className="w-24 h-24 rounded-3xl overflow-hidden relative border border-white/10 group-hover:border-emerald-600/50 transition-all duration-700 shadow-2xl shrink-0">
+                    <div className="w-24 h-24 rounded-3xl overflow-hidden relative border border-border group-hover:border-emerald-600/50 transition-all duration-700 shadow-2xl shrink-0">
                         <Image
                             src={getImagePath(user.cara) || "/placeholder-face.jpg"}
                             alt={user.name}
@@ -197,28 +197,28 @@ function WhitelistCard({ user, onRemove, idx }: { user: any, onRemove: () => voi
                     </div>
                     <div className="flex-1 min-w-0 space-y-2">
                         <div className="flex justify-between items-start">
-                            <h3 className="text-xl font-black uppercase tracking-tight truncate text-white leading-tight">
+                            <h3 className="text-xl font-black uppercase tracking-tight truncate text-foreground leading-tight">
                                 {user.name}
                             </h3>
                             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse mt-2" title="Acceso Habilitado" />
                         </div>
-                        <p className="text-[11px] text-neutral-600 font-black uppercase tracking-widest truncate">{user.dni || "DNI No Registrado"}</p>
+                        <p className="text-[11px] text-muted-foreground font-black uppercase tracking-widest truncate">{user.dni || "DNI No Registrado"}</p>
                         <div className="flex flex-wrap gap-2 pt-1">
                             <Badge className="bg-emerald-600/10 text-emerald-500 border-emerald-600/20 text-[7px] font-black uppercase tracking-widest px-2 py-0.5 whitespace-nowrap">WHITELISTED</Badge>
-                            <Badge className="bg-white/5 text-neutral-500 border-white/10 text-[7px] font-black uppercase tracking-widest px-2 py-0.5 truncate">{user.unit?.name || "RECURRENTE"}</Badge>
+                            <Badge className="bg-foreground/10 text-muted-foreground border-border text-[7px] font-black uppercase tracking-widest px-2 py-0.5 truncate">{user.unit?.name || "RECURRENTE"}</Badge>
                         </div>
                     </div>
                 </div>
 
                 {/* Metadata Details */}
-                <div className="grid grid-cols-1 gap-4 py-6 border-t border-b border-white/5">
+                <div className="grid grid-cols-1 gap-4 py-6 border-t border-b border-border">
                     <div className="space-y-3">
                         <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center text-neutral-500">
+                            <div className="w-8 h-8 rounded-xl bg-foreground/10 flex items-center justify-center text-muted-foreground">
                                 <Star size={14} className="group-hover:text-emerald-500 transition-colors" />
                             </div>
                             <div className="min-w-0">
-                                <p className="text-[8px] font-black text-neutral-600 uppercase tracking-widest">Nivel de Acceso</p>
+                                <p className="text-[8px] font-black text-muted-foreground uppercase tracking-widest">Nivel de Acceso</p>
                                 <p className="text-[10px] font-bold text-emerald-500/80 uppercase truncate">
                                     {user.blacklistReason || "Acceso Preferencial Ilimitado"}
                                 </p>
@@ -226,24 +226,24 @@ function WhitelistCard({ user, onRemove, idx }: { user: any, onRemove: () => voi
                         </div>
 
                         <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center text-neutral-500">
+                            <div className="w-8 h-8 rounded-xl bg-foreground/10 flex items-center justify-center text-muted-foreground">
                                 <Calendar size={14} />
                             </div>
                             <div className="min-w-0">
-                                <p className="text-[8px] font-black text-neutral-600 uppercase tracking-widest">Creación del Perfil</p>
-                                <p className="text-[10px] font-black text-neutral-400 uppercase">
+                                <p className="text-[8px] font-black text-muted-foreground uppercase tracking-widest">Creación del Perfil</p>
+                                <p className="text-[10px] font-black text-muted-foreground uppercase">
                                     {new Date(user.createdAt).toLocaleDateString()}
                                 </p>
                             </div>
                         </div>
 
                         <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center text-neutral-500">
+                            <div className="w-8 h-8 rounded-xl bg-foreground/10 flex items-center justify-center text-muted-foreground">
                                 <UserCheck size={14} />
                             </div>
                             <div className="min-w-0">
-                                <p className="text-[8px] font-black text-neutral-600 uppercase tracking-widest">Registrado por</p>
-                                <p className="text-[10px] font-black text-white hover:text-emerald-500 transition-colors uppercase">
+                                <p className="text-[8px] font-black text-muted-foreground uppercase tracking-widest">Registrado por</p>
+                                <p className="text-[10px] font-black text-foreground hover:text-emerald-500 transition-colors uppercase">
                                     {user.createdBy || "Admin Console"}
                                 </p>
                             </div>
@@ -254,11 +254,11 @@ function WhitelistCard({ user, onRemove, idx }: { user: any, onRemove: () => voi
                 {/* Observations */}
                 <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                        <MessageSquare size={10} className="text-neutral-600" />
-                        <span className="text-[9px] font-black text-neutral-600 uppercase tracking-widest">Instrucciones Especiales</span>
+                        <MessageSquare size={10} className="text-muted-foreground" />
+                        <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Instrucciones Especiales</span>
                     </div>
-                    <div className="bg-white/[0.02] p-4 rounded-3xl border border-white/5 min-h-[80px]">
-                        <p className="text-[11px] text-neutral-400 font-medium italic leading-relaxed">
+                    <div className="bg-foreground/[0.04] p-4 rounded-3xl border border-border min-h-[80px]">
+                        <p className="text-[11px] text-muted-foreground font-medium italic leading-relaxed">
                             {user.observations ? `"${user.observations}"` : "Sin requerimientos especiales registrados."}
                         </p>
                     </div>
@@ -268,12 +268,12 @@ function WhitelistCard({ user, onRemove, idx }: { user: any, onRemove: () => voi
                 <div className="pt-4 flex gap-3">
                     <button
                         onClick={onRemove}
-                        className="flex-1 h-14 rounded-[1.25rem] bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all flex items-center justify-center gap-3 group/btn shadow-xl active:scale-95"
+                        className="flex-1 h-14 rounded-[1.25rem] bg-foreground/10 border border-border text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-foreground hover:border-emerald-600 transition-all flex items-center justify-center gap-3 group/btn shadow-xl active:scale-95"
                     >
-                        <Trash2 size={16} className="text-neutral-600 group-hover:text-white transition-colors" />
+                        <Trash2 size={16} className="text-muted-foreground group-hover:text-foreground transition-colors" />
                         Quitar Nivel Especial
                     </button>
-                    <button className="w-14 h-14 rounded-[1.25rem] bg-white/5 border border-white/10 flex items-center justify-center text-neutral-500 hover:text-white hover:bg-white/10 transition-all shadow-xl active:scale-95">
+                    <button className="w-14 h-14 rounded-[1.25rem] bg-foreground/10 border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-all shadow-xl active:scale-95">
                         <History size={18} />
                     </button>
                 </div>
@@ -287,12 +287,12 @@ function WhitelistEventTable({ events }: { events: any[] }) {
         <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-[#0A0A0A] border border-white/5 rounded-[3rem] overflow-hidden shadow-2xl"
+            className="bg-[#0A0A0A] border border-border rounded-[3rem] overflow-hidden shadow-2xl"
         >
-            <div className="p-8 border-b border-white/5 flex items-center justify-between">
+            <div className="p-8 border-b border-border flex items-center justify-between">
                 <div>
                     <h2 className="text-xl font-black uppercase tracking-tight">Bitácora de Accesos Premium</h2>
-                    <p className="text-[9px] text-neutral-500 font-black uppercase tracking-widest mt-1">Historial de validaciones faciales exitosas</p>
+                    <p className="text-[9px] text-muted-foreground font-black uppercase tracking-widest mt-1">Historial de validaciones faciales exitosas</p>
                 </div>
                 <div className="w-12 h-12 rounded-2xl bg-emerald-600/10 flex items-center justify-center text-emerald-600 border border-emerald-600/20 shadow-inner text-shadow-glow">
                     <Zap size={20} />
@@ -302,26 +302,26 @@ function WhitelistEventTable({ events }: { events: any[] }) {
             <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                     <thead>
-                        <tr className="bg-white/[0.02]">
-                            <th className="px-8 py-6 text-[9px] font-black text-neutral-500 uppercase tracking-widest">Identidad / Perfil</th>
-                            <th className="px-8 py-6 text-[9px] font-black text-neutral-500 uppercase tracking-widest">Temporalidad</th>
-                            <th className="px-8 py-6 text-[9px] font-black text-neutral-500 uppercase tracking-widest">Ubicación de Acceso</th>
-                            <th className="px-8 py-6 text-[9px] font-black text-neutral-500 uppercase tracking-widest">Status Biométrico</th>
-                            <th className="px-8 py-6 text-[9px] font-black text-neutral-500 uppercase tracking-widest text-right">Acción</th>
+                        <tr className="bg-foreground/[0.04]">
+                            <th className="px-8 py-6 text-[9px] font-black text-muted-foreground uppercase tracking-widest">Identidad / Perfil</th>
+                            <th className="px-8 py-6 text-[9px] font-black text-muted-foreground uppercase tracking-widest">Temporalidad</th>
+                            <th className="px-8 py-6 text-[9px] font-black text-muted-foreground uppercase tracking-widest">Ubicación de Acceso</th>
+                            <th className="px-8 py-6 text-[9px] font-black text-muted-foreground uppercase tracking-widest">Status Biométrico</th>
+                            <th className="px-8 py-6 text-[9px] font-black text-muted-foreground uppercase tracking-widest text-right">Acción</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
                         {events.length === 0 ? (
                             <tr>
-                                <td colSpan={5} className="px-8 py-20 text-center text-neutral-600 text-xs font-bold uppercase tracking-widest font-mono italic">
+                                <td colSpan={5} className="px-8 py-20 text-center text-muted-foreground text-xs font-bold uppercase tracking-widest font-mono italic">
                                     No se registran accesos recientes para esta categoría.
                                 </td>
                             </tr>
                         ) : events.map((event, idx) => (
-                            <tr key={event.id} className="hover:bg-white/[0.01] transition-colors group">
+                            <tr key={event.id} className="hover:bg-foreground/[0.04] transition-colors group">
                                 <td className="px-8 py-6">
                                     <div className="flex items-center gap-6">
-                                        <div className="w-12 h-12 rounded-xl overflow-hidden relative border border-white/10 group-hover:border-emerald-600/50 transition-all shadow-lg">
+                                        <div className="w-12 h-12 rounded-xl overflow-hidden relative border border-border group-hover:border-emerald-600/50 transition-all shadow-lg">
                                             <Image
                                                 src={getImagePath(event.snapshotPath || event.user.cara) || "/placeholder-face.jpg"}
                                                 alt="Event"
@@ -330,25 +330,25 @@ function WhitelistEventTable({ events }: { events: any[] }) {
                                             />
                                         </div>
                                         <div>
-                                            <p className="text-sm font-black text-white group-hover:text-emerald-500 transition-colors uppercase">{event.user.name}</p>
-                                            <p className="text-[9px] font-bold text-neutral-600 uppercase">{event.user.dni || "VERIFICADO"}</p>
+                                            <p className="text-sm font-black text-foreground group-hover:text-emerald-500 transition-colors uppercase">{event.user.name}</p>
+                                            <p className="text-[9px] font-bold text-muted-foreground uppercase">{event.user.dni || "VERIFICADO"}</p>
                                         </div>
                                     </div>
                                 </td>
                                 <td className="px-8 py-6">
                                     <div className="space-y-1">
-                                        <p className="text-xs font-black uppercase text-white/80">{new Date(event.timestamp).toLocaleTimeString()}</p>
-                                        <p className="text-[10px] font-bold text-neutral-600 uppercase">{new Date(event.timestamp).toLocaleDateString()}</p>
+                                        <p className="text-xs font-black uppercase text-foreground/70">{new Date(event.timestamp).toLocaleTimeString()}</p>
+                                        <p className="text-[10px] font-bold text-muted-foreground uppercase">{new Date(event.timestamp).toLocaleDateString()}</p>
                                     </div>
                                 </td>
                                 <td className="px-8 py-6">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-neutral-600 group-hover:text-emerald-500 transition-colors">
+                                        <div className="w-8 h-8 rounded-lg bg-foreground/10 flex items-center justify-center text-muted-foreground group-hover:text-emerald-500 transition-colors">
                                             <MapPin size={14} />
                                         </div>
                                         <div>
-                                            <p className="text-xs font-black text-neutral-400 uppercase">{event.device?.name || "Terminal 01"}</p>
-                                            <p className="text-[10px] font-bold text-neutral-600 uppercase">{event.device?.location || "Punto de Control"}</p>
+                                            <p className="text-xs font-black text-muted-foreground uppercase">{event.device?.name || "Terminal 01"}</p>
+                                            <p className="text-[10px] font-bold text-muted-foreground uppercase">{event.device?.location || "Punto de Control"}</p>
                                         </div>
                                     </div>
                                 </td>
@@ -359,7 +359,7 @@ function WhitelistEventTable({ events }: { events: any[] }) {
                                     </div>
                                 </td>
                                 <td className="px-8 py-6 text-right">
-                                    <button className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest text-neutral-400 hover:text-white transition-all shadow-xl">
+                                    <button className="px-4 py-2 bg-foreground/10 hover:bg-accent border border-border rounded-xl text-[9px] font-black uppercase tracking-widest text-muted-foreground hover:text-foreground transition-all shadow-xl">
                                         Auditoría
                                     </button>
                                 </td>

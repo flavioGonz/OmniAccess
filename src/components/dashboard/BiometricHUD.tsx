@@ -147,7 +147,7 @@ function HUDDataPoint({ x, y, label, value, color = "text-[#B20D30]" }: any) {
             style={{ top: y, left: x }}
         >
             <div className="bg-black/80 border-l-2 border-[#B20D30] px-4 py-2 backdrop-blur-md">
-                <p className="text-[8px] text-neutral-500 font-black tracking-widest leading-none mb-1">{label}</p>
+                <p className="text-[8px] text-muted-foreground font-black tracking-widest leading-none mb-1">{label}</p>
                 <p className={cn("text-xs font-black tracking-tighter leading-none", color)}>{value}</p>
             </div>
             <motion.div

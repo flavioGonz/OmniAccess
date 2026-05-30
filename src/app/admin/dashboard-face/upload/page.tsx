@@ -72,10 +72,10 @@ export default function UploadFacePage() {
     return (
         <div className="min-h-screen bg-black text-white p-8 space-y-8 animate-in fade-in duration-700">
             {/* Tactical Header */}
-            <header className="flex items-center gap-6 pb-8 border-b border-white/5">
+            <header className="flex items-center gap-6 pb-8 border-b border-border">
                 <Link
                     href="/admin/dashboard-face"
-                    className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-neutral-800 transition-all group shadow-xl"
+                    className="w-12 h-12 rounded-2xl bg-foreground/10 border border-border flex items-center justify-center hover:bg-muted transition-all group shadow-xl"
                 >
                     <ChevronLeft className="group-hover:-translate-x-1 transition-transform" />
                 </Link>
@@ -84,7 +84,7 @@ export default function UploadFacePage() {
                         <h1 className="text-4xl font-black uppercase tracking-tight leading-none italic">Inscripción Biométrica</h1>
                         <Badge className="bg-blue-600/20 text-blue-500 border-blue-600/30 font-black">NUEVO EXPEDIENTE</Badge>
                     </div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-500 mt-2 flex items-center gap-2">
+                    <p className="text-[10px] font-black uppercase tracking-[0.4em] text-muted-foreground mt-2 flex items-center gap-2">
                         <Database size={12} className="text-[#B20D30]" />
                         Módulo de Registro Centralizado v2.4
                     </p>
@@ -94,11 +94,11 @@ export default function UploadFacePage() {
             <form onSubmit={handleRegister} className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 {/* Left: Capture HUD (Lg 5) */}
                 <div className="lg:col-span-5 space-y-6">
-                    <div className="bg-[#0A0A0A] border border-white/5 rounded-[2.5rem] p-8 space-y-8 shadow-2xl relative overflow-hidden group">
+                    <div className="bg-[#0A0A0A] border border-border rounded-[2.5rem] p-8 space-y-8 shadow-2xl relative overflow-hidden group">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-[#B20D30]/5 blur-[50px] -z-10" />
 
                         <div className="flex items-center justify-between">
-                            <h3 className="text-[10px] font-black text-neutral-500 uppercase tracking-[0.3em] flex items-center gap-2">
+                            <h3 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em] flex items-center gap-2">
                                 <Fingerprint size={14} className="text-[#B20D30]" />
                                 Captura Facial Activa
                             </h3>
@@ -112,35 +112,35 @@ export default function UploadFacePage() {
                             onClick={() => document.getElementById('face-upload')?.click()}
                             className={cn(
                                 "w-full aspect-square rounded-[2rem] bg-black border-2 border-dashed transition-all relative overflow-hidden group/box cursor-pointer",
-                                preview ? (role === 'BLACKLISTED' ? "border-red-600/50" : role === 'WHITELISTED' ? "border-emerald-600/50" : "border-white/20") : "border-white/5 hover:bg-white/[0.02]"
+                                preview ? (role === 'BLACKLISTED' ? "border-red-600/50" : role === 'WHITELISTED' ? "border-emerald-600/50" : "border-border") : "border-border hover:bg-foreground/[0.04]"
                             )}
                         >
                             {preview ? (
                                 <>
                                     <Image src={preview} alt="Preview" fill className="object-cover group-hover/box:scale-105 transition-transform duration-[2000ms]" />
                                     <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/box:opacity-100 flex flex-col items-center justify-center transition-all backdrop-blur-sm gap-3">
-                                        <RefreshCw className="text-white animate-spin-slow" size={32} />
-                                        <span className="text-[10px] font-black uppercase text-white tracking-widest">Reemplazar Captura</span>
+                                        <RefreshCw className="text-foreground animate-spin-slow" size={32} />
+                                        <span className="text-[10px] font-black uppercase text-foreground tracking-widest">Reemplazar Captura</span>
                                     </div>
                                     {/* Scanning Animation */}
                                     <div className="absolute inset-x-0 h-[2px] bg-red-600/50 top-0 shadow-[0_0_15px_rgba(220,38,38,0.5)] animate-scan-y pointer-events-none" />
                                 </>
                             ) : (
                                 <div className="h-full flex flex-col items-center justify-center gap-6">
-                                    <div className="w-20 h-20 rounded-3xl bg-white/5 flex items-center justify-center text-neutral-700 group-hover/box:text-white group-hover/box:scale-110 transition-all border border-white/5">
+                                    <div className="w-20 h-20 rounded-3xl bg-foreground/10 flex items-center justify-center text-muted-foreground group-hover/box:text-foreground group-hover/box:scale-110 transition-all border border-border">
                                         <Camera size={38} />
                                     </div>
                                     <div className="text-center px-8">
-                                        <p className="text-sm font-black text-white uppercase tracking-widest">Cargar Rostro</p>
-                                        <p className="text-[9px] text-neutral-600 font-bold uppercase mt-2 tracking-widest italic leading-relaxed">Arrastra una imagen de alta resolución para un match neural preciso</p>
+                                        <p className="text-sm font-black text-foreground uppercase tracking-widest">Cargar Rostro</p>
+                                        <p className="text-[9px] text-muted-foreground font-bold uppercase mt-2 tracking-widest italic leading-relaxed">Arrastra una imagen de alta resolución para un match neural preciso</p>
                                     </div>
                                 </div>
                             )}
                         </div>
                         <input id="face-upload" type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
 
-                        <div className="bg-white/[0.02] rounded-3xl p-6 border border-white/5">
-                            <h4 className="text-[9px] font-black text-neutral-600 uppercase tracking-widest mb-3">Requisitos de Calidad</h4>
+                        <div className="bg-foreground/[0.04] rounded-3xl p-6 border border-border">
+                            <h4 className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-3">Requisitos de Calidad</h4>
                             <ul className="space-y-2">
                                 <QualityRow label="Iluminación Frontal" checked={!!preview} />
                                 <QualityRow label="Rostro Despejado" checked={!!preview} />
@@ -152,9 +152,9 @@ export default function UploadFacePage() {
 
                 {/* Right: Metadata Form (Lg 7) */}
                 <div className="lg:col-span-7 space-y-6">
-                    <div className="bg-[#0A0A0A] border border-white/5 rounded-[2.5rem] p-8 space-y-8 shadow-2xl h-full flex flex-col">
+                    <div className="bg-[#0A0A0A] border border-border rounded-[2.5rem] p-8 space-y-8 shadow-2xl h-full flex flex-col">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-[10px] font-black text-neutral-500 uppercase tracking-[0.3em] flex items-center gap-2">
+                            <h3 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em] flex items-center gap-2">
                                 <Tag size={14} className="text-[#B20D30]" />
                                 Metadatos del Sujeto
                             </h3>
@@ -162,29 +162,29 @@ export default function UploadFacePage() {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-2">
-                                <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest ml-1">Nombre Completo</label>
+                                <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest ml-1">Nombre Completo</label>
                                 <Input
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
                                     placeholder="Nombre del Sujeto..."
-                                    className="h-14 bg-white/[0.02] border-white/5 text-white rounded-[1.25rem] px-6 text-sm font-black uppercase focus:border-[#B20D30]/50 transition-all shadow-inner"
+                                    className="h-14 bg-foreground/[0.04] border-border text-foreground rounded-[1.25rem] px-6 text-sm font-black uppercase focus:border-[#B20D30]/50 transition-all shadow-inner"
                                 />
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest ml-1">Identificación / DNI</label>
+                                <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest ml-1">Identificación / DNI</label>
                                 <Input
                                     value={dni}
                                     onChange={(e) => setDni(e.target.value)}
                                     placeholder="Nro de Documento..."
-                                    className="h-14 bg-white/[0.02] border-white/5 text-white rounded-[1.25rem] px-6 text-sm font-black uppercase focus:border-blue-600/50 transition-all shadow-inner"
+                                    className="h-14 bg-foreground/[0.04] border-border text-foreground rounded-[1.25rem] px-6 text-sm font-black uppercase focus:border-blue-600/50 transition-all shadow-inner"
                                 />
                             </div>
                         </div>
 
                         {/* Category Selector */}
                         <div className="space-y-4">
-                            <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest ml-1 block">Nivel de Seguridad / Categoría</label>
+                            <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest ml-1 block">Nivel de Seguridad / Categoría</label>
                             <div className="grid grid-cols-3 gap-3">
                                 <RoleOption
                                     active={role === 'VISITOR'}
@@ -212,41 +212,41 @@ export default function UploadFacePage() {
 
                         {/* Reason Field */}
                         <div className="space-y-2">
-                            <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest ml-1">Motivo de Registro</label>
+                            <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest ml-1">Motivo de Registro</label>
                             <Input
                                 value={reason}
                                 onChange={(e) => setReason(e.target.value)}
                                 placeholder="Ej: Historial delictivo, Contratista VIP, etc..."
-                                className="h-14 bg-white/[0.02] border-white/5 text-white rounded-[1.25rem] px-6 text-xs font-bold uppercase focus:border-red-600/50 transition-all shadow-inner"
+                                className="h-14 bg-foreground/[0.04] border-border text-foreground rounded-[1.25rem] px-6 text-xs font-bold uppercase focus:border-red-600/50 transition-all shadow-inner"
                             />
                         </div>
 
                         {/* Observations */}
                         <div className="space-y-2 flex-1">
                             <div className="flex items-center justify-between ml-1">
-                                <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest">Observaciones Adicionales</label>
-                                <MessageSquare size={12} className="text-neutral-700" />
+                                <label className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Observaciones Adicionales</label>
+                                <MessageSquare size={12} className="text-muted-foreground" />
                             </div>
                             <textarea
                                 value={observations}
                                 onChange={(e) => setObservations(e.target.value)}
                                 placeholder="Detalles técnicos o de comportamiento observados durante el registro..."
-                                className="w-full bg-white/[0.02] border border-white/5 text-white rounded-[1.25rem] p-6 text-xs font-medium uppercase focus:border-[#B20D30]/50 focus:ring-0 outline-none transition-all resize-none h-40 shadow-inner"
+                                className="w-full bg-foreground/[0.04] border border-border text-foreground rounded-[1.25rem] p-6 text-xs font-medium uppercase focus:border-[#B20D30]/50 focus:ring-0 outline-none transition-all resize-none h-40 shadow-inner"
                             />
                         </div>
 
                         {/* Creator Footer Info */}
-                        <div className="flex items-center justify-between p-6 bg-white/[0.03] rounded-[1.5rem] border border-white/5">
+                        <div className="flex items-center justify-between p-6 bg-foreground/[0.04] rounded-[1.5rem] border border-border">
                             <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neutral-700 to-black flex items-center justify-center text-[10px] font-black border border-white/10">A</div>
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neutral-700 to-black flex items-center justify-center text-[10px] font-black border border-border">A</div>
                                 <div>
-                                    <p className="text-[8px] font-black text-neutral-500 uppercase tracking-widest">Operador Responsable</p>
-                                    <p className="text-[11px] font-black text-white hover:text-[#B20D30] cursor-pointer transition-colors uppercase">{creator}</p>
+                                    <p className="text-[8px] font-black text-muted-foreground uppercase tracking-widest">Operador Responsable</p>
+                                    <p className="text-[11px] font-black text-foreground hover:text-[#B20D30] cursor-pointer transition-colors uppercase">{creator}</p>
                                 </div>
                             </div>
                             <div className="text-right">
-                                <p className="text-[8px] font-black text-neutral-500 uppercase tracking-widest">Hash de Registro</p>
-                                <p className="text-[9px] font-mono text-neutral-700 uppercase">SYS-FAC-{(Math.random() * 10000).toFixed(0)}-AX</p>
+                                <p className="text-[8px] font-black text-muted-foreground uppercase tracking-widest">Hash de Registro</p>
+                                <p className="text-[9px] font-mono text-muted-foreground uppercase">SYS-FAC-{(Math.random() * 10000).toFixed(0)}-AX</p>
                             </div>
                         </div>
 
@@ -255,7 +255,7 @@ export default function UploadFacePage() {
                             disabled={isSubmitting}
                             className={cn(
                                 "w-full h-16 rounded-[1.5rem] font-black uppercase tracking-[0.3em] text-[11px] transition-all flex gap-4 shadow-2xl active:scale-95",
-                                isSubmitting ? "bg-neutral-800" : (role === 'BLACKLISTED' ? "bg-red-600 hover:bg-red-700" : role === 'WHITELISTED' ? "bg-blue-600 hover:bg-blue-700" : "bg-emerald-600 hover:bg-emerald-700")
+                                isSubmitting ? "bg-muted" : (role === 'BLACKLISTED' ? "bg-red-600 hover:bg-red-700" : role === 'WHITELISTED' ? "bg-blue-600 hover:bg-blue-700" : "bg-emerald-600 hover:bg-emerald-700")
                             )}
                         >
                             {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : (
@@ -285,9 +285,9 @@ export default function UploadFacePage() {
 
 function RoleOption({ active, onClick, icon, label, color }: { active: boolean, onClick: () => void, icon: any, label: string, color: string }) {
     const colors: any = {
-        red: active ? "border-red-600 bg-red-600/20 text-red-500" : "border-white/5 bg-white/[0.02] text-neutral-600 hover:border-white/10 hover:text-white",
-        blue: active ? "border-blue-600 bg-blue-600/20 text-blue-500" : "border-white/5 bg-white/[0.02] text-neutral-600 hover:border-white/10 hover:text-white",
-        emerald: active ? "border-emerald-600 bg-emerald-600/20 text-emerald-500" : "border-white/5 bg-white/[0.02] text-neutral-600 hover:border-white/10 hover:text-white"
+        red: active ? "border-red-600 bg-red-600/20 text-red-500" : "border-border bg-foreground/[0.04] text-muted-foreground hover:border-border hover:text-foreground",
+        blue: active ? "border-blue-600 bg-blue-600/20 text-blue-500" : "border-border bg-foreground/[0.04] text-muted-foreground hover:border-border hover:text-foreground",
+        emerald: active ? "border-emerald-600 bg-emerald-600/20 text-emerald-500" : "border-border bg-foreground/[0.04] text-muted-foreground hover:border-border hover:text-foreground"
     };
 
     return (
@@ -308,13 +308,13 @@ function RoleOption({ active, onClick, icon, label, color }: { active: boolean, 
 function QualityRow({ label, checked }: { label: string, checked: boolean }) {
     return (
         <li className="flex items-center justify-between">
-            <span className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest">{label}</span>
+            <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">{label}</span>
             {checked ? (
                 <div className="w-4 h-4 rounded-full bg-emerald-600/20 flex items-center justify-center text-emerald-500">
                     <ShieldCheck size={10} />
                 </div>
             ) : (
-                <div className="w-1.5 h-1.5 rounded-full bg-neutral-800" />
+                <div className="w-1.5 h-1.5 rounded-full bg-muted" />
             )}
         </li>
     );

@@ -25,7 +25,7 @@ export function EventCard({ event }: EventCardProps) {
     return (
         <EventDetailsDialog event={event}>
             <div className={`
-                bg-neutral-900/40 border rounded-xl overflow-hidden relative cursor-pointer group
+                bg-card/40 border rounded-xl overflow-hidden relative cursor-pointer group
                 transition-all duration-500 hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.7)] hover:-translate-y-1.5
                 ${isGrant ? "border-emerald-500/20 hover:border-emerald-500/50" : "border-red-500/20 hover:border-red-500/50"}
                 backdrop-blur-sm
@@ -61,27 +61,27 @@ export function EventCard({ event }: EventCardProps) {
                             )}
 
                             {/* Quick Status Tag */}
-                            <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-full bg-blue-500/80 text-white text-[7px] font-black uppercase tracking-widest backdrop-blur-md border border-white/10 shadow-lg z-20">
+                            <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-full bg-blue-500/80 text-foreground text-[7px] font-black uppercase tracking-widest backdrop-blur-md border border-border shadow-lg z-20">
                                 FACE ID
                             </div>
                         </>
                     ) : (
                         <>
                             {/* User Face Image */}
-                            <div className="w-1/2 bg-neutral-950 relative flex items-center justify-center overflow-hidden">
+                            <div className="w-1/2 bg-background relative flex items-center justify-center overflow-hidden">
                                 {userFaceUrl ? (
                                     <Image src={userFaceUrl} alt="User Face" fill sizes="50vw" className="object-cover group-hover:scale-125 transition-transform duration-700 opacity-60 group-hover:opacity-100" />
                                 ) : (
-                                    <UserIcon size={24} className="text-neutral-800" />
+                                    <UserIcon size={24} className="text-muted-foreground" />
                                 )}
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                             </div>
                             {/* Plate Capture Image */}
-                            <div className="w-1/2 bg-[#080808] relative flex items-center justify-center border-l border-white/5 overflow-hidden">
+                            <div className="w-1/2 bg-[#080808] relative flex items-center justify-center border-l border-border overflow-hidden">
                                 {plateImageUrl ? (
                                     <Image src={plateImageUrl} alt="Plate Capture" fill sizes="50vw" className="object-cover group-hover:scale-125 transition-transform duration-700 opacity-60 group-hover:opacity-100" />
                                 ) : (
-                                    <Car size={24} className="text-neutral-800" />
+                                    <Car size={24} className="text-muted-foreground" />
                                 )}
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                             </div>
@@ -99,7 +99,7 @@ export function EventCard({ event }: EventCardProps) {
                     {/* Plate & Decision */}
                     <div className="flex justify-between items-start">
                         <div className="space-y-1">
-                            <h3 className="text-xl font-black tracking-widest text-white group-hover:text-blue-400 transition-colors uppercase font-mono leading-none">
+                            <h3 className="text-xl font-black tracking-widest text-foreground group-hover:text-blue-400 transition-colors uppercase font-mono leading-none">
                                 {(event.plateDetected || event.accessType || "EVENT").replace(/_/g, " ")}
                             </h3>
                             <div className="flex items-center gap-1.5">
@@ -128,7 +128,7 @@ export function EventCard({ event }: EventCardProps) {
 
                     {/* Subject Info */}
                     <div className="flex items-center gap-2 p-2 bg-black/40 rounded-lg border border-white/5 group-hover:border-blue-500/20 transition-colors">
-                        <div className="w-6 h-6 rounded-md bg-neutral-800 flex items-center justify-center text-neutral-500 overflow-hidden relative">
+                        <div className="w-6 h-6 rounded-md bg-muted flex items-center justify-center text-muted-foreground overflow-hidden relative">
                             {userFaceUrl ? (
                                 <Image src={userFaceUrl} alt="Subject" fill sizes="24px" className="object-cover" />
                             ) : (
@@ -136,19 +136,19 @@ export function EventCard({ event }: EventCardProps) {
                             )}
                         </div>
                         <div className="min-w-0">
-                            <p className="text-[10px] font-black text-white truncate leading-none mb-0.5">
+                            <p className="text-[10px] font-black text-foreground truncate leading-none mb-0.5">
                                 {event.user?.name || "Desconocido"}
                             </p>
-                            <p className="text-[7px] text-neutral-500 font-bold uppercase tracking-widest truncate">
+                            <p className="text-[7px] text-muted-foreground font-bold uppercase tracking-widest truncate">
                                 {event.user?.unit?.name || "Externo"}
                             </p>
                         </div>
                     </div>
 
                     {/* Footer Info */}
-                    <div className="flex justify-between items-center text-[8px] font-black text-neutral-600 uppercase tracking-widest pt-0">
+                    <div className="flex justify-between items-center text-[8px] font-black text-muted-foreground uppercase tracking-widest pt-0">
                         <div className="flex items-center gap-1.5">
-                            <div className="w-1 h-1 rounded-full bg-neutral-700" />
+                            <div className="w-1 h-1 rounded-full bg-muted" />
                             {new Date(event.timestamp).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
                         </div>
                         <span className="truncate max-w-[80px]">{event.device?.name || "Root"}</span>

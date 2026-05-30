@@ -173,23 +173,23 @@ export default function ChangelogPage() {
                         <FileText size={32} className="text-blue-400" />
                     </div>
                     <div>
-                        <h1 className="text-4xl font-black text-white uppercase tracking-tight">Changelog</h1>
-                        <p className="text-neutral-500 font-bold uppercase tracking-widest text-xs">Historial de actualizaciones y mejoras</p>
+                        <h1 className="text-4xl font-black text-foreground uppercase tracking-tight">Changelog</h1>
+                        <p className="text-muted-foreground font-bold uppercase tracking-widest text-xs">Historial de actualizaciones y mejoras</p>
                     </div>
                 </div>
                 <div className="h-px w-full bg-gradient-to-r from-neutral-800 via-neutral-800 to-transparent" />
             </header>
 
-            <div className="space-y-12 relative before:absolute before:left-[17px] before:top-2 before:bottom-2 before:w-px before:bg-neutral-800">
+            <div className="space-y-12 relative before:absolute before:left-[17px] before:top-2 before:bottom-2 before:w-px before:bg-muted">
                 {/* NEW RELEASE v2.1.1 */}
                 <div className="relative pl-12 group">
-                    <div className="absolute left-0 top-1.5 w-[35px] h-[35px] rounded-full bg-neutral-900 border-2 border-neutral-800 flex items-center justify-center z-10 group-hover:border-blue-500/50 transition-colors">
+                    <div className="absolute left-0 top-1.5 w-[35px] h-[35px] rounded-full bg-card border-2 border-border flex items-center justify-center z-10 group-hover:border-blue-500/50 transition-colors">
                         <Rocket size={16} className="text-blue-400" />
                     </div>
                     <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
-                        <h2 className="text-2xl font-black text-white">v2.1.1</h2>
+                        <h2 className="text-2xl font-black text-foreground">v2.1.1</h2>
                         <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest h-5 px-2 flex items-center rounded-full bg-neutral-800 border border-neutral-700">
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest h-5 px-2 flex items-center rounded-full bg-muted border border-border">
                                 2026-03-12
                             </span>
                             <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest h-5 px-2 flex items-center rounded-full bg-blue-500/10 border border-blue-500/20">
@@ -197,35 +197,35 @@ export default function ChangelogPage() {
                             </span>
                         </div>
                     </div>
-                    <div className="bg-neutral-900/50 border border-neutral-800 rounded-3xl p-6 shadow-2xl backdrop-blur-xl mb-6">
-                        <h3 className="text-xl font-bold text-neutral-200 mb-2">Avicam Driver & Real-time Persistence</h3>
-                        <p className="text-neutral-500 text-sm mb-6">Integración oficial de terminales Avicam, corrección de sincronización horaria y mejoras en persistencia del dashboard.</p>
+                    <div className="bg-card/50 border border-border rounded-3xl p-6 shadow-2xl backdrop-blur-xl mb-6">
+                        <h3 className="text-xl font-bold text-foreground mb-2">Avicam Driver & Real-time Persistence</h3>
+                        <p className="text-muted-foreground text-sm mb-6">Integración oficial de terminales Avicam, corrección de sincronización horaria y mejoras en persistencia del dashboard.</p>
                         <div className="grid gap-4">
-                            <div className="flex items-start gap-4 p-3 rounded-xl bg-neutral-950/50 border border-neutral-800/50 hover:bg-neutral-900 transition-colors group/item">
+                            <div className="flex items-start gap-4 p-3 rounded-xl bg-background/50 border border-border/50 hover:bg-card transition-colors group/item">
                                 <div className="mt-0.5 p-1.5 rounded-lg shrink-0 bg-emerald-500/10"><PlusCircle size={14} className="text-emerald-400" /></div>
                                 <div className="flex-1">
-                                    <p className="text-sm font-medium text-neutral-300 leading-relaxed">Avicam Integration: Driver nativo para terminales faciales con soporte de eventos Push y fotos en alta resolución.</p>
+                                    <p className="text-sm font-medium text-muted-foreground leading-relaxed">Avicam Integration: Driver nativo para terminales faciales con soporte de eventos Push y fotos en alta resolución.</p>
                                     <span className="text-[9px] font-black uppercase tracking-widest text-emerald-400">feature</span>
                                 </div>
                             </div>
-                            <div className="flex items-start gap-4 p-3 rounded-xl bg-neutral-950/50 border border-neutral-800/50 hover:bg-neutral-900 transition-colors group/item">
+                            <div className="flex items-start gap-4 p-3 rounded-xl bg-background/50 border border-border/50 hover:bg-card transition-colors group/item">
                                 <div className="mt-0.5 p-1.5 rounded-lg shrink-0 bg-blue-400/10"><Zap size={14} className="text-blue-400" /></div>
                                 <div className="flex-1">
-                                    <p className="text-sm font-medium text-neutral-300 leading-relaxed">Timezone Sync: Corrección automática de timestamps para dispositivos en UTC-3 (Montevideo), garantizando orden cronológico exacto.</p>
+                                    <p className="text-sm font-medium text-muted-foreground leading-relaxed">Timezone Sync: Corrección automática de timestamps para dispositivos en UTC-3 (Montevideo), garantizando orden cronológico exacto.</p>
                                     <span className="text-[9px] font-black uppercase tracking-widest text-blue-400">improvement</span>
                                 </div>
                             </div>
-                            <div className="flex items-start gap-4 p-3 rounded-xl bg-neutral-950/50 border border-neutral-800/50 hover:bg-neutral-900 transition-colors group/item">
+                            <div className="flex items-start gap-4 p-3 rounded-xl bg-background/50 border border-border/50 hover:bg-card transition-colors group/item">
                                 <div className="mt-0.5 p-1.5 rounded-lg shrink-0 bg-amber-500/10"><TrendingUp size={14} className="text-amber-400" /></div>
                                 <div className="flex-1">
-                                    <p className="text-sm font-medium text-neutral-300 leading-relaxed">Dashboard Retention: Ventana de visión extendida a 24 horas continuas, eliminando el corte abrupto de medianoche.</p>
+                                    <p className="text-sm font-medium text-muted-foreground leading-relaxed">Dashboard Retention: Ventana de visión extendida a 24 horas continuas, eliminando el corte abrupto de medianoche.</p>
                                     <span className="text-[9px] font-black uppercase tracking-widest text-amber-400">improvement</span>
                                 </div>
                             </div>
-                            <div className="flex items-start gap-4 p-3 rounded-xl bg-neutral-950/50 border border-neutral-800/50 hover:bg-neutral-900 transition-colors group/item">
+                            <div className="flex items-start gap-4 p-3 rounded-xl bg-background/50 border border-border/50 hover:bg-card transition-colors group/item">
                                 <div className="mt-0.5 p-1.5 rounded-lg shrink-0 bg-red-400/10"><Bug size={14} className="text-red-400" /></div>
                                 <div className="flex-1">
-                                    <p className="text-sm font-medium text-neutral-300 leading-relaxed">S3 Fix: Limpieza estricta de payloads Base64 para asegurar compatibilidad con el almacenamiento en la nube.</p>
+                                    <p className="text-sm font-medium text-muted-foreground leading-relaxed">S3 Fix: Limpieza estricta de payloads Base64 para asegurar compatibilidad con el almacenamiento en la nube.</p>
                                     <span className="text-[9px] font-black uppercase tracking-widest text-red-400">fix</span>
                                 </div>
                             </div>
@@ -235,20 +235,20 @@ export default function ChangelogPage() {
 
                 {/* RELEASE v2.1.0 */}
                 <div className="relative pl-12 group">
-                    <div className="absolute left-0 top-1.5 w-[35px] h-[35px] rounded-full bg-neutral-900 border-2 border-neutral-800 flex items-center justify-center z-10 group-hover:border-blue-500/50 transition-colors">
-                        <Rocket size={16} className="text-neutral-600" />
+                    <div className="absolute left-0 top-1.5 w-[35px] h-[35px] rounded-full bg-card border-2 border-border flex items-center justify-center z-10 group-hover:border-blue-500/50 transition-colors">
+                        <Rocket size={16} className="text-muted-foreground" />
                     </div>
                     <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
-                        <h2 className="text-2xl font-black text-neutral-400">v2.1.0</h2>
+                        <h2 className="text-2xl font-black text-muted-foreground">v2.1.0</h2>
                         <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest h-5 px-2 flex items-center rounded-full bg-neutral-800 border border-neutral-700">
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest h-5 px-2 flex items-center rounded-full bg-muted border border-border">
                                 2026-02-24
                             </span>
                         </div>
                     </div>
-                    <div className="bg-neutral-900/30 border border-neutral-800/50 rounded-3xl p-6 mb-6 opacity-60">
-                        <h3 className="text-lg font-bold text-neutral-400 mb-2">Native Face Engine & Data Optimization</h3>
-                        <p className="text-neutral-500 text-xs">Optimización del reconocimiento facial delegando validación a hardware nativo.</p>
+                    <div className="bg-card/30 border border-border/50 rounded-3xl p-6 mb-6 opacity-60">
+                        <h3 className="text-lg font-bold text-muted-foreground mb-2">Native Face Engine & Data Optimization</h3>
+                        <p className="text-muted-foreground text-xs">Optimización del reconocimiento facial delegando validación a hardware nativo.</p>
                     </div>
                 </div>
 
@@ -256,14 +256,14 @@ export default function ChangelogPage() {
                 {changes.map((release, idx) => (
                     <div key={release.version} className="relative pl-12 group">
                         {/* Timeline node */}
-                        <div className="absolute left-0 top-1.5 w-[35px] h-[35px] rounded-full bg-neutral-900 border-2 border-neutral-800 flex items-center justify-center z-10 group-hover:border-blue-500/50 transition-colors">
-                            {idx === 0 ? <Rocket size={16} className="text-blue-400" /> : <Clock size={16} className="text-neutral-600" />}
+                        <div className="absolute left-0 top-1.5 w-[35px] h-[35px] rounded-full bg-card border-2 border-border flex items-center justify-center z-10 group-hover:border-blue-500/50 transition-colors">
+                            {idx === 0 ? <Rocket size={16} className="text-blue-400" /> : <Clock size={16} className="text-muted-foreground" />}
                         </div>
 
                         <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
-                            <h2 className="text-2xl font-black text-white">{release.version}</h2>
+                            <h2 className="text-2xl font-black text-foreground">{release.version}</h2>
                             <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest h-5 px-2 flex items-center rounded-full bg-neutral-800 border border-neutral-700">
+                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest h-5 px-2 flex items-center rounded-full bg-muted border border-border">
                                     {release.date}
                                 </span>
                                 {idx === 0 && (
@@ -274,28 +274,28 @@ export default function ChangelogPage() {
                             </div>
                         </div>
 
-                        <div className="bg-neutral-900/50 border border-neutral-800 rounded-3xl p-6 shadow-2xl backdrop-blur-xl mb-6">
-                            <h3 className="text-xl font-bold text-neutral-200 mb-2">{release.title}</h3>
-                            <p className="text-neutral-500 text-sm mb-6">{release.description}</p>
+                        <div className="bg-card/50 border border-border rounded-3xl p-6 shadow-2xl backdrop-blur-xl mb-6">
+                            <h3 className="text-xl font-bold text-foreground mb-2">{release.title}</h3>
+                            <p className="text-muted-foreground text-sm mb-6">{release.description}</p>
 
                             <div className="grid gap-4">
                                 {release.items.map((item, i) => {
                                     const style = typeStyles[item.type] || typeStyles.improvement;
                                     const Icon = style.icon;
                                     return (
-                                        <div key={i} className="flex items-start gap-4 p-3 rounded-xl bg-neutral-950/50 border border-neutral-800/50 hover:bg-neutral-900 transition-colors group/item">
+                                        <div key={i} className="flex items-start gap-4 p-3 rounded-xl bg-background/50 border border-border/50 hover:bg-card transition-colors group/item">
                                             <div className={cn("mt-0.5 p-1.5 rounded-lg shrink-0", style.bg)}>
                                                 <Icon size={14} className={style.color} />
                                             </div>
                                             <div className="flex-1">
-                                                <p className="text-sm font-medium text-neutral-300 leading-relaxed">
+                                                <p className="text-sm font-medium text-muted-foreground leading-relaxed">
                                                     {item.text}
                                                 </p>
                                                 <span className={cn("text-[9px] font-black uppercase tracking-widest", style.color)}>
                                                     {item.type}
                                                 </span>
                                             </div>
-                                            <ChevronRight size={14} className="mt-1 text-neutral-800 group-hover/item:text-neutral-600 transition-colors" />
+                                            <ChevronRight size={14} className="mt-1 text-muted-foreground group-hover/item:text-muted-foreground transition-colors" />
                                         </div>
                                     );
                                 })}
@@ -305,8 +305,8 @@ export default function ChangelogPage() {
                 ))}
             </div>
 
-            <footer className="mt-20 pt-8 border-t border-neutral-800 text-center">
-                <p className="text-xs font-bold text-neutral-600 uppercase tracking-[0.2em]">
+            <footer className="mt-20 pt-8 border-t border-border text-center">
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em]">
                     OmniAccess Software Foundation &copy; 2026
                 </p>
             </footer>

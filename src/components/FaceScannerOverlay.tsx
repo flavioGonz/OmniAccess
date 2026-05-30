@@ -197,7 +197,7 @@ export default function FaceScannerOverlay({ onClose, guardName, location, recen
                             exit={{ opacity: 0 }}
                             className="absolute inset-0 flex items-center justify-center pointer-events-none"
                         >
-                            <div className="w-64 h-64 md:w-80 md:h-80 rounded-full border-2 border-dashed border-white/10 relative">
+                            <div className="w-64 h-64 md:w-80 md:h-80 rounded-full border-2 border-dashed border-border relative">
                                 <motion.div
                                     animate={{ rotate: 360 }}
                                     transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
@@ -205,8 +205,8 @@ export default function FaceScannerOverlay({ onClose, guardName, location, recen
                                 />
                                 <div className="absolute inset-0 flex items-center justify-center">
                                     <div className="text-center">
-                                        <ScanFace className="w-12 h-12 text-white/10 mb-2 mx-auto" />
-                                        <p className="text-[7px] font-black uppercase tracking-[0.5em] text-white/20">Biometric Scan Active</p>
+                                        <ScanFace className="w-12 h-12 text-muted-foreground mb-2 mx-auto" />
+                                        <p className="text-[7px] font-black uppercase tracking-[0.5em] text-muted-foreground">Biometric Scan Active</p>
                                     </div>
                                 </div>
                             </div>
@@ -219,7 +219,7 @@ export default function FaceScannerOverlay({ onClose, guardName, location, recen
             <header className="relative z-50 p-4 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-[#B20D30] flex items-center justify-center shadow-lg">
-                        <ScanFace size={20} className="text-white" />
+                        <ScanFace size={20} className="text-foreground" />
                     </div>
                     <div>
                         <h2 className="text-sm font-black uppercase tracking-widest leading-none">Guard Scanner</h2>
@@ -228,7 +228,7 @@ export default function FaceScannerOverlay({ onClose, guardName, location, recen
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <button onClick={toggleFacingMode} className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-md border border-white/5 flex items-center justify-center hover:bg-white/20 transition-all">
+                    <button onClick={toggleFacingMode} className="w-10 h-10 rounded-xl bg-foreground/10 backdrop-blur-md border border-border flex items-center justify-center hover:bg-foreground/10 transition-all">
                         <RefreshCcw size={18} />
                     </button>
                     <button onClick={onClose} className="w-10 h-10 rounded-xl bg-red-600/80 backdrop-blur-md border border-red-500/30 flex items-center justify-center hover:bg-red-600 transition-all">
@@ -251,12 +251,12 @@ export default function FaceScannerOverlay({ onClose, guardName, location, recen
                             <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar no-scrollbar">
                                 {recentEntries.slice(0, 10).map((entry, idx) => (
                                     <div key={idx} className="shrink-0 flex items-center gap-3 p-2 px-4 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl min-w-[160px]">
-                                        <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white/40 border border-white/10 shrink-0">
+                                        <div className="w-8 h-8 rounded-full bg-foreground/10 flex items-center justify-center text-muted-foreground border border-border shrink-0">
                                             <UserCheck size={14} />
                                         </div>
                                         <div className="min-w-0">
                                             <p className="text-[9px] font-black uppercase tracking-tight truncate">{entry.name || entry.bitacora?.name || "Desconocido"}</p>
-                                            <p className="text-[7px] font-black uppercase text-white/30 tracking-widest">{new Date(entry.timestamp || entry.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                            <p className="text-[7px] font-black uppercase text-muted-foreground tracking-widest">{new Date(entry.timestamp || entry.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                                         </div>
                                     </div>
                                 ))}
@@ -266,7 +266,7 @@ export default function FaceScannerOverlay({ onClose, guardName, location, recen
                             <button
                                 onClick={captureAndAnalyze}
                                 disabled={isAnalyzing}
-                                className="w-full h-24 bg-white hover:bg-neutral-100 flex items-center justify-between px-8 rounded-[2.5rem] shadow-2xl active:scale-[0.98] transition-all group"
+                                className="w-full h-24 bg-white hover:bg-muted flex items-center justify-between px-8 rounded-[2.5rem] shadow-2xl active:scale-[0.98] transition-all group"
                             >
                                 <div className="flex flex-col text-left">
                                     <span className="text-[10px] font-black uppercase tracking-widest text-[#B20D30]">Ejecutar Analítica</span>
@@ -276,7 +276,7 @@ export default function FaceScannerOverlay({ onClose, guardName, location, recen
                                     "w-14 h-14 rounded-2xl flex items-center justify-center transition-all",
                                     isAnalyzing ? "bg-amber-500 animate-spin" : "bg-red-600 shadow-xl shadow-red-600/20 group-hover:scale-110"
                                 )}>
-                                    {isAnalyzing ? <Loader2 size={24} className="text-white" /> : <Zap size={24} className="text-white" />}
+                                    {isAnalyzing ? <Loader2 size={24} className="text-foreground" /> : <Zap size={24} className="text-foreground" />}
                                 </div>
                             </button>
                         </motion.div>
@@ -297,7 +297,7 @@ export default function FaceScannerOverlay({ onClose, guardName, location, recen
                         <div className="absolute inset-0 bg-black/60 backdrop-blur-xl" />
 
                         {/* Modal Content */}
-                        <div className="relative w-full max-w-lg bg-white rounded-[3rem] shadow-[0_50px_100px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col items-center p-8 gap-6 border-4 border-white/20">
+                        <div className="relative w-full max-w-lg bg-white rounded-[3rem] shadow-[0_50px_100px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col items-center p-8 gap-6 border-4 border-border">
                             {/* Close X Button */}
                             <button
                                 onClick={() => setResult(null)}
@@ -315,8 +315,8 @@ export default function FaceScannerOverlay({ onClose, guardName, location, recen
                             <div className={cn(
                                 "px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2",
                                 result.user
-                                    ? (result.user.role === 'BLACKLISTED' ? "bg-red-600 text-white" : "bg-emerald-600 text-white")
-                                    : (result.match ? "bg-amber-500 text-white" : "bg-neutral-800 text-white/60")
+                                    ? (result.user.role === 'BLACKLISTED' ? "bg-red-600 text-foreground" : "bg-emerald-600 text-foreground")
+                                    : (result.match ? "bg-amber-500 text-foreground" : "bg-muted text-foreground/70")
                             )}>
                                 {result.user ? <UserCheck size={14} /> : <UserX size={14} />}
                                 {result.user ? "Identidad Verificada" : (result.match ? "Match Neural Externo" : "No Encontrado")}
@@ -341,7 +341,7 @@ export default function FaceScannerOverlay({ onClose, guardName, location, recen
                                     <input
                                         value={formName}
                                         onChange={e => setFormName(e.target.value)}
-                                        className="w-full h-12 bg-neutral-100 border-none rounded-2xl px-5 text-black font-bold text-xs uppercase"
+                                        className="w-full h-12 bg-muted border-none rounded-2xl px-5 text-black font-bold text-xs uppercase"
                                         placeholder="Nombre..."
                                     />
                                 </div>
@@ -350,7 +350,7 @@ export default function FaceScannerOverlay({ onClose, guardName, location, recen
                                     <input
                                         value={formDni}
                                         onChange={e => setFormDni(e.target.value)}
-                                        className="w-full h-12 bg-neutral-100 border-none rounded-2xl px-5 text-black font-bold text-xs"
+                                        className="w-full h-12 bg-muted border-none rounded-2xl px-5 text-black font-bold text-xs"
                                         placeholder="DNI..."
                                     />
                                 </div>
@@ -359,7 +359,7 @@ export default function FaceScannerOverlay({ onClose, guardName, location, recen
                                     <input
                                         value={formNotes}
                                         onChange={e => setFormNotes(e.target.value)}
-                                        className="w-full h-12 bg-neutral-100 border-none rounded-2xl px-5 text-black font-bold text-xs"
+                                        className="w-full h-12 bg-muted border-none rounded-2xl px-5 text-black font-bold text-xs"
                                         placeholder="Notas adicionales..."
                                     />
                                 </div>
@@ -369,7 +369,7 @@ export default function FaceScannerOverlay({ onClose, guardName, location, recen
                             <button
                                 onClick={handleQuickRegister}
                                 disabled={isResolving}
-                                className="w-full h-20 bg-emerald-600 hover:bg-emerald-500 text-white rounded-[2rem] font-black uppercase tracking-widest text-sm shadow-xl shadow-emerald-900/40 active:scale-95 transition-all flex items-center justify-center gap-3 mt-2"
+                                className="w-full h-20 bg-emerald-600 hover:bg-emerald-500 text-foreground rounded-[2rem] font-black uppercase tracking-widest text-sm shadow-xl shadow-emerald-900/40 active:scale-95 transition-all flex items-center justify-center gap-3 mt-2"
                             >
                                 {isResolving ? <Loader2 className="animate-spin" /> : <><CheckCircle2 /> Confirmar Ingreso</>}
                             </button>

@@ -102,61 +102,11 @@ export async function getAccessEvents(options?: {
             return { events, total };
         }
 
-        // Enrich events with duration logic (Keep inside try block as it depends on events)
-        const enrichedEvents = await Promise.all(events.map(async (event) => {
-            // Para eventos LPR, usar la patente
-            const plate = event.plateDetected?.trim();
-            // Para eventos faciales, usar el userId
-            const userId = event.userId;
+        // Batch enrichment: single raw SQL query to get previous events for ALL events at once.
+        // This replaces the N+1 pattern (1 query per event) with 1 query total.
+        const enrichedEvents = await enrichEventsWithDuration(events);
 
-            // Si no hay identificador válido, no calcular duración
-            if ((!plate || plate === 'unknown' || plate === 'NO_LEIDA') && !userId) {
-                return { ...event, stayDuration: null, previousDirection: null };
-            }
-
-            // Buscar evento previo basado en el tipo de acceso
-            let previousEvent;
-
-            if (event.accessType === 'FACE' && userId) {
-                // Para eventos faciales, buscar por userId
-                previousEvent = await prisma.accessEvent.findFirst({
-                    where: {
-                        userId: userId,
-                        timestamp: { lt: event.timestamp },
-                        accessType: 'FACE'
-                    },
-                    orderBy: { timestamp: 'desc' }
-                });
-            } else if (event.accessType === 'PLATE' && plate) {
-                // Para eventos LPR, buscar por patente
-                previousEvent = await prisma.accessEvent.findFirst({
-                    where: {
-                        plateDetected: { equals: plate, mode: 'insensitive' },
-                        timestamp: { lt: event.timestamp }
-                    },
-                    orderBy: { timestamp: 'desc' }
-                });
-            }
-
-            if (!previousEvent) {
-                return { ...event, stayDuration: null, previousDirection: null };
-            }
-
-            const durationMs = event.timestamp.getTime() - previousEvent.timestamp.getTime();
-
-            return {
-                ...event,
-                stayDuration: durationMs,
-                previousDirection: previousEvent.direction
-            };
-        }));
-
-        // Ensure results are sorted by timestamp desc after enrichment
-        const sortedEnrichedEvents = enrichedEvents.sort((a, b) =>
-            b.timestamp.getTime() - a.timestamp.getTime()
-        );
-
-        return { events: sortedEnrichedEvents, total };
+        return { events: enrichedEvents, total };
 
     } catch (error) {
         console.error("Database connection error in getAccessEvents:", error);
@@ -285,6 +235,88 @@ export async function getPlateAnalysis(plate: string) {
         };
     }
 }
+
+/**
+ * Batch-compute stayDuration for a list of events using a single raw SQL query.
+ * Replaces the N+1 pattern where each event triggered its own findFirst query.
+ * Uses PostgreSQL LAG() window function to find the previous event per identity.
+ */
+async function enrichEventsWithDuration(events: any[]) {
+    if (events.length === 0) return events;
+
+    // Collect unique identifiers we need to look up
+    const plateIds = new Set<string>();
+    const userIds = new Set<string>();
+
+    for (const event of events) {
+        const plate = event.plateDetected?.trim();
+        if (event.accessType === 'FACE' && event.userId) {
+            userIds.add(event.userId);
+        } else if (event.accessType === 'PLATE' && plate && plate !== 'unknown' && plate !== 'NO_LEIDA') {
+            plateIds.add(plate.toUpperCase());
+        }
+    }
+
+    // Build a map of eventId -> previous event info using raw SQL with LAG()
+    const previousMap = new Map<string, { duration: number; previousDirection: string }>();
+
+    try {
+        // For PLATE events: get previous event per plate using window function
+        if (plateIds.size > 0) {
+            const plateDurations: any[] = await prisma.$queryRawUnsafe(`
+                SELECT id, "plateDetected", timestamp, direction,
+                    LAG(timestamp) OVER (PARTITION BY UPPER("plateDetected") ORDER BY timestamp) as prev_timestamp,
+                    LAG(direction) OVER (PARTITION BY UPPER("plateDetected") ORDER BY timestamp) as prev_direction
+                FROM "AccessEvent"
+                WHERE UPPER("plateDetected") IN (${Array.from(plateIds).map(p => `'${p.replace(/'/g, "''")}'`).join(',')})
+                  AND "accessType" = 'PLATE'
+                ORDER BY timestamp DESC
+            `);
+
+            for (const row of plateDurations) {
+                if (row.prev_timestamp) {
+                    const duration = new Date(row.timestamp).getTime() - new Date(row.prev_timestamp).getTime();
+                    previousMap.set(row.id, { duration, previousDirection: row.prev_direction });
+                }
+            }
+        }
+
+        // For FACE events: get previous event per userId using window function
+        if (userIds.size > 0) {
+            const faceDurations: any[] = await prisma.$queryRawUnsafe(`
+                SELECT id, "userId", timestamp, direction,
+                    LAG(timestamp) OVER (PARTITION BY "userId" ORDER BY timestamp) as prev_timestamp,
+                    LAG(direction) OVER (PARTITION BY "userId" ORDER BY timestamp) as prev_direction
+                FROM "AccessEvent"
+                WHERE "userId" IN (${Array.from(userIds).map(u => `'${u.replace(/'/g, "''")}'`).join(',')})
+                  AND "accessType" = 'FACE'
+                ORDER BY timestamp DESC
+            `);
+
+            for (const row of faceDurations) {
+                if (row.prev_timestamp) {
+                    const duration = new Date(row.timestamp).getTime() - new Date(row.prev_timestamp).getTime();
+                    previousMap.set(row.id, { duration, previousDirection: row.prev_direction });
+                }
+            }
+        }
+    } catch (error) {
+        console.error("[History] Batch duration query failed, returning events without duration:", error);
+        return events.map(e => ({ ...e, stayDuration: null, previousDirection: null }));
+    }
+
+    // Merge results
+    return events.map(event => {
+        const prev = previousMap.get(event.id);
+        return {
+            ...event,
+            stayDuration: prev?.duration ?? null,
+            previousDirection: prev?.previousDirection ?? null
+        };
+    });
+}
+
+
 export async function getAccessEvent(id: string) {
     try {
         return await prisma.accessEvent.findUnique({
@@ -299,5 +331,47 @@ export async function getAccessEvent(id: string) {
     } catch (error) {
         console.error("Error in getAccessEvent:", error);
         return null;
+    }
+}
+
+
+export async function getHourlyStats(type?: "PLATE" | "FACE" | "TAG") {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const now = new Date();
+
+    const baseWhere: any = {
+        timestamp: { gte: startOfDay, lte: now },
+    };
+    if (type) baseWhere.accessType = type;
+
+    try {
+        const events = await prisma.accessEvent.findMany({
+            where: baseWhere,
+            select: { timestamp: true, decision: true, direction: true },
+            orderBy: { timestamp: "asc" },
+        });
+
+        // Build hourly buckets 0-23
+        const hours: { hour: number; total: number; grants: number; denies: number; entries: number; exits: number }[] = [];
+        for (let h = 0; h <= now.getHours(); h++) {
+            hours.push({ hour: h, total: 0, grants: 0, denies: 0, entries: 0, exits: 0 });
+        }
+
+        for (const ev of events) {
+            const h = new Date(ev.timestamp).getHours();
+            const bucket = hours.find(b => b.hour === h);
+            if (!bucket) continue;
+            bucket.total++;
+            if (ev.decision === "GRANT") bucket.grants++;
+            else bucket.denies++;
+            if (ev.direction === "ENTRY") bucket.entries++;
+            else if (ev.direction === "EXIT") bucket.exits++;
+        }
+
+        return hours;
+    } catch (error) {
+        console.error("Error in getHourlyStats:", error);
+        return [];
     }
 }

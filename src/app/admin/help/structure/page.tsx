@@ -13,32 +13,32 @@ export default async function ProjectStructurePage() {
                 <div className="flex items-center gap-4">
                     <Link
                         href="/admin/help"
-                        className="w-10 h-10 rounded-xl bg-neutral-900 border border-white/5 flex items-center justify-center text-neutral-500 hover:text-white hover:bg-neutral-800 transition-all shadow-xl"
+                        className="w-10 h-10 rounded-xl bg-card border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-all shadow-xl"
                     >
                         <ChevronLeft size={20} />
                     </Link>
                     <div>
-                        <h1 className="text-2xl font-black text-white uppercase tracking-tighter leading-none">Arquitectura del Sistema</h1>
-                        <p className="text-[10px] font-black text-neutral-500 uppercase tracking-widest mt-1">Mapa interactivo de módulos LPR-NODE</p>
+                        <h1 className="text-2xl font-black text-foreground uppercase tracking-tighter leading-none">Arquitectura del Sistema</h1>
+                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mt-1">Mapa interactivo de módulos LPR-NODE</p>
                     </div>
                 </div>
 
-                <div className="hidden md:flex items-center gap-6 px-5 py-2.5 bg-neutral-900/50 rounded-2xl border border-white/5 backdrop-blur-xl">
+                <div className="hidden md:flex items-center gap-6 px-5 py-2.5 bg-card/50 rounded-2xl border border-border backdrop-blur-xl">
                     <div className="flex flex-col items-center">
                         <span className="text-[10px] font-black text-emerald-400">18</span>
-                        <span className="text-[8px] font-black text-neutral-600 uppercase tracking-widest">OK</span>
+                        <span className="text-[8px] font-black text-muted-foreground uppercase tracking-widest">OK</span>
                     </div>
-                    <div className="w-px h-4 bg-white/10" />
+                    <div className="w-px h-4 bg-foreground/10" />
                     <div className="flex flex-col items-center">
                         <span className="text-[10px] font-black text-blue-400">4</span>
-                        <span className="text-[8px] font-black text-neutral-600 uppercase tracking-widest">DEV</span>
+                        <span className="text-[8px] font-black text-muted-foreground uppercase tracking-widest">DEV</span>
                     </div>
                 </div>
             </div>
 
             {/* Tree Container - Stretching to fill remaining space */}
             <div className="flex-1 min-h-0">
-                <div className="w-full h-full bg-neutral-950/40 rounded-[2.5rem] border border-white/5 overflow-hidden relative shadow-inner">
+                <div className="w-full h-full bg-background/40 rounded-[2.5rem] border border-border overflow-hidden relative shadow-inner">
                     <TreeDiagram data={data} />
                 </div>
             </div>
@@ -51,7 +51,7 @@ export default async function ProjectStructurePage() {
                         Tip: Arrastra para navegar • Scroll para zoom • Hover para gestionar nodos
                     </p>
                 </div>
-                <div className="text-[9px] font-black text-neutral-700 uppercase tracking-widest">
+                <div className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">
                     LPR-NODE Documentación v1.4.2
                 </div>
             </div>

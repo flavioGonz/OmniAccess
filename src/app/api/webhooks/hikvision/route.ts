@@ -1,37 +1,28 @@
-import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { NextRequest, NextResponse } from "next/server";
 
-export async function POST(req: Request) {
-    try {
-        const contentType = req.headers.get('content-type') || '';
-        
-        let body;
-        // La cámara puede enviar JSON o Multipart con XML
-        if (contentType.includes('application/json')) {
-            body = await req.json();
-            console.log('[Webhook Hik] JSON Event:', body.eventType || 'Unknown');
-        } else {
-            const text = await req.text();
-            console.log('[Webhook Hik] XML/Multipart received');
-            // Por ahora aceptamos el evento para no dar error 500
-            return NextResponse.json({ success: true, message: 'XML received' });
-        }
+/**
+ * DEPRECATED: Hikvision webhooks are handled by server.js (port 10000).
+ * This Next.js route exists only as a fallback/health-check.
+ * Configure your Hikvision cameras to point to :10000, NOT :10001.
+ */
 
-        // Registrar el evento de acceso en la base de datos
-        await prisma.accessEvent.create({
-            data: {
-                timestamp: new Date(),
-                accessType: body.eventType || 'FACE_DETECTION',
-                details: JSON.stringify(body),
-                location: body.channelName || 'Cámara Frente',
-                decision: 'GRANT',
-                // ipAddress: body.ipAddress, // Prisma doesn't have this field in AccessEvent based on common patterns, but let's check
-            }
-        });
+export async function GET(req: NextRequest) {
+    return NextResponse.json({
+        status: "ok",
+        message: "Hikvision webhook endpoint. NOTE: Production webhooks are handled by server.js on port 10000.",
+        timestamp: new Date().toISOString()
+    });
+}
 
-        return NextResponse.json({ success: true });
-    } catch (error: any) {
-        console.error('[Webhook Hik Error]:', error.message);
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-    }
+export async function POST(req: NextRequest) {
+    console.warn("[Webhook Hik] Received event on Next.js route — this should go to server.js:10000 instead");
+    
+    // Log what we received for debugging
+    const contentType = req.headers.get("content-type") || "";
+    console.warn(`[Webhook Hik] Content-Type: ${contentType}`);
+    
+    return NextResponse.json({
+        warning: "This webhook was received by Next.js (:10001) but should be directed to server.js (:10000) for full processing.",
+        received: true
+    }, { status: 200 });
 }

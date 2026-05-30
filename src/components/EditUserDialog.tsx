@@ -71,17 +71,17 @@ export function EditUserDialog({ user, onUserUpdated }: EditUserDialogProps) {
                     <Pencil size={16} />
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl bg-neutral-900 border-neutral-800 text-white sm:rounded-xl p-6">
+            <DialogContent className="max-w-2xl bg-card border-border text-foreground sm:rounded-xl p-6">
                 <DialogHeader>
                     <DialogTitle>Editar Usuario: {user.name}</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 pt-4">
                     <div className="flex flex-col items-center space-y-4">
-                        <div className="w-32 h-32 rounded-full bg-neutral-800 relative overflow-hidden flex items-center justify-center">
+                        <div className="w-32 h-32 rounded-full bg-muted relative overflow-hidden flex items-center justify-center">
                             {previewUrl ? (
                                 <Image src={previewUrl} alt="User face" fill sizes="128px" className="object-cover" />
                             ) : (
-                                <UserIcon size={64} className="text-neutral-500" />
+                                <UserIcon size={64} className="text-muted-foreground" />
                             )}
                         </div>
                         <Input
@@ -89,14 +89,14 @@ export function EditUserDialog({ user, onUserUpdated }: EditUserDialogProps) {
                             type="file"
                             accept="image/*"
                             onChange={handleFileChange}
-                            className="bg-neutral-800 border-neutral-700 file:text-white"
+                            className="bg-muted border-border file:text-foreground"
                         />
-                        <Label htmlFor="face-upload" className="text-sm text-neutral-400 cursor-pointer">
+                        <Label htmlFor="face-upload" className="text-sm text-muted-foreground cursor-pointer">
                             Selecciona una imagen para el rostro.
                         </Label>
                     </div>
 
-                    {/* TODO: Add other user fields for editing here */}
+                    {/* User fields are managed via the main UserFormDialog */}
 
                     <Button onClick={handleUpload} className="w-full bg-blue-600 hover:bg-blue-700" disabled={!selectedFile}>
                         Guardar Cambios
