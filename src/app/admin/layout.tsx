@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import LiveEdgeKeeper from "@/components/LiveEdgeKeeper";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -38,6 +39,7 @@ import { HelpMenu } from "@/components/HelpMenu";
 import { cn } from "@/lib/utils";
 import { getEnabledModules, type ModuleId } from "@/app/actions/modules";
 import { logout } from "@/app/actions/auth";
+import AforoAlertOverlay from "@/components/AforoAlertOverlay";
 
 interface SidebarItemProps {
     icon: React.ReactNode;
@@ -206,7 +208,6 @@ export default function AdminLayout({
                         <>
                             {!collapsed && <div className="pt-2 pb-0.5 px-3 text-[8px] font-bold text-violet-500/60 uppercase tracking-widest">Filas</div>}
                             <SidebarItem icon={<Rows3 size={18} />} label="Filas" href="/admin/filas" active={pathname === "/admin/filas"} collapsed={collapsed} />
-                            <SidebarItem icon={<Bell size={18} />} label="Notificaciones" href="/admin/notificaciones" active={pathname === "/admin/notificaciones"} collapsed={collapsed} />
                             <SidebarItem icon={<Send size={18} />} label="Despachos" href="/admin/despachos" active={pathname === "/admin/despachos"} collapsed={collapsed} />
                             <SidebarItem icon={<FileBarChart size={18} />} label="Reportes" href="/admin/reportes-queue" active={pathname === "/admin/reportes-queue"} collapsed={collapsed} />
                             <SidebarItem icon={<Video size={18} />} label="Dispositivos Conteo" href="/admin/devices?type=QUEUE_COUNTER" active={pathname?.includes("devices") && pathname.includes("type=QUEUE")} collapsed={collapsed} />
@@ -254,16 +255,22 @@ export default function AdminLayout({
                             </div>
                         )}
                         {!collapsed && (
-                            <button
-                                onClick={handleLogout}
-                                disabled={loggingOut}
-                                className="ml-auto p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                                title="Cerrar sesión"
-                            >
-                                <LogOut size={14} />
-                            </button>
+                            <div className="ml-auto flex items-center gap-1.5">
+                                <ThemeToggle />
+                                <button
+                                    onClick={handleLogout}
+                                    disabled={loggingOut}
+                                    className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                    title="Cerrar sesión"
+                                >
+                                    <LogOut size={14} />
+                                </button>
+                            </div>
                         )}
                     </div>
+                    {collapsed && (
+                        <div className="w-full flex justify-center mb-1"><ThemeToggle /></div>
+                    )}
                     {collapsed && (
                         <button
                             onClick={handleLogout}
@@ -285,6 +292,9 @@ export default function AdminLayout({
             >
                 {children}
             </main>
+
+            <AforoAlertOverlay />
+            <LiveEdgeKeeper />
 
             <style jsx global>{`
                 .custom-scrollbar::-webkit-scrollbar {

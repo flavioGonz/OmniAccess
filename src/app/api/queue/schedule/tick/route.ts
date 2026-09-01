@@ -6,8 +6,10 @@ import { resetQueueCounters } from "@/lib/onvif-polling";
 export async function GET(_req: NextRequest) {
     try {
         const now = new Date();
-        const dow = now.getDay() === 0 ? 7 : now.getDay(); // 1=Mon..7=Sun
-        const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+        // El servidor corre en UTC; los horarios los carga el usuario en hora de Montevideo (UTC-3).
+        const UY = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+        const dow = UY.getUTCDay() === 0 ? 7 : UY.getUTCDay(); // 1=Mon..7=Sun (hora local)
+        const hhmm = `${String(UY.getUTCHours()).padStart(2, "0")}:${String(UY.getUTCMinutes()).padStart(2, "0")}`;
 
         const schedules = await prisma.queueSchedule.findMany({ where: { enabled: true, resetOnOpen: true } });
         const fired: string[] = [];

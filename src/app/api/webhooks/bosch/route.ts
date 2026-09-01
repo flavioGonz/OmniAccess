@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { uploadToS3 } from "@/lib/s3";
-import { parseBoschPayload, type BoschIVAEvent } from "@/lib/drivers/BoschDriver";
+import { parseBoschPayload, BoschDriver, type BoschIVAEvent } from "@/lib/drivers/BoschDriver";
 
 // Debounce: deviceId+channel -> timestamp
 const debounceCache = new Map<string, number>();
@@ -56,22 +56,13 @@ export async function GET(req: NextRequest) {
 
     const count = parseInt(searchParams.get("count") || searchParams.get("object_count") || "0", 10);
 
-    // Try to get snapshot from camera
+    // Try to get snapshot from camera (Bosch is HTTPS-only with self-signed cert — use driver helper)
     let snapshotPath: string | null = null;
     try {
-        if (device.username && device.password) {
-            const encoded = Buffer.from(`${device.username}:${device.password}`).toString("base64");
-            const snapRes = await fetch(`http://${device.ip}/snap.jpg?JpegSize=L`, {
-                headers: { Authorization: `Basic ${encoded}` },
-                signal: AbortSignal.timeout(5000),
-            });
-            if (snapRes.ok) {
-                const imgBuf = Buffer.from(await snapRes.arrayBuffer());
-                if (imgBuf.length > 100) {
-                    const filename = `queue/${device.id}/${Date.now()}.jpg`;
-                    snapshotPath = await uploadToS3(imgBuf, filename, "image/jpeg");
-                }
-            }
+        const imgBuf = await new BoschDriver().getSnapshot(device);
+        if (imgBuf && imgBuf.length > 100) {
+            const filename = `queue/${device.id}/${Date.now()}.jpg`;
+            snapshotPath = await uploadToS3(imgBuf, filename, "image/jpeg");
         }
     } catch (e) {
         console.log(`${logPrefix} Snapshot grab failed:`, e);

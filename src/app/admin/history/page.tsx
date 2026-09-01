@@ -273,55 +273,6 @@ export default function HistoryPage() {
                 </div>
             </div>
 
-            {/* KPI Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-card/60 border border-border/50 rounded-lg p-5">
-                    <div className="flex items-center gap-2 mb-3">
-                        <Activity className="w-4 h-4 text-violet-400" />
-                        <span className="text-[11px] text-muted-foreground uppercase tracking-wide font-semibold">Total Eventos</span>
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-bold text-foreground">{totalEvents.toLocaleString()}</span>
-                        <span className="text-xs text-muted-foreground">registrados</span>
-                    </div>
-                </div>
-
-                <div className="bg-card/60 border border-border/50 rounded-lg p-5">
-                    <div className="flex items-center gap-2 mb-3">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                        <span className="text-[11px] text-muted-foreground uppercase tracking-wide font-semibold">Autorizados</span>
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-bold text-emerald-400">{grantCount}</span>
-                        <span className="text-xs text-muted-foreground">en vista</span>
-                    </div>
-                </div>
-
-                <div className="bg-card/60 border border-border/50 rounded-lg p-5">
-                    <div className="flex items-center gap-2 mb-3">
-                        <ShieldAlert className="w-4 h-4 text-red-400" />
-                        <span className="text-[11px] text-muted-foreground uppercase tracking-wide font-semibold">Denegados</span>
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-bold text-red-400">{denyCount}</span>
-                        <span className="text-xs text-muted-foreground">en vista</span>
-                    </div>
-                </div>
-
-                <div className="bg-card/60 border border-border/50 rounded-lg p-5">
-                    <div className="flex items-center gap-2 mb-3">
-                        <Wifi className="w-4 h-4 text-blue-400" />
-                        <span className="text-[11px] text-muted-foreground uppercase tracking-wide font-semibold">Estado</span>
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-lg font-bold text-emerald-400">En linea</span>
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                        Streaming en tiempo real
-                    </div>
-                </div>
-            </div>
-
             {/* Search + Filters */}
             <div className="bg-card/60 border border-border/50 rounded-lg p-5">
                 <div className="flex items-center gap-4 flex-wrap">

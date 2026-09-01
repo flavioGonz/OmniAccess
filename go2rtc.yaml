@@ -5,6 +5,22 @@ streams:
     - "rtsp://admin:admin@172.26.20.199/rtsp_tunnel?p=1&line=1&inst=2&vcd=2"
   bosch_172_26_20_199_hd:
     - "rtsp://admin:admin@172.26.20.199/rtsp_tunnel?p=0&line=1&inst=1&vcd=2"
+  lpr_cmmpd8je6000m9at95ho8oup5:
+    - "rtsp://admin:yusyus..2024@cc210c93b0ab.sn.mynetname.net:8891/Streaming/Channels/102"
+    - "ffmpeg:lpr_cmmpd8je6000m9at95ho8oup5#video=h264"
+  lpr_cmmpd74su0003f2n60dfsc1t6:
+    - "rtsp://admin:yusyus..2024@cc210c93b0ab.sn.mynetname.net:8892/Streaming/Channels/102"
+    - "ffmpeg:lpr_cmmpd74su0003f2n60dfsc1t6#video=h264"
+  face_cmmpd6qu30000f2n6bttmlilw:
+    - "rtsp://admin:qwerty12@e7e70ec8193a.sn.mynetname.net:56892/Streaming/Channels/101"
+  face_cmmpd6rfl0002f2n6a4slg5ee:
+    - "rtsp://admin:qwerty12@e7e70ec8193a.sn.mynetname.net:56891/Streaming/Channels/101"
+  face_cmmpd6qu30000f2n6bttmlilw_low:
+    - "rtsp://admin:qwerty12@e7e70ec8193a.sn.mynetname.net:56892/Streaming/Channels/102"
+    - "ffmpeg:face_cmmpd6qu30000f2n6bttmlilw_low#video=h264"
+  face_cmmpd6rfl0002f2n6a4slg5ee_low:
+    - "rtsp://admin:qwerty12@e7e70ec8193a.sn.mynetname.net:56891/Streaming/Channels/102"
+    - "ffmpeg:face_cmmpd6rfl0002f2n6a4slg5ee_low#video=h264"
 
 api:
   listen: ":1984"

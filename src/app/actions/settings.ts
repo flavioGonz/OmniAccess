@@ -796,7 +796,7 @@ export async function saveGuardBranding(settings: Record<string, string>) {
 }
 
 // ─── App Branding (login) ──────────────────────────────────────────────────
-const APP_BRAND_KEYS = ["APP_BRAND_NAME", "APP_BRAND_SUBTITLE", "APP_BRAND_LOGO_URL", "APP_BRAND_LOGIN_BG_URL", "APP_BRAND_PRIMARY"];
+const APP_BRAND_KEYS = ["APP_BRAND_NAME", "APP_BRAND_SUBTITLE", "APP_BRAND_LOGO_URL", "APP_BRAND_LOGIN_BG_URL", "APP_BRAND_PRIMARY", "APP_BRAND_TESTIMONIALS"];
 
 export async function getAppBranding() {
     const rows = await prisma.setting.findMany({ where: { key: { in: APP_BRAND_KEYS } } });
@@ -808,6 +808,31 @@ export async function getAppBranding() {
         logoUrl: map.APP_BRAND_LOGO_URL || "",
         loginBgUrl: map.APP_BRAND_LOGIN_BG_URL || "",
         primary: map.APP_BRAND_PRIMARY || "",
+        testimonials: (() => { try { const a = JSON.parse(map.APP_BRAND_TESTIMONIALS || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } })(),
+    };
+}
+
+// ─── Report Branding (PDF/Excel) ───────────────────────────────────────────
+const REPORT_BRAND_KEYS = ["REPORT_COMPANY", "REPORT_TAGLINE", "REPORT_FOOTER", "REPORT_CONTACT", "REPORT_PRIMARY", "REPORT_ACCENT", "REPORT_TABLE_HEADER", "REPORT_TABLE_STRIPE", "REPORT_LOGO_URL", "REPORT_PREPARED_BY", "REPORT_AUTHORIZED_BY", "REPORT_COVER_URL"];
+
+export async function getReportBranding() {
+    const rows = await prisma.setting.findMany({ where: { key: { in: [...REPORT_BRAND_KEYS, "APP_BRAND_NAME", "APP_BRAND_LOGO_URL", "APP_BRAND_PRIMARY"] } } });
+    const m: Record<string, string> = {};
+    for (const r of rows) m[r.key] = r.value;
+    const primary = m.REPORT_PRIMARY || m.APP_BRAND_PRIMARY || "#7c3aed";
+    return {
+        company: m.REPORT_COMPANY || m.APP_BRAND_NAME || "OmniAccess",
+        tagline: m.REPORT_TAGLINE || "Reporte de aforo \u00b7 Control de Filas",
+        footer: m.REPORT_FOOTER || m.REPORT_COMPANY || m.APP_BRAND_NAME || "OmniAccess",
+        contact: m.REPORT_CONTACT || "",
+        primary,
+        accent: m.REPORT_ACCENT || primary,
+        tableHeader: m.REPORT_TABLE_HEADER || primary,
+        tableStripe: m.REPORT_TABLE_STRIPE || "#f7f4ff",
+        logoUrl: m.REPORT_LOGO_URL || m.APP_BRAND_LOGO_URL || "",
+        preparedBy: m.REPORT_PREPARED_BY || "",
+        authorizedBy: m.REPORT_AUTHORIZED_BY || "",
+        coverUrl: m.REPORT_COVER_URL || "",
     };
 }
 
@@ -839,6 +864,16 @@ export async function savePwaIcon(formData: FormData, pwa: string = "filas") {
         await sharp(buffer).resize(192, 192, { fit: "cover" }).png().toFile(path.join(dir, `${safe}-192.png`));
         await sharp(buffer).resize(512, 512, { fit: "cover" }).png().toFile(path.join(dir, `${safe}-512.png`));
         await sharp(buffer).resize(512, 512, { fit: "cover" }).png().toFile(path.join(dir, `${safe}-512-maskable.png`));
+        // Versionar el manifest para que las PWA instaladas vuelvan a pedir el icono nuevo
+        try {
+            const manifestPath = path.join(process.cwd(), "public", `manifest-${safe}.json`);
+            const mani = JSON.parse(await fs.readFile(manifestPath, "utf-8"));
+            const v = Date.now();
+            if (Array.isArray(mani.icons)) {
+                mani.icons = mani.icons.map((ic: any) => ({ ...ic, src: String(ic.src).split("?")[0] + `?v=${v}` }));
+                await fs.writeFile(manifestPath, JSON.stringify(mani, null, 2));
+            }
+        } catch {}
         return { success: true };
     } catch (error: any) {
         console.error("Error saving PWA icon:", error);
@@ -865,4 +900,34 @@ export async function listBucketObjects(bucket: string, prefix: string = "", tok
         const objects = (res.Contents || []).filter((o: any) => o.Key !== prefix).map((o: any) => ({ key: o.Key as string, size: (o.Size || 0) as number, lastModified: o.LastModified as Date }));
         return { success: true, folders, objects, nextToken: res.IsTruncated ? (res.NextContinuationToken as string) : null };
     } catch (e: any) { console.error("listBucketObjects", e.message); return { success: false, message: e.message, folders: [] as string[], objects: [] as any[], nextToken: null }; }
+}
+
+
+// ── PWA Splash Screen designer (Branding) ──
+const SPLASH_DEFAULT = {
+    bgType: "color", color1: "#6d28d9", color2: "#0a0a0b", gradient: true, angle: 160,
+    imageUrl: "", videoUrl: "", overlay: 0,
+    showLogo: true, logoUrl: "", logoSize: 96,
+    title: "OmniAccess", subtitle: "", titleColor: "#ffffff", subtitleColor: "#ffffffb3",
+    spinner: true, spinnerColor: "#ffffff", duration: 1700,
+};
+
+export async function getSplashConfig(target: string) {
+    const key = "SPLASH_" + String(target || "global").toUpperCase();
+    try {
+        let s = await prisma.setting.findUnique({ where: { key } });
+        let usedFallback = false;
+        if (!s?.value && target !== "global") { s = await prisma.setting.findUnique({ where: { key: "SPLASH_GLOBAL" } }); usedFallback = true; }
+        const stored = s?.value ? JSON.parse(s.value) : {};
+        return { ...SPLASH_DEFAULT, ...stored, _stored: !!s?.value, _fallback: usedFallback };
+    } catch { return { ...SPLASH_DEFAULT, _stored: false, _fallback: false }; }
+}
+
+export async function saveSplashConfig(target: string, config: any) {
+    const key = "SPLASH_" + String(target || "global").toUpperCase();
+    try {
+        const clean = { ...config }; delete clean._stored; delete clean._fallback;
+        await prisma.setting.upsert({ where: { key }, update: { value: JSON.stringify(clean) }, create: { key, value: JSON.stringify(clean) } });
+        return { success: true };
+    } catch (e: any) { return { success: false, error: e?.message || "error" }; }
 }

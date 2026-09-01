@@ -62,7 +62,7 @@ function onvifRequest(
                 "Content-Length": Buffer.byteLength(envelope),
             },
             rejectUnauthorized: false,
-            timeout: 10000,
+            timeout: 5000,
         };
 
         const req = https.request(options, (res) => {
@@ -188,10 +188,12 @@ export async function GET(req: NextRequest) {
 
         return NextResponse.json(config);
     } catch (error: any) {
-        console.error("[VCA-Config] Error:", error.message);
+        // Cámara inaccesible (offline / sin ruta / timeout): degradar con elegancia,
+        // NO romper el frontend con un 500. Devolvemos reglas vacías + offline:true.
+        console.warn("[VCA-Config] cámara no accesible:", error?.message);
         return NextResponse.json(
-            { error: "Failed to fetch VCA configuration", details: error.message },
-            { status: 500 },
+            { rules: [], offline: true, error: error?.message || "camera unreachable", fetchedAt: new Date().toISOString() },
+            { status: 200 },
         );
     }
 }

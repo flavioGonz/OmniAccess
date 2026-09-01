@@ -19,7 +19,8 @@ export async function middleware(request: NextRequest) {
         pathname.startsWith('/go2rtc/') ||
         pathname === '/login' ||
         pathname === '/guard' ||
-        pathname.startsWith('/guard-iphone')
+        pathname.startsWith('/guard-iphone') ||
+        pathname.startsWith('/pwa')
     ) {
         return NextResponse.next()
     }
@@ -28,18 +29,22 @@ export async function middleware(request: NextRequest) {
     if (
         pathname.startsWith('/api/webhooks/') ||
         pathname === '/api/subscribe' ||
+        pathname.startsWith('/api/push/dispatch') ||
         pathname === '/api/events' ||
         pathname.startsWith('/api/files/') ||
         pathname === '/api/system-status' ||
         pathname.startsWith('/api/topology/') ||
         pathname === '/api/queue-report' ||
         pathname.startsWith('/api/queue/poll') ||
+        pathname.startsWith('/api/queue/vca-config') ||
+        pathname.startsWith('/api/chatbot/') ||
         pathname.startsWith('/api/queue/report/send') ||
         pathname.startsWith('/api/queue/reset') ||
         pathname.startsWith('/api/queue/schedule/tick') ||
         pathname.startsWith('/api/queue/report/tick') ||
         pathname.startsWith('/api/onvif/notify') ||
         pathname.startsWith('/api/snapshot/') ||
+        pathname.startsWith('/api/clip/') ||
         pathname.startsWith('/facepad/')
     ) {
         return NextResponse.next()

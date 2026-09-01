@@ -38,14 +38,21 @@ import {
     User as UserIcon,
     Loader2,
     Palette,
-    Layers
+    Layers,
+    Server,
+    SlidersHorizontal,
+    ChevronDown,
+    Video
 } from "lucide-react";
-import BrandingSection from "./BrandingSection";
-import AuditPage from "@/app/admin/audit/page";
-import WebhookDebugPage from "@/app/admin/debug/page";
+import nextDynamic from "next/dynamic";
+const _SLoad = () => <div className="p-8 text-sm text-muted-foreground animate-pulse">Cargando…</div>;
+const BrandingSection = nextDynamic(() => import("./BrandingSection"), { ssr: false, loading: _SLoad });
+const SystemLiveStatus = nextDynamic(() => import("./SystemLiveStatus"), { ssr: false, loading: _SLoad });
+const AuditPage = nextDynamic(() => import("@/app/admin/audit/page"), { ssr: false, loading: _SLoad });
+const WebhookDebugPage = nextDynamic(() => import("@/app/admin/debug/page"), { ssr: false, loading: _SLoad });
 import StorageBrowser from "@/components/settings/StorageBrowser";
 import { Button } from "@/components/ui/button";
-import SystemFlow from "@/components/dashboard/SystemFlow";
+const SystemFlow = nextDynamic(() => import("@/components/dashboard/SystemFlow"), { ssr: false, loading: _SLoad });
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -142,11 +149,37 @@ const SETTINGS_SECTIONS = [
     {
         id: "whatsapp",
         icon: MessageSquare,
-        label: "Chatbot (WAHA)",
+        label: "Chatbot (OpenWA)",
         description: "Notificaciones & IA WhatsApp",
         color: "emerald"
     },
 
+];
+
+const NAV_GROUPS = [
+    { id: "sistema", label: "Sistema", icon: Server, items: [
+        { sec: "system_status", btab: "", label: "Estado del Sistema", icon: Activity },
+        { sec: "webhooks", btab: "", label: "Webhooks", icon: Activity },
+        { sec: "storage", btab: "", label: "Almacenamiento", icon: Cloud },
+        { sec: "database", btab: "", label: "Database", icon: Database },
+        { sec: "users", btab: "", label: "Administradores", icon: Users },
+    ]},
+    { id: "branding", label: "Branding", icon: Palette, items: [
+        { sec: "branding", btab: "identidad", label: "Identidad Corporativa", icon: Palette },
+        { sec: "branding", btab: "testimonios", label: "Testimonios Login", icon: MessageSquare },
+        { sec: "branding", btab: "reportes", label: "Reportes Exportables", icon: FileText },
+        { sec: "branding", btab: "pwa", label: "PWA e Iconos", icon: Smartphone },
+        { sec: "branding", btab: "splash", label: "PWA SplashScreen", icon: Smartphone },
+    ]},
+    { id: "modos", label: "Modos", icon: Layers, items: [
+        { sec: "modo", btab: "", label: "Modos (LPR / Face / Cola)", icon: Layers },
+    ]},
+    { id: "avanzado", label: "Avanzado", icon: SlidersHorizontal, items: [
+        { sec: "drivers", btab: "", label: "Drivers & Protocolos", icon: Camera },
+        { sec: "audit", btab: "", label: "Auditoría Hardware", icon: ShieldCheck },
+        { sec: "whatsapp", btab: "", label: "Chatbot (OpenWA)", icon: MessageSquare },
+        { sec: "prerec", btab: "", label: "Pre-grabación", icon: Video },
+    ]},
 ];
 
 const DRIVERS = [
@@ -164,6 +197,8 @@ const DRIVERS = [
 
 export default function SettingsPage() {
     const [activeSection, setActiveSection] = useState("system_status");
+    const [openGroup, setOpenGroup] = useState<string | null>(null);
+    const [brandingTab, setBrandingTab] = useState("identidad");
     const [storageTab, setStorageTab] = useState("explorador");
     const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
     const [modelSearch, setModelSearch] = useState("");
@@ -178,30 +213,49 @@ export default function SettingsPage() {
         <div className="h-full overflow-y-auto px-6 pb-6 pt-0 space-y-6 animate-in fade-in duration-700 custom-scrollbar">
 
 
-            {/* Tabs Navigation */}
+            {/* Tabs Navigation (agrupado por familias) */}
             <div className="sticky top-0 z-50 bg-card/95 backdrop-blur-xl border-b border-border mb-6 -mx-6 px-4 py-3 shadow-md shadow-black/20">
-                <div className="flex items-center gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden">
-                    {SETTINGS_SECTIONS.map((section) => {
-                        const Icon = section.icon;
-                        const isActive = activeSection === section.id;
+                {openGroup && <div className="fixed inset-0 z-40" onClick={() => setOpenGroup(null)} />}
+                <div className="relative z-50 flex items-center gap-1.5 flex-wrap">
+                    {NAV_GROUPS.map((g) => {
+                        const GIcon = g.icon;
+                        const groupActive = g.items.some(it => it.sec === activeSection && (it.btab ? it.btab === brandingTab : true));
+                        const isOpen = openGroup === g.id;
                         return (
-                            <button
-                                key={section.id}
-                                onClick={() => setActiveSection(section.id)}
-                                title={section.description}
-                                className={cn(
-                                    "group flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium transition-all whitespace-nowrap rounded-lg border",
-                                    isActive
-                                        ? "bg-accent text-foreground border-border shadow-sm"
-                                        : "text-muted-foreground border-transparent hover:text-foreground hover:bg-accent/50"
+                            <div key={g.id} className="relative">
+                                <button
+                                    onClick={() => setOpenGroup(isOpen ? null : g.id)}
+                                    className={cn(
+                                        "group flex items-center gap-1.5 px-3.5 py-1.5 text-[13px] font-semibold transition-all rounded-lg border",
+                                        groupActive ? "bg-accent text-foreground border-border shadow-sm" : "text-muted-foreground border-transparent hover:text-foreground hover:bg-accent/50"
+                                    )}
+                                >
+                                    <GIcon size={15} className={cn("shrink-0", groupActive ? "text-indigo-400" : "text-muted-foreground group-hover:text-foreground")} />
+                                    {g.label}
+                                    <ChevronDown size={13} className={cn("transition-transform duration-200", isOpen && "rotate-180")} />
+                                </button>
+                                {isOpen && (
+                                    <div className="absolute left-0 top-full mt-1.5 min-w-[240px] rounded-xl border border-border bg-card shadow-xl shadow-black/30 p-1.5 z-50 animate-in fade-in slide-in-from-top-1 duration-150">
+                                        {g.items.map((it, idx) => {
+                                            const IIcon = it.icon;
+                                            const itemActive = it.sec === activeSection && (it.btab ? it.btab === brandingTab : true);
+                                            return (
+                                                <button
+                                                    key={idx}
+                                                    onClick={() => { setActiveSection(it.sec); if (it.btab) setBrandingTab(it.btab); setOpenGroup(null); }}
+                                                    className={cn(
+                                                        "w-full flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium rounded-lg transition-colors text-left",
+                                                        itemActive ? "bg-indigo-500/15 text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                                                    )}
+                                                >
+                                                    <IIcon size={15} className={cn("shrink-0", itemActive ? "text-indigo-400" : "")} />
+                                                    {it.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
                                 )}
-                            >
-                                <Icon size={15} className={cn(
-                                    "transition-colors shrink-0",
-                                    isActive ? `text-${section.color}-400` : "text-muted-foreground group-hover:text-foreground"
-                                )} />
-                                {section.label}
-                            </button>
+                            </div>
                         );
                     })}
                 </div>
@@ -215,7 +269,7 @@ export default function SettingsPage() {
 
                     {activeSection === "webhooks" && <WebhookDebugPage />}
 
-                    {activeSection === "branding" && <BrandingSection />}
+                    {activeSection === "branding" && <BrandingSection activeTab={brandingTab} />}
 
 
                     {activeSection === "modo" && (
@@ -419,6 +473,21 @@ export default function SettingsPage() {
                         </div>
                     )}
 
+                    {activeSection === "prerec" && (
+                        <div className="space-y-6 animate-in zoom-in-95 duration-500">
+                            <div className="flex items-center justify-between mb-2">
+                                <div>
+                                    <h2 className="text-2xl font-black text-foreground tracking-tight">Pre-grabación</h2>
+                                    <p className="text-sm text-muted-foreground mt-1">Buffer continuo de video por cámara de fila y flujos procesados en vivo</p>
+                                </div>
+                                <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
+                                    <Video className="text-emerald-400" size={24} />
+                                </div>
+                            </div>
+                            <SystemLiveStatus />
+                        </div>
+                    )}
+
                     {activeSection === "system_status" && (
                         <div className="space-y-6 animate-in zoom-in-95 duration-500">
                             <div className="flex items-center justify-between mb-6">
@@ -430,7 +499,7 @@ export default function SettingsPage() {
                                     <Activity className="text-indigo-400" size={24} />
                                 </div>
                             </div>
-                            <div className="h-[calc(100vh-220px)] rounded-xl overflow-hidden border border-border bg-card/50 backdrop-blur-3xl shadow-2xl relative group">
+                            <div className="h-[calc(100vh-150px)] -mx-6 overflow-hidden relative group">
                                 <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none" />
                                 <SystemFlow />
                             </div>
@@ -1794,7 +1863,7 @@ function ModeConfiguration({ title, description, settingKey, options }: {
             {pendingMode && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setPendingMode(null)}>
                     <div
-                        className="bg-[#0f0f10] border border-border rounded-xl max-w-sm w-full mx-4 overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300"
+                        className="bg-card border border-border rounded-xl max-w-sm w-full mx-4 overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="p-6 text-center">
@@ -1846,6 +1915,10 @@ function WhatsAppSection() {
     const [testing, setTesting] = useState(false);
     const [sessions, setSessions] = useState<any[]>([]);
     const [history, setHistory] = useState<any[]>([]);
+    const [allowEnabled, setAllowEnabled] = useState(false);
+    const [allowList, setAllowList] = useState<string[]>([]);
+    const [newAllow, setNewAllow] = useState("");
+    const [savingAllow, setSavingAllow] = useState(false);
 
     useEffect(() => {
         loadConfig();
@@ -1854,11 +1927,15 @@ function WhatsAppSection() {
     const loadConfig = async () => {
         setLoading(true);
         try {
-            const [url, apiKey, cmdConfig] = await Promise.all([
+            const [url, apiKey, cmdConfig, allowEn, allowLs] = await Promise.all([
                 getSetting("WAHA_URL"),
                 getSetting("WAHA_API_KEY"),
-                getSetting("WAHA_COMMANDS")
+                getSetting("WAHA_COMMANDS"),
+                getSetting("WHATSAPP_ALLOWLIST_ENABLED"),
+                getSetting("WHATSAPP_ALLOWLIST")
             ]);
+            setAllowEnabled(allowEn?.value === "true");
+            try { const a = JSON.parse(allowLs?.value || "[]"); if (Array.isArray(a)) setAllowList(a); } catch {}
 
             setConfig({
                 url: url?.value || "",
@@ -1895,6 +1972,20 @@ function WhatsAppSection() {
             console.error(e);
         }
     }
+
+    const addAllow = (val: string) => { const v = (val || "").trim(); if (!v) return; if (allowList.includes(v)) return; setAllowList([...allowList, v]); setNewAllow(""); };
+    const removeAllow = (v: string) => setAllowList(allowList.filter(x => x !== v));
+    const saveAllowlist = async () => {
+        setSavingAllow(true);
+        try {
+            await Promise.all([
+                updateSetting("WHATSAPP_ALLOWLIST_ENABLED", allowEnabled ? "true" : "false"),
+                updateSetting("WHATSAPP_ALLOWLIST", JSON.stringify(allowList)),
+            ]);
+            toast.success({ title: "Seguridad del chatbot guardada" });
+        } catch { toast.error({ title: "Error al guardar la lista blanca" }); }
+        finally { setSavingAllow(false); }
+    };
 
     const handleSave = async () => {
         setSaving(true);
@@ -2026,6 +2117,72 @@ function WhatsAppSection() {
                             <p className="text-[10px] text-blue-200/60 mb-2">Configura esta URL en WAHA:</p>
                             <code className="block bg-black/20 rounded p-2 text-[10px] font-mono text-blue-300">http://SERVER_IP:10000/api/webhooks/whatsapp</code>
                         </div>
+                    </div>
+
+                    {/* Seguridad: lista blanca de remitentes */}
+                    <div className="bg-card/50 backdrop-blur-xl border border-border rounded-lg p-6 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <ShieldCheck className="text-emerald-400" size={18} />
+                                <h3 className="text-sm font-black text-foreground uppercase tracking-wider">Seguridad · Remitentes</h3>
+                            </div>
+                            <Switch checked={allowEnabled} onCheckedChange={setAllowEnabled} />
+                        </div>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">
+                            El bot responde con eventos, historiales y <b>fotos</b>. Con la lista blanca activada, <b>solo</b> procesa mensajes de los remitentes autorizados; al resto lo ignora en silencio. Evita fuga de datos a desconocidos.
+                        </p>
+                        <div className="flex items-start gap-2 rounded-lg bg-blue-500/10 border border-blue-500/20 p-2.5">
+                            <Info size={14} className="text-blue-400 shrink-0 mt-0.5" />
+                            <span className="text-[10px] text-blue-200/80">WhatsApp moderno puede ocultar el número y usar un ID anónimo. Forma segura de autorizar: que la persona <b>escriba al bot</b> y luego tocá su entrada en <b>"Remitentes recientes"</b> aquí abajo. (Escribir el número a mano solo funciona si WhatsApp lo expone.)</span>
+                        </div>
+
+                        {!allowEnabled && (
+                            <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 p-2.5">
+                                <ShieldAlert size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                                <span className="text-[10px] text-amber-300">Desactivada: cualquier persona que escriba al bot puede consultar datos. Recomendado activarla.</span>
+                            </div>
+                        )}
+
+                        {allowEnabled && (
+                            <>
+                                <div className="flex gap-2">
+                                    <Input value={newAllow} onChange={(e) => setNewAllow(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addAllow(newAllow); } }}
+                                        placeholder="Número (098…) o JID de grupo (…@g.us)" className="bg-black/40 border-white/10 h-9 font-mono text-xs" />
+                                    <Button onClick={() => addAllow(newAllow)} className="h-9 px-3 bg-emerald-600 hover:bg-emerald-500 text-white"><Plus size={15} /></Button>
+                                </div>
+
+                                {history.length > 0 && (
+                                    <div>
+                                        <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-1.5">Remitentes recientes (tocar para autorizar)</p>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {Array.from(new Set(history.map((h: any) => h.user).filter(Boolean))).slice(0, 8).map((u: any) => (
+                                                <button key={u} onClick={() => addAllow(u)} disabled={allowList.includes(u)} className="text-[10px] font-mono px-2 py-1 rounded-md border border-border bg-muted/50 hover:bg-emerald-500/10 hover:text-emerald-400 disabled:opacity-40 transition">+ {String(u).split("@")[0]}</button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="space-y-1.5">
+                                    <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Autorizados ({allowList.length})</p>
+                                    {allowList.length === 0 ? (
+                                        <p className="text-[10px] text-muted-foreground italic">Sin remitentes autorizados. Con la lista vacía y activada, el bot no responde a nadie.</p>
+                                    ) : (
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {allowList.map((v) => (
+                                                <span key={v} className="inline-flex items-center gap-1.5 text-[10px] font-mono px-2 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
+                                                    {v.endsWith("@g.us") ? "👥 " : "📱 "}{String(v).split("@")[0]}
+                                                    <button onClick={() => removeAllow(v)} className="hover:text-red-400"><X size={11} /></button>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        )}
+
+                        <Button onClick={saveAllowlist} disabled={savingAllow} className="w-full h-9 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white">
+                            {savingAllow ? "Guardando…" : "Guardar seguridad"}
+                        </Button>
                     </div>
                 </div>
 

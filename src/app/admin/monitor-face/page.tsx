@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import { getAccessEvents, getEventsCountToday } from "@/app/actions/history";
+import { getDevices, getAvailableStreams } from "@/app/actions/devices";
 import {
     ScanFace,
     CheckCircle2,
@@ -62,8 +63,90 @@ function TimeAgo({ timestamp }: { timestamp: string | Date }) {
     return <span>{label}</span>;
 }
 
+function FSnapImg({ deviceId, className }: { deviceId: string; className?: string }) {
+    const [src, setSrc] = useState(`/api/snapshot/${deviceId}?t=${Date.now()}`);
+    const [err, setErr] = useState(false);
+    const ivRef = useRef<any>(null);
+    useEffect(() => {
+        setErr(false);
+        setSrc(`/api/snapshot/${deviceId}?t=${Date.now()}`);
+        ivRef.current = setInterval(() => setSrc(`/api/snapshot/${deviceId}?t=${Date.now()}`), 5000);
+        return () => { if (ivRef.current) clearInterval(ivRef.current); };
+    }, [deviceId]);
+    const onErr = () => { setErr(true); if (ivRef.current) { clearInterval(ivRef.current); ivRef.current = null; } };
+    if (err) return <div className={cn("flex flex-col items-center justify-center bg-zinc-950 gap-1 text-[9px] text-white/40", className)}><Camera size={18} className="opacity-40" /> Sin señal</div>;
+    return <img src={src} alt="" className={cn("object-cover", className)} onError={onErr} />;
+}
+function FLiveVideo({ deviceId, className }: { deviceId: string; className?: string }) {
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const [ready, setReady] = useState(false);
+    const [failed, setFailed] = useState(false);
+    const retry = useRef(0);
+    useEffect(() => {
+        const video = videoRef.current; if (!video) return;
+        let destroyed = false; let timer: any;
+        const src = `/go2rtc/api/stream.mp4?src=face_${deviceId}&video=h264`;
+        const start = () => { if (destroyed || !video) return; video.src = src; video.play().catch(() => {}); };
+        const onPlaying = () => { if (!destroyed) setReady(true); };
+        const onError = () => { if (destroyed) return; setReady(false); retry.current++; if (retry.current > 3) { setFailed(true); return; } timer = setTimeout(start, Math.min(900 * retry.current, 4000)); };
+        video.addEventListener("playing", onPlaying); video.addEventListener("error", onError); start();
+        return () => { destroyed = true; if (timer) clearTimeout(timer); video.removeEventListener("playing", onPlaying); video.removeEventListener("error", onError); video.pause(); video.removeAttribute("src"); video.load(); };
+    }, [deviceId]);
+    if (failed) return <FSnapImg deviceId={deviceId} className={className} />;
+    return (
+        <div className={cn("relative vid-surface overflow-hidden", className)}>
+            <FSnapImg deviceId={deviceId} className={cn("absolute inset-0 w-full h-full transition-opacity duration-500", ready ? "opacity-0" : "opacity-100")} />
+            <video ref={videoRef} className={cn("absolute inset-0 w-full h-full object-cover transition-opacity duration-500", ready ? "opacity-100" : "opacity-0")} autoPlay muted playsInline />
+        </div>
+    );
+}
+function LiveCam({ deviceId, label, pulseId, cap }: { deviceId: string | null; label: string; pulseId?: string; cap?: any }) {
+    const [flash, setFlash] = useState(false);
+    const [shown, setShown] = useState<any>(null);
+    const first = useRef(true);
+    const capRef = useRef<any>(null);
+    capRef.current = cap;
+    useEffect(() => {
+        if (first.current) { first.current = false; return; }
+        setFlash(true);
+        setShown(capRef.current);
+        const t1 = setTimeout(() => setFlash(false), 900);
+        const t2 = setTimeout(() => setShown(null), 4500);
+        return () => { clearTimeout(t1); clearTimeout(t2); };
+    }, [pulseId]);
+    if (!deviceId) return null;
+    return (
+        <div className={cn("relative w-full aspect-video rounded-lg overflow-hidden border-2 mb-2.5 shrink-0 transition-all duration-300", flash ? "border-emerald-400 shadow-[0_0_24px_rgba(52,211,153,0.55)]" : "border-border")}>
+            <FLiveVideo deviceId={deviceId} className="absolute inset-0 w-full h-full" />
+            <div className="absolute top-1.5 left-2 flex items-center gap-1 text-[9px] font-bold text-white/90 z-10" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.9)" }}><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> EN VIVO · {label}</div>
+            {flash && <div className="absolute inset-0 bg-emerald-400/10 pointer-events-none z-10" />}
+            {flash && (
+                <div className="absolute inset-0 overflow-hidden pointer-events-none z-10">
+                    <div className="absolute left-0 right-0 h-[3px] bg-emerald-400 shadow-[0_0_14px_4px_rgba(52,211,153,0.85)]" style={{ animation: "capscan 0.9s ease-out" }} />
+                </div>
+            )}
+            {shown && (
+                <div className="absolute bottom-2 left-2 right-2 z-20 flex items-center gap-2 p-1.5 rounded-lg bg-black/80 backdrop-blur border border-emerald-400/50 shadow-2xl animate-in fade-in slide-in-from-bottom-3 zoom-in-95 duration-300">
+                    {shown.img ? (
+                        <Image src={shown.img} alt="" width={48} height={48} className="w-12 h-12 rounded-md object-cover border border-white/20 shrink-0" />
+                    ) : (
+                        <div className="w-12 h-12 rounded-md bg-zinc-800 flex items-center justify-center shrink-0"><Camera size={16} className="text-white/40" /></div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                        <div className="text-sm font-bold text-white truncate leading-tight">{shown.name}</div>
+                        <div className="text-[10px] text-white/70 truncate">{shown.sub}</div>
+                    </div>
+                    <span className={cn("text-[9px] font-black px-1.5 py-0.5 rounded shrink-0", shown.ok ? "bg-emerald-500 text-white" : "bg-red-500 text-white")}>{shown.ok ? "PERMITIDO" : "DENEGADO"}</span>
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function MonitorFace() {
     const [events, setEvents] = useState<FullAccessEvent[]>([]);
+    const [devices, setDevices] = useState<any[]>([]);
+    const [streams, setStreams] = useState<string[]>([]);
     const [socket, setSocket] = useState<Socket | null>(null);
     const [activeFilter, setActiveFilter] = useState<"ALL" | "GRANT" | "DENY">("ALL");
     const [isConnected, setIsConnected] = useState(false);
@@ -99,8 +182,18 @@ export default function MonitorFace() {
         return events.filter(e => activeFilter === "ALL" || e.decision === activeFilter);
     }, [events, activeFilter]);
 
+    useEffect(() => { getDevices().then((d: any) => setDevices(d || [])).catch(() => {}); getAvailableStreams().then((s: any) => setStreams(s || [])).catch(() => {}); }, []);
+    const faceDevs = useMemo(() => devices.filter((d: any) => d.deviceType === "FACE_TERMINAL"), [devices]);
     const entryEvents = useMemo(() => filteredEvents.filter(e => e.direction === "ENTRY"), [filteredEvents]);
     const exitEvents = useMemo(() => filteredEvents.filter(e => e.direction === "EXIT"), [filteredEvents]);
+    const hasStream = (id: any) => !!id && streams.includes(`face_${id}`);
+    const pickCam = (evts: any[], dir: string) => {
+        for (const e of evts) { if (hasStream(e?.device?.id)) return e.device.id; }
+        const d = faceDevs.find((x: any) => x.direction === dir && hasStream(x.id)) || faceDevs.find((x: any) => hasStream(x.id));
+        return d?.id || null;
+    };
+    const entryCam = useMemo(() => pickCam(entryEvents, "ENTRY"), [faceDevs, entryEvents, streams]);
+    const exitCam = useMemo(() => pickCam(exitEvents, "EXIT"), [faceDevs, exitEvents, streams]);
 
     const getImg = (path: string | null | undefined): string => getImagePath(path) || "";
 
@@ -217,7 +310,7 @@ export default function MonitorFace() {
         const meta = parseMeta(event.details);
         const faceUrl = getImg(meta.FaceImage) || getImg(event.user?.cara);
         const snapUrl = getImg(event.snapshotPath || event.imagePath);
-        const imgSrc = faceUrl || snapUrl;
+        const imgSrc = snapUrl || faceUrl;
         const similarity = meta.Similitud ? parseInt(meta.Similitud) : null;
         const personName = event.user?.name || meta.Rostro;
         const isRecognized = !!personName;
@@ -255,6 +348,13 @@ export default function MonitorFace() {
                         <div className="absolute bottom-3 left-3 w-5 h-5 border-b-2 border-l-2 border-emerald-500/50 z-10" />
                         <div className="absolute bottom-3 right-3 w-5 h-5 border-b-2 border-r-2 border-emerald-500/50 z-10" />
 
+                        {/* Rostro recortado superpuesto */}
+                        {faceUrl && (
+                            <div className="absolute bottom-3 right-3 w-[92px] h-[116px] rounded-md overflow-hidden border-2 border-emerald-400/70 shadow-xl z-20">
+                                <Image src={faceUrl} alt="rostro" fill sizes="92px" className="object-cover" />
+                                <div className="absolute inset-x-0 bottom-0 bg-black/70 text-[7px] text-white/80 text-center py-px font-bold tracking-wider">ROSTRO</div>
+                            </div>
+                        )}
                         {/* Match badge */}
                         {similarity != null && similarity > 0 && (
                             <div className="absolute top-3 right-10 z-10">
@@ -315,11 +415,13 @@ export default function MonitorFace() {
     };
 
     // ─── COLUMN COMPONENT ───
-    const DirectionColumn = ({ title, icon: Icon, events, iconColor }: {
+    const DirectionColumn = ({ title, icon: Icon, events, iconColor, cam, pulseId }: {
         title: string;
         icon: any;
         events: FullAccessEvent[];
         iconColor: string;
+        cam: string | null;
+        pulseId?: string;
     }) => (
         <div className="flex flex-col h-full">
             <div className="flex items-center gap-2 mb-3 px-1">
@@ -327,7 +429,13 @@ export default function MonitorFace() {
                 <span className="text-[11px] text-muted-foreground uppercase tracking-wider font-bold">{title}</span>
                 <span className="ml-auto text-[10px] text-muted-foreground font-mono bg-muted/50 px-1.5 py-0.5 rounded">{events.length}</span>
             </div>
-            <div className="flex-1 overflow-y-auto max-h-[calc(100vh-180px)] pr-1 custom-scrollbar">
+            <LiveCam deviceId={cam} label={title} pulseId={pulseId} cap={events[0] ? {
+                img: getImg(parseMeta(events[0].details).FaceImage) || getImg(events[0].user?.cara) || getImg(events[0].snapshotPath || events[0].imagePath),
+                name: events[0].user?.name || parseMeta(events[0].details).Rostro || "No identificado",
+                sub: parseMeta(events[0].details).Similitud ? `${parseMeta(events[0].details).Similitud}% match` : title,
+                ok: events[0].decision === "GRANT"
+            } : null} />
+            <div className="flex-1 overflow-y-auto max-h-[calc(100vh-320px)] pr-1 custom-scrollbar">
                 {events.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                         <ScanFace size={24} className="opacity-30 mb-2" />
@@ -400,6 +508,8 @@ export default function MonitorFace() {
                     icon={LogIn}
                     events={entryEvents}
                     iconColor="text-blue-400"
+                    cam={entryCam}
+                    pulseId={entryEvents[0]?.id}
                 />
 
                 {/* CENTER — Spotlight + Recent Grid */}
@@ -436,6 +546,8 @@ export default function MonitorFace() {
                     icon={LogOut}
                     events={exitEvents}
                     iconColor="text-orange-400"
+                    cam={exitCam}
+                    pulseId={exitEvents[0]?.id}
                 />
             </div>
 

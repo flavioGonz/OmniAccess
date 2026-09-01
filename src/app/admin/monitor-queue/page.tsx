@@ -185,7 +185,7 @@ function LiveVideo({ streamName, className, fallbackDeviceId }: { streamName: st
     return (
         <video
             ref={videoRef}
-            className={cn("object-cover bg-black", className)}
+            className={cn("object-cover", className)}
             autoPlay
             muted
             playsInline
@@ -229,7 +229,7 @@ function DeviceCell({ device, selected, onSelect, vcaRules }: { device: DeviceVi
             borderColor, isAlert && "shadow-lg shadow-red-500/20",
             selected && "shadow-lg shadow-violet-500/20 ring-1 ring-violet-500/30"
         )} onClick={onSelect}>
-            <div className="relative aspect-video bg-black">
+            <div className="relative aspect-video vid-surface">
                 <LiveVideo streamName={device.streamName} fallbackDeviceId={device.deviceId} className="absolute inset-0 w-full h-full" />
                 <VCAOverlay rules={vcaRules} />
                 {centroid && (

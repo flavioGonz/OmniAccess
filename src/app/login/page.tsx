@@ -19,6 +19,11 @@ export default function LoginPage() {
     const [success, setSuccess] = useState('');
     const [brand, setBrand] = useState<{ name: string; subtitle: string; logoUrl: string; loginBgUrl: string }>({ name: '', subtitle: '', logoUrl: '', loginBgUrl: '' });
     useEffect(() => { getAppBranding().then((b: any) => setBrand(b)).catch(() => {}); }, []);
+    const [tIdx, setTIdx] = useState(0);
+    const TS_DEFAULT = [{ quote: "OmniAccess ha revolucionado la forma en que gestionamos la seguridad. No es solo un sistema, es la base de nuestra tranquilidad operativa.", name: "Ricardo Valenzuela", role: "Director de Seguridad Patrimonial" }];
+    const testimonials: any[] = ((brand as any).testimonials && (brand as any).testimonials.length) ? (brand as any).testimonials : TS_DEFAULT;
+    useEffect(() => { const n = testimonials.length; if (n <= 1) return; const iv = setInterval(() => setTIdx((i) => (i + 1) % n), 7000); return () => clearInterval(iv); }, [testimonials.length]);
+    const tCur = testimonials[tIdx % testimonials.length] || TS_DEFAULT[0];
 
     const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -269,23 +274,21 @@ export default function LoginPage() {
                     >
                         <Quote className="text-[#B20D30] mb-6 w-12 h-12 opacity-80" />
                         <h3 className="text-3xl xl:text-4xl font-semibold text-white leading-tight mb-8">
-                            "OmniAccess ha revolucionado la forma en que gestionamos la seguridad. No es solo un sistema, es la base de nuestra tranquilidad operativa."
+                            "{tCur.quote}"
                         </h3>
                         <div className="flex items-center gap-4">
                             <div className="w-12 h-12 rounded-full border-2 border-[#B20D30] overflow-hidden bg-neutral-800">
                                 <User className="w-full h-full p-2 text-neutral-400" />
                             </div>
                             <div>
-                                <p className="text-white font-bold text-lg underline decoration-[#B20D30] decoration-2 underline-offset-4">Ricardo Valenzuela</p>
-                                <p className="text-neutral-400 font-medium">Director de Seguridad Patrimonial</p>
+                                <p className="text-white font-bold text-lg underline decoration-[#B20D30] decoration-2 underline-offset-4">{tCur.name}</p>
+                                <p className="text-neutral-400 font-medium">{tCur.role}</p>
                             </div>
                         </div>
 
                         {/* Pagination indicator dots like in the UI kit */}
                         <div className="flex gap-2 mt-12">
-                            <div className="w-8 h-2 bg-[#B20D30] rounded-full" />
-                            <div className="w-2 h-2 bg-white/20 rounded-full" />
-                            <div className="w-2 h-2 bg-white/20 rounded-full" />
+                            {testimonials.map((_, i) => <div key={i} className={i === (tIdx % testimonials.length) ? "w-8 h-2 bg-[#B20D30] rounded-full transition-all duration-500" : "w-2 h-2 bg-white/20 rounded-full transition-all duration-500"} />)}
                         </div>
                     </motion.div>
 

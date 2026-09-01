@@ -60,11 +60,19 @@ export async function getLatestQueueCounts() {
             ORDER BY "channelName", "timestamp" DESC
         `;
 
+        // Solo canales ACTIVOS: descarta nombres de canal viejos/de configs anteriores que ya no
+        // reporta la cámara (los reales actualizan juntos; los obsoletos quedaron horas/días atrás).
+        const deviceLatestMs = latestEvents.reduce((m, e) => Math.max(m, new Date(e.timestamp).getTime()), 0);
+        const ACTIVE_WINDOW_MS = 6 * 60 * 60 * 1000;
+        const activeEvents = deviceLatestMs > 0
+            ? latestEvents.filter(e => deviceLatestMs - new Date(e.timestamp).getTime() <= ACTIVE_WINDOW_MS)
+            : latestEvents;
+
         // Live aforo: mirror exactly what the camera's OccupancyCounter sends (1 -> 1, 0 -> 0).
         // No app-side hold/smoothing. Stability is handled at the camera (VCA "Tiempo de rebote").
         results.push({
             device,
-            channels: latestEvents.map(e => ({
+            channels: activeEvents.map(e => ({
                 channelName: e.channelName || `Canal ${e.channelId}`,
                 channelId: e.channelId,
                 peopleCount: e.peopleCount,
@@ -110,12 +118,19 @@ export async function getQueueStatsToday() {
 }
 
 // --- Get hourly breakdown for chart ---
+// Uruguay = UTC-3 (sin horario de verano). El server corre en UTC.
+const UY_OFFSET_MS = 3 * 60 * 60 * 1000;
+function uyHour(ts: Date | string): number { return new Date(new Date(ts).getTime() - UY_OFFSET_MS).getUTCHours(); }
+function uyMinuteOfDay(ts: Date | string): number { const s = new Date(new Date(ts).getTime() - UY_OFFSET_MS); return s.getUTCHours() * 60 + s.getUTCMinutes(); }
+function uyDayWindow(target: Date): { start: Date; end: Date } {
+    const s = new Date(target.getTime() - UY_OFFSET_MS);
+    const startMs = Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), s.getUTCDate(), 0, 0, 0) + UY_OFFSET_MS;
+    return { start: new Date(startMs), end: new Date(startMs + 24 * 60 * 60 * 1000 - 1) };
+}
+
 export async function getQueueHourlyBreakdown(deviceId?: string, date?: Date) {
     const targetDate = date || new Date();
-    const startOfDay = new Date(targetDate);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
+    const { start: startOfDay, end: endOfDay } = uyDayWindow(targetDate);
 
     const where: any = {
         timestamp: { gte: startOfDay, lte: endOfDay },
@@ -130,7 +145,7 @@ export async function getQueueHourlyBreakdown(deviceId?: string, date?: Date) {
 
     const hourly: { hour: number; avg: number; max: number; count: number }[] = [];
     for (let h = 0; h < 24; h++) {
-        const hourEvents = events.filter(e => new Date(e.timestamp).getHours() === h);
+        const hourEvents = events.filter(e => uyHour(e.timestamp) === h);
         if (hourEvents.length === 0) {
             hourly.push({ hour: h, avg: 0, max: 0, count: 0 });
         } else {
@@ -145,6 +160,54 @@ export async function getQueueHourlyBreakdown(deviceId?: string, date?: Date) {
     }
 
     return hourly;
+}
+
+/**
+ * Aforo por intervalo (5/15/30/45/60 min) de un día, en hora de Montevideo.
+ * Filtra a canales de aforo/ocupación (no a los contadores Entrada/Salida).
+ * - max: aforo más alto del intervalo
+ * - avg: aforo promedio
+ * - last: aforo exacto = última lectura del intervalo
+ */
+export async function getQueueIntervalBreakdown(deviceId?: string, date?: Date, intervalMin: number = 60) {
+    const iv = [5, 15, 30, 45, 60].includes(intervalMin) ? intervalMin : 60;
+    const targetDate = date || new Date();
+    const { start, end } = uyDayWindow(targetDate);
+    const where: any = { timestamp: { gte: start, lte: end } };
+    if (deviceId) where.deviceId = deviceId;
+    const all = await prisma.queueEvent.findMany({
+        where,
+        select: { timestamp: true, peopleCount: true, channelName: true },
+        orderBy: { timestamp: "asc" },
+    });
+    const occRe = /aforo|occupancy|ocupaci|personas/i;
+    let evs = all.filter(e => occRe.test(e.channelName || ""));
+    if (!evs.length) evs = all.filter(e => !/entrada|salida/i.test(e.channelName || ""));
+
+    const nBuckets = Math.ceil(1440 / iv);
+    const buckets = Array.from({ length: nBuckets }, (_, b) => ({ startMin: b * iv, vals: [] as number[], last: 0 }));
+    for (const e of evs) {
+        const mod = uyMinuteOfDay(e.timestamp);
+        const b = Math.min(Math.floor(mod / iv), nBuckets - 1);
+        buckets[b].vals.push(e.peopleCount);
+        buckets[b].last = e.peopleCount; // orden asc -> queda la última lectura
+    }
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return buckets.map(b => {
+        const sh = Math.floor(b.startMin / 60), sm = b.startMin % 60;
+        const eMin = b.startMin + iv, eh = Math.floor(eMin / 60) % 24, em = eMin % 60;
+        const counts = b.vals;
+        return {
+            startMin: b.startMin,
+            label: `${pad(sh)}:${pad(sm)}`,
+            rangeLabel: `${pad(sh)}:${pad(sm)} - ${pad(eh)}:${pad(em)}`,
+            avg: counts.length ? Math.round((counts.reduce((a, c) => a + c, 0) / counts.length) * 10) / 10 : 0,
+            max: counts.length ? Math.max(...counts) : 0,
+            min: counts.length ? Math.min(...counts) : 0,
+            last: counts.length ? b.last : 0,
+            count: counts.length,
+        };
+    });
 }
 
 // --- CRUD for QueueAlerts ---
@@ -209,17 +272,23 @@ export async function getQueueDailyBreakdown(deviceId?: string, from?: Date, to?
 
     const events = await prisma.queueEvent.findMany({
         where,
-        select: { timestamp: true, peopleCount: true },
+        select: { timestamp: true, peopleCount: true, channelName: true },
         orderBy: { timestamp: "asc" },
     });
 
+    const occRe = /aforo|occupancy|ocupaci|personas/i;
+    let occEvs = events.filter((e: any) => occRe.test(e.channelName || ""));
+    if (!occEvs.length) occEvs = events.filter((e: any) => !/entrada|salida/i.test(e.channelName || ""));
+
     const dayMap = new Map<string, number[]>();
-    for (const e of events) {
+    const lastMap = new Map<string, number>();
+    for (const e of occEvs) {
         const d = new Date(e.timestamp);
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
         const arr = dayMap.get(key) || [];
         arr.push(e.peopleCount);
         dayMap.set(key, arr);
+        lastMap.set(key, e.peopleCount);
     }
 
     const result: { date: string; avg: number; max: number; count: number; total: number }[] = [];
@@ -231,6 +300,7 @@ export async function getQueueDailyBreakdown(deviceId?: string, from?: Date, to?
             date: key,
             avg: counts.length > 0 ? Math.round((counts.reduce((a, b) => a + b, 0) / counts.length) * 10) / 10 : 0,
             max: counts.length > 0 ? Math.max(...counts) : 0,
+            last: lastMap.get(key) ?? 0,
             count: counts.length,
             total: counts.reduce((a, b) => a + b, 0),
         });
@@ -251,12 +321,17 @@ export async function getQueueWeeklyBreakdown(deviceId?: string, from?: Date, to
 
     const events = await prisma.queueEvent.findMany({
         where,
-        select: { timestamp: true, peopleCount: true },
+        select: { timestamp: true, peopleCount: true, channelName: true },
         orderBy: { timestamp: "asc" },
     });
 
+    const occRe = /aforo|occupancy|ocupaci|personas/i;
+    let occEvs = events.filter((e: any) => occRe.test(e.channelName || ""));
+    if (!occEvs.length) occEvs = events.filter((e: any) => !/entrada|salida/i.test(e.channelName || ""));
+
     const weekMap = new Map<string, number[]>();
-    for (const e of events) {
+    const lastMap = new Map<string, number>();
+    for (const e of occEvs) {
         const d = new Date(e.timestamp);
         const jan1 = new Date(d.getFullYear(), 0, 1);
         const week = Math.ceil(((d.getTime() - jan1.getTime()) / 86400000 + jan1.getDay() + 1) / 7);
@@ -264,12 +339,14 @@ export async function getQueueWeeklyBreakdown(deviceId?: string, from?: Date, to
         const arr = weekMap.get(key) || [];
         arr.push(e.peopleCount);
         weekMap.set(key, arr);
+        lastMap.set(key, e.peopleCount);
     }
 
     return Array.from(weekMap.entries()).map(([week, counts]) => ({
         week,
         avg: Math.round((counts.reduce((a, b) => a + b, 0) / counts.length) * 10) / 10,
         max: Math.max(...counts),
+        last: lastMap.get(week) ?? 0,
         count: counts.length,
         total: counts.reduce((a, b) => a + b, 0),
     })).sort((a, b) => a.week.localeCompare(b.week));
@@ -287,23 +364,30 @@ export async function getQueueMonthlyBreakdown(deviceId?: string, from?: Date, t
 
     const events = await prisma.queueEvent.findMany({
         where,
-        select: { timestamp: true, peopleCount: true },
+        select: { timestamp: true, peopleCount: true, channelName: true },
         orderBy: { timestamp: "asc" },
     });
 
+    const occRe = /aforo|occupancy|ocupaci|personas/i;
+    let occEvs = events.filter((e: any) => occRe.test(e.channelName || ""));
+    if (!occEvs.length) occEvs = events.filter((e: any) => !/entrada|salida/i.test(e.channelName || ""));
+
     const monthMap = new Map<string, number[]>();
-    for (const e of events) {
+    const lastMap = new Map<string, number>();
+    for (const e of occEvs) {
         const d = new Date(e.timestamp);
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
         const arr = monthMap.get(key) || [];
         arr.push(e.peopleCount);
         monthMap.set(key, arr);
+        lastMap.set(key, e.peopleCount);
     }
 
     return Array.from(monthMap.entries()).map(([month, counts]) => ({
         month,
         avg: Math.round((counts.reduce((a, b) => a + b, 0) / counts.length) * 10) / 10,
         max: Math.max(...counts),
+        last: lastMap.get(month) ?? 0,
         count: counts.length,
         total: counts.reduce((a, b) => a + b, 0),
     })).sort((a, b) => a.month.localeCompare(b.month));
@@ -413,8 +497,7 @@ export async function getCameraOutages(options?: {
 // --- Flow (entries/exits per hour) ---
 export async function getQueueFlowHourly(deviceId?: string, date?: Date) {
     const day = date ? new Date(date) : new Date();
-    const start = new Date(day); start.setHours(0, 0, 0, 0);
-    const end = new Date(day); end.setHours(23, 59, 59, 999);
+    const { start, end } = uyDayWindow(day);
     const where: any = { timestamp: { gte: start, lte: end }, channelName: { in: ["Entrada", "Salida"] } };
     if (deviceId) where.deviceId = deviceId;
     const events = await prisma.queueEvent.findMany({
@@ -422,7 +505,7 @@ export async function getQueueFlowHourly(deviceId?: string, date?: Date) {
     });
     const hours = Array.from({ length: 24 }, (_, h) => ({ hour: h, entradas: 0, salidas: 0 }));
     for (const e of events) {
-        const h = new Date(e.timestamp).getHours();
+        const h = uyHour(e.timestamp);
         if (e.channelName === "Entrada") hours[h].entradas++;
         else if (e.channelName === "Salida") hours[h].salidas++;
     }
@@ -770,7 +853,155 @@ export async function getDispatchHistory(options?: { take?: number }) {
             ruleName: p.ruleName || (j.type === "REPORT" ? "Reporte" : "Alerta"),
             deviceName: p.deviceName || null, count: p.count ?? null, threshold: p.threshold ?? null,
             channelName: p.channelName || null, snapshotPath: p.snapshotPath || null,
+            message: p.sentText || p.text || (j.type === "REPORT" ? `Reporte ${p.period || "diario"}${p.deviceName ? " - " + p.deviceName : ""}` : (p.ruleName ? `${p.ruleName}${p.count != null ? ` - aforo ${p.count}/${p.threshold ?? "?"}` : ""}` : null)),
             createdAt: j.createdAt, sentAt: j.sentAt,
         };
     });
+}
+
+
+// --- WhatsApp groups seen via inbound webhook (for recipient picker) ---
+export async function getWhatsAppSeenGroups() {
+    const s = await prisma.setting.findUnique({ where: { key: "WHATSAPP_SEEN_GROUPS" } });
+    if (!s?.value) return [] as { id: string; name: string }[];
+    try {
+        const arr = JSON.parse(s.value);
+        return Array.isArray(arr) ? arr.map((g: any) => ({ id: g.id, name: g.name || g.id })) : [];
+    } catch { return []; }
+}
+
+
+// Estado en vivo del sistema: pre-grabación (ring buffer) + flujos procesados por cámara de fila.
+export async function getSystemLiveStatus() {
+    const fs = await import("fs");
+    const path = await import("path");
+    const RING_ROOT = "/opt/OmniAccess/public/clips/ring";
+    const now = Date.now();
+    const ACTIVE_WINDOW_MS = 6 * 60 * 60 * 1000;
+    const devices = await prisma.device.findMany({ where: { deviceType: "QUEUE_COUNTER" }, select: { id: true, name: true, ip: true } });
+    const out: any[] = [];
+    for (const d of devices) {
+        // pre-rec: mtime del segmento más nuevo del anillo
+        let preRecMs = 0;
+        try {
+            const dir = path.join(RING_ROOT, d.id);
+            for (const fn of fs.readdirSync(dir)) {
+                if (!fn.endsWith(".ts")) continue;
+                const m = fs.statSync(path.join(dir, fn)).mtimeMs;
+                if (m > preRecMs) preRecMs = m;
+            }
+        } catch {}
+        const preRecActive = preRecMs > 0 && (now - preRecMs) < 15000;
+        // flujos en vivo: último evento por canal, sólo canales activos
+        let channels: any[] = [];
+        try {
+            const ev: any[] = await prisma.$queryRawUnsafe(
+                'SELECT DISTINCT ON ("channelName") "channelName","peopleCount","timestamp" FROM "QueueEvent" WHERE "deviceId"=$1 ORDER BY "channelName","timestamp" DESC',
+                d.id
+            );
+            const latest = ev.reduce((mx, e) => Math.max(mx, new Date(e.timestamp).getTime()), 0);
+            channels = ev
+                .filter(e => latest - new Date(e.timestamp).getTime() <= ACTIVE_WINDOW_MS)
+                .map(e => ({ name: e.channelName, count: Number(e.peopleCount), ageSec: Math.round((now - new Date(e.timestamp).getTime()) / 1000) }))
+                .sort((a, b) => (/(aforo|occupancy|ocupaci|personas)/i.test(a.name) ? -1 : 1) - (/(aforo|occupancy|ocupaci|personas)/i.test(b.name) ? -1 : 1));
+        } catch {}
+        out.push({ deviceId: d.id, name: d.name, ip: d.ip, preRecActive, preRecAgeSec: preRecMs ? Math.round((now - preRecMs) / 1000) : null, channels });
+    }
+    return out;
+}
+
+
+// ── Pre-grabación: gestión de grabadores ffmpeg (ring buffer) + almacenamiento ──
+export async function getPreRecStatus() {
+    const cp = await import("child_process");
+    const fs = await import("fs");
+    const path = await import("path");
+    const RING_ROOT = "/opt/OmniAccess/public/clips/ring";
+
+    // Procesos ffmpeg que están grabando el anillo
+    const procByDevice: Record<string, { pid: number; uptimeSec: number }> = {};
+    let instances = 0;
+    try {
+        const out = cp.execSync("ps -eo pid,etimes,args 2>/dev/null", { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
+        for (const line of out.split("\n")) {
+            if (!line.includes("/clips/ring/") || !line.includes("ffmpeg")) continue;
+            const m = line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/);
+            if (!m) continue;
+            const dm = m[3].match(/\/clips\/ring\/([^/\\]+)/);
+            if (!dm) continue;
+            instances++;
+            procByDevice[dm[1]] = { pid: Number(m[1]), uptimeSec: Number(m[2]) };
+        }
+    } catch {}
+
+    // Disco de la partición de clips
+    let disk = { totalBytes: 0, usedBytes: 0, freeBytes: 0 };
+    try {
+        const d = cp.execSync("df -B1 --output=size,used,avail /opt/OmniAccess/public/clips 2>/dev/null | tail -1", { encoding: "utf8" });
+        const p = d.trim().split(/\s+/).map((x) => Number(x));
+        if (p.length >= 3 && p[0] > 0) disk = { totalBytes: p[0], usedBytes: p[1], freeBytes: p[2] };
+    } catch {}
+
+    const devices = await prisma.device.findMany({ where: { deviceType: "QUEUE_COUNTER" }, select: { id: true, name: true, ip: true } });
+    let ringTotal = 0;
+    const now = Date.now();
+    const out: any[] = [];
+    for (const dv of devices) {
+        const dir = path.join(RING_ROOT, dv.id);
+        let bytes = 0, segs = 0, newestMs = 0;
+        try {
+            for (const fn of fs.readdirSync(dir)) {
+                if (!fn.endsWith(".ts")) continue;
+                const st = fs.statSync(path.join(dir, fn));
+                bytes += st.size; segs++; if (st.mtimeMs > newestMs) newestMs = st.mtimeMs;
+            }
+        } catch {}
+        ringTotal += bytes;
+        const proc = procByDevice[dv.id] || null;
+        out.push({
+            deviceId: dv.id, name: dv.name, ip: dv.ip,
+            running: !!proc, pid: proc ? proc.pid : null, uptimeSec: proc ? proc.uptimeSec : null,
+            fresh: newestMs > 0 && (now - newestMs) < 15000,
+            ringBytes: bytes, segments: segs,
+        });
+    }
+    return { instances, ringTotalBytes: ringTotal, disk, devices: out };
+}
+
+// Corta (kill) un grabador ffmpeg colgado; el worker lo re-levanta solo en <=30s.
+export async function killPreRecFlow(pid: number) {
+    const cp = await import("child_process");
+    const p = Number(pid);
+    if (!p || p < 2) return { ok: false, error: "PID inválido" };
+    try {
+        const args = cp.execSync(`ps -p ${p} -o args= 2>/dev/null`, { encoding: "utf8" });
+        if (!args.includes("/clips/ring/") || !args.includes("ffmpeg")) return { ok: false, error: "Ese proceso no es un grabador de pre-grabación" };
+        cp.execSync(`kill ${p} 2>/dev/null`);
+        return { ok: true };
+    } catch (e: any) { return { ok: false, error: (e && e.message) || "No se pudo cortar el flujo" }; }
+}
+
+
+// Borra carpetas de ring buffer que no corresponden a una cámara de fila activa.
+export async function cleanOrphanRings() {
+    const fs = await import("fs");
+    const path = await import("path");
+    const RING_ROOT = "/opt/OmniAccess/public/clips/ring";
+    const devices = await prisma.device.findMany({ where: { deviceType: "QUEUE_COUNTER" }, select: { id: true } });
+    const active = new Set(devices.map((d) => d.id));
+    let removed = 0, bytes = 0;
+    try {
+        for (const name of fs.readdirSync(RING_ROOT)) {
+            if (active.has(name)) continue;
+            const dir = path.join(RING_ROOT, name);
+            try {
+                const st = fs.statSync(dir);
+                if (!st.isDirectory()) continue;
+                for (const fn of fs.readdirSync(dir)) { try { bytes += fs.statSync(path.join(dir, fn)).size; } catch {} }
+                fs.rmSync(dir, { recursive: true, force: true });
+                removed++;
+            } catch {}
+        }
+    } catch {}
+    return { removed, bytes };
 }

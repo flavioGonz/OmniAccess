@@ -20,8 +20,10 @@ const pushLastCounts = new Map<string, number>();
 // Track push activity per device to let polling know push is working
 const pushActivity = new Map<string, number>();
 
-// IVA occupancy counter for push events (enter +1, leave -1)
+// IVA occupancy counter for push events (enter +1, leave -1) — YA NO se usa para Aforo
 const pushIvaOccupancy = new Map<string, number>();
+// Contadores cumulativos de Entrada/Salida (cruces de campo) por push
+const pushFlowCounts = new Map<string, number>();
 
 export function isPushActive(deviceId: string): boolean {
     const last = pushActivity.get(deviceId);
@@ -212,12 +214,16 @@ export async function POST(req: NextRequest) {
             }
 
             if (isIvaEvent) {
+                // Entrada/Salida cumulativas. NO derivar el aforo de aquí: el aforo lo da el
+                // OccupancyCounter nativo (se autocorrige a 0 cuando la fila se vacía). Derivarlo
+                // de enter/leave se "pegaba" si la cámara perdía un Leave.
                 const isEntering = topic.includes("EnteringField");
-                const currentOcc = pushIvaOccupancy.get(device.id) || 0;
-                count = isEntering ? currentOcc + 1 : Math.max(0, currentOcc - 1);
-                pushIvaOccupancy.set(device.id, count);
-                ruleName = "IVA Aforo";
-                console.log(`${logPrefix} IVA ${isEntering ? "Enter" : "Leave"} -> occupancy=${count}`);
+                const dirKey = `${device.id}:${isEntering ? "Entrada" : "Salida"}`;
+                const cur = pushFlowCounts.get(dirKey) || 0;
+                count = cur + 1;
+                pushFlowCounts.set(dirKey, count);
+                ruleName = isEntering ? "Entrada" : "Salida";
+                console.log(`${logPrefix} IVA ${isEntering ? "Enter" : "Leave"} -> ${ruleName}=${count}`);
             }
 
             const cacheKey = `${device.id}:${ruleName}`;
@@ -229,8 +235,8 @@ export async function POST(req: NextRequest) {
 
             if (operation === "Initialized" && lastCount !== undefined) continue;
 
-            const isOccupancy = topic.includes("Occupancy") || isIvaEvent;
-            const channelName = isIvaEvent ? "IVA Aforo" : (ruleName || (isOccupancy ? "Occupancy" : "Counter"));
+            const isOccupancy = topic.includes("Occupancy");
+            const channelName = ruleName || (isOccupancy ? "Occupancy" : "Counter");
 
             let snapshotPath: string | null = null;
             if (count > 0 && device.ip && device.username && device.password) {

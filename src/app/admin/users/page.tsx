@@ -325,7 +325,7 @@ export default function UsersPage() {
                 <div className="flex-1 border border-border rounded-lg overflow-hidden bg-card/40 relative">
                     <div className="absolute inset-0 overflow-auto custom-scrollbar">
                         <Table>
-                            <TableHeader className="sticky top-0 bg-[#0c0c0c] z-10 shadow-sm">
+                            <TableHeader className="sticky top-0 bg-card z-10 shadow-sm">
                                 <TableRow className="border-border hover:bg-transparent h-9">
                                     <TableHead className="w-[280px] text-[10px] font-bold uppercase tracking-wider text-muted-foreground h-9">Identidad</TableHead>
                                     <TableHead className="w-[120px] text-[10px] font-bold uppercase tracking-wider text-muted-foreground h-9">Unidad / DNI</TableHead>

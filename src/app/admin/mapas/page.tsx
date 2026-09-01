@@ -7,6 +7,7 @@ import {
     Wifi, WifiOff, Plus, Crosshair, Sun, Moon, Video,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import MapFloatingWindow from "./MapFloatingWindow";
 import { toast } from "sonner";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { getMapConfig, saveMapConfig, getMapDevices } from "@/app/actions/maps";
@@ -40,7 +41,7 @@ function LiveVideo({ ip, deviceId, className }: { ip: string; deviceId: string; 
         return () => { destroyed = true; if (timer) clearTimeout(timer); video.removeEventListener("error", onError); video.pause(); video.removeAttribute("src"); video.load(); };
     }, [ip]);
     if (failed) return <img src={`/api/snapshot/${deviceId}?t=${Date.now()}`} alt="" className={cn("object-cover", className)} onError={(e) => ((e.target as HTMLImageElement).style.opacity = "0.2")} />;
-    return <video ref={videoRef} className={cn("object-cover bg-black", className)} autoPlay muted playsInline />;
+    return <video ref={videoRef} className={cn("object-cover", className)} autoPlay muted playsInline />;
 }
 
 function IconBtn({ label, onClick, active, disabled, children }: { label: string; onClick?: () => void; active?: boolean; disabled?: boolean; children: React.ReactNode }) {
@@ -79,12 +80,22 @@ export default function MapasPage() {
     const [limit, setLimit] = useState(8);
     const [edit, setEdit] = useState(false);
     const [selected, setSelected] = useState<string | null>(null);
+    const [winGeom, setWinGeom] = useState({ x: 120, y: 100, w: 440, h: 320, docked: false });
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem("oa_map_win");
+            if (raw) { const j = JSON.parse(raw); if (j && j.deviceId) { setSelected(j.deviceId); setWinGeom({ x: j.x ?? 120, y: j.y ?? 100, w: j.w ?? 440, h: j.h ?? 320, docked: !!j.docked }); } }
+        } catch {}
+    }, []);
+    const saveMapWin = () => { try { localStorage.setItem("oa_map_win", JSON.stringify({ deviceId: selected, ...winGeom })); toast.success("Vista de mapa guardada"); } catch {} };
+    const closeMapWin = () => { setSelected(null); try { localStorage.removeItem("oa_map_win"); } catch {} };
     const [flashId, setFlashId] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
     const [bright, setBright] = useState(0);
     const [modules, setModules] = useState<Record<string, boolean>>({});
     const [pip, setPip] = useState(true);
     const [layersOpen, setLayersOpen] = useState(false);
+    const [brightOpen, setBrightOpen] = useState(false);
     const mapRef = useRef<HTMLDivElement>(null);
     const dragId = useRef<string | null>(null);
     const fileRef = useRef<HTMLInputElement>(null);
@@ -202,16 +213,6 @@ export default function MapasPage() {
                 </div>
             )}
 
-            {/* ── Brightness slider ── */}
-            <div className="absolute top-4 right-4 z-[1000] flex items-center gap-2 px-3 py-2 rounded-full bg-card/90 backdrop-blur-xl border border-border shadow-2xl">
-                <Moon size={14} className="text-foreground/50" />
-                <input type="range" min={-80} max={80} step={5} value={bright}
-                    onChange={(e) => setBright(Number(e.target.value))}
-                    onPointerUp={() => saveMapConfig({ bright } as any)}
-                    className="w-28 accent-blue-500 cursor-pointer" title="Aclarar / oscurecer el mapa" />
-                <Sun size={14} className="text-foreground/50" />
-            </div>
-
             {/* ── Floating toolbar ── */}
             <TooltipProvider delayDuration={150}>
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-1 px-1.5 py-1.5 rounded-full bg-card/90 backdrop-blur-xl border border-border shadow-2xl">
@@ -228,6 +229,7 @@ export default function MapasPage() {
                         </>
                     )}
                     <IconBtn label={pip ? "Ocultar mini-video" : "Mini-video en vivo"} active={pip} onClick={() => setPip(p => !p)}><Video size={18} /></IconBtn>
+                    <IconBtn label="Brillo del mapa" active={brightOpen} onClick={() => setBrightOpen(o => !o)}><Sun size={18} /></IconBtn>
                     <IconBtn label="Actualizar" onClick={load}><RefreshCw size={18} /></IconBtn>
                     {edit ? (
                         <IconBtn label="Guardar posiciones" active onClick={save}><Save size={18} /></IconBtn>
@@ -263,6 +265,21 @@ export default function MapasPage() {
                 </>
             )}
 
+            {/* ── Brightness popover ── */}
+            {brightOpen && (
+                <>
+                    <div className="fixed inset-0 z-[999]" onClick={() => setBrightOpen(false)} />
+                    <div className="absolute top-[64px] left-1/2 -translate-x-1/2 z-[1001] flex items-center gap-2 px-3 py-2 rounded-full bg-card/95 backdrop-blur-xl border border-border shadow-2xl animate-in fade-in slide-in-from-top-1 duration-200">
+                        <Moon size={14} className="text-foreground/50" />
+                        <input type="range" min={-80} max={80} step={5} value={bright}
+                            onChange={(e) => setBright(Number(e.target.value))}
+                            onPointerUp={() => saveMapConfig({ bright } as any)}
+                            className="w-36 accent-blue-500 cursor-pointer" title="Aclarar / oscurecer el mapa" />
+                        <Sun size={14} className="text-foreground/50" />
+                    </div>
+                </>
+            )}
+
             {/* ── Legend ── */}
             <div className="absolute bottom-4 right-4 z-[1000] flex items-center gap-3 px-3 py-2 rounded-full bg-card/90 backdrop-blur-xl border border-border text-[11px] text-foreground/70">
                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> OK</span>
@@ -270,26 +287,19 @@ export default function MapasPage() {
                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500" /> Lleno/Offline</span>
             </div>
 
-            {/* ── Device popup ── */}
+            {/* ── Floating video window (drag / dock / resize / save) ── */}
             {sel && !edit && (
-                <div className="fixed inset-0 z-[2000] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setSelected(null)}>
-                    <div className="w-full sm:max-w-lg bg-card border border-border rounded-t-2xl sm:rounded-2xl overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                            <div className="flex items-center gap-2 min-w-0"><span className={cn("w-2 h-2 rounded-full", sel.online ? "bg-emerald-500" : "bg-red-500")} /><span className="font-bold text-sm truncate">{sel.name}</span><span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{sel.type}</span></div>
-                            <button onClick={() => setSelected(null)} className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground"><X size={16} /></button>
-                        </div>
-                        <div className="relative aspect-video bg-black">
-                            <LiveVideo ip={sel.ip} deviceId={sel.id} className="absolute inset-0 w-full h-full" />
-                            {sel.type === "QUEUE_COUNTER" && (
-                                <div className="absolute bottom-2 right-2 flex items-baseline gap-1 px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur"><span className="text-[10px] uppercase text-white/60 font-bold">Aforo</span><span className="text-2xl font-black tabular-nums" style={{ color: markerColor(sel) }}>{aforo[sel.id] ?? 0}</span><span className="text-xs text-white/50">/ {limit}</span></div>
-                            )}
-                        </div>
-                        <div className="px-4 py-3 flex items-center justify-between text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1.5">{sel.online ? <><Wifi size={13} className="text-emerald-400" /> En línea</> : <><WifiOff size={13} className="text-red-400" /> Sin conexión</>}</span>
-                            <span className="font-mono">{sel.ip}</span>
-                        </div>
-                    </div>
-                </div>
+                <MapFloatingWindow
+                    device={sel as any}
+                    aforo={aforo[sel.id] ?? 0}
+                    limit={limit}
+                    geom={winGeom}
+                    setGeom={setWinGeom}
+                    onClose={closeMapWin}
+                    onSave={saveMapWin}
+                >
+                    <LiveVideo ip={sel.ip} deviceId={sel.id} className="absolute inset-0 w-full h-full" />
+                </MapFloatingWindow>
             )}
         </div>
     );

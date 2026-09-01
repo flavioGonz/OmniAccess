@@ -22,7 +22,7 @@ type Dev = { id: string; name: string };
 const METRICS = [{ v: "aforo", l: "Aforo" }, { v: "entrada", l: "Entradas" }, { v: "salida", l: "Salidas" }];
 const OPERATORS = [">=", ">", "==", "<="];
 const ZONES = ["Aforo", "Entrada", "Salida"];
-const CHANNEL_OPTS = [{ v: "telegram", l: "Telegram" }, { v: "whatsapp", l: "WhatsApp" }, { v: "email", l: "Email" }];
+const CHANNEL_OPTS = [{ v: "telegram", l: "Telegram" }, { v: "whatsapp", l: "WhatsApp" }, { v: "email", l: "Email" }, { v: "webpush", l: "PWA / Push" }];
 const DAYS = [{ v: "1", l: "L" }, { v: "2", l: "M" }, { v: "3", l: "X" }, { v: "4", l: "J" }, { v: "5", l: "V" }, { v: "6", l: "S" }, { v: "7", l: "D" }];
 
 const empty = {

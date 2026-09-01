@@ -4,6 +4,7 @@
 import { Button } from "@/components/ui/button";
 import { Download, Loader2 } from "lucide-react";
 import ExcelJS from "exceljs";
+import { getReportBranding } from "@/app/actions/settings";
 import { useState } from "react";
 import { sileo as toast } from "sileo";
 
@@ -24,6 +25,10 @@ export function ExportUsersButton({ users }: ExportUsersButtonProps) {
     const handleExport = async () => {
         setExporting(true);
         try {
+            let rb: any = {};
+            try { rb = await getReportBranding(); } catch {}
+            const toARGB = (hex: string, fb: string) => { const h = (hex || "").replace("#", ""); return /^[0-9a-fA-F]{6}$/.test(h) ? ("FF" + h.toUpperCase()) : fb; };
+            const cHeader = toARGB(rb?.tableHeader || rb?.primary, "FF1F1F1F");
             const workbook = new ExcelJS.Workbook();
             const worksheet = workbook.addWorksheet("Directorio de Identidades", {
                 views: [{ state: 'frozen', xSplit: 0, ySplit: 1 }]
@@ -53,7 +58,7 @@ export function ExportUsersButton({ users }: ExportUsersButtonProps) {
                 cell.fill = {
                     type: 'pattern',
                     pattern: 'solid',
-                    fgColor: { argb: 'FF1F1F1F' } // Dark gray/black
+                    fgColor: { argb: cHeader }
                 };
                 cell.alignment = { vertical: 'middle', horizontal: 'center' };
                 cell.border = { bottom: { style: 'thin' } };

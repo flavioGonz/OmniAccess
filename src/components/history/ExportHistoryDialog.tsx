@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Calendar as CalendarIcon, Download, Loader2, FileSpreadsheet } from "lucide-react";
 import { getAccessEvents } from "@/app/actions/history";
+import { getReportBranding } from "@/app/actions/settings";
 import ExcelJS from "exceljs";
 
 interface ExportHistoryDialogProps {
@@ -34,6 +35,13 @@ export function ExportHistoryDialog({ open, onOpenChange, filters }: ExportHisto
     const handleExport = async () => {
         setIsExporting(true);
         try {
+            let rb: any = {};
+            try { rb = await getReportBranding(); } catch {}
+            const toARGB = (hex: string, fb: string) => { const h = (hex || "").replace("#", ""); return /^[0-9a-fA-F]{6}$/.test(h) ? ("FF" + h.toUpperCase()) : fb; };
+            const cHeader = toARGB(rb?.tableHeader, "FFC52828");
+            const cStripe = toARGB(rb?.tableStripe, "FFF9FAFB");
+            const cPrimary = toARGB(rb?.primary, "FF6366F1");
+            const repCompany = (rb?.company || "OmniAccess").toUpperCase();
             // Fetch ALL data for the period (no pagination)
             const fromDate = new Date(startDate + "T00:00:00");
             const toDate = new Date(endDate + "T23:59:59");
@@ -56,7 +64,7 @@ export function ExportHistoryDialog({ open, onOpenChange, filters }: ExportHisto
             const worksheet = workbook.addWorksheet("Historial de Accesos");
 
             // 1. Add Filter Summary at the top
-            worksheet.addRow(["REPORTE DE HISTORIAL - OMNIACCESS"]).font = { bold: true, size: 14 };
+            worksheet.addRow([`REPORTE DE HISTORIAL - ${repCompany}`]).font = { bold: true, size: 14 };
             worksheet.addRow([`Generado el: ${new Date().toLocaleString()}`]);
             worksheet.addRow([`Periodo: ${startDate} a ${endDate}`]);
 
@@ -84,7 +92,7 @@ export function ExportHistoryDialog({ open, onOpenChange, filters }: ExportHisto
                 tag: events.filter((e: any) => e.accessType === 'TAG').length,
             };
 
-            worksheet.addRow(["ESTADÍSTICAS DEL PERIODO"]).font = { bold: true, size: 12, color: { argb: "FF6366F1" } };
+            worksheet.addRow(["ESTADÍSTICAS DEL PERIODO"]).font = { bold: true, size: 12, color: { argb: cPrimary } };
             worksheet.addRow([`Total de Eventos: ${stats.total}`]);
             worksheet.addRow([`Entradas: ${stats.entradas} | Salidas: ${stats.salidas}`]);
             worksheet.addRow([`Permitidos: ${stats.permitidos} | Denegados: ${stats.denegados}`]);
@@ -117,7 +125,7 @@ export function ExportHistoryDialog({ open, onOpenChange, filters }: ExportHisto
             headerRow.fill = {
                 type: "pattern",
                 pattern: "solid",
-                fgColor: { argb: "FFC52828" } // Red-600
+                fgColor: { argb: cHeader }
             };
             headerRow.alignment = { vertical: "middle", horizontal: "center" };
             headerRow.height = 25;
@@ -149,7 +157,7 @@ export function ExportHistoryDialog({ open, onOpenChange, filters }: ExportHisto
                     row.fill = {
                         type: 'pattern',
                         pattern: 'solid',
-                        fgColor: { argb: 'FFF9FAFB' } // Very light gray (neutral-50)
+                        fgColor: { argb: cStripe }
                     };
                 }
 

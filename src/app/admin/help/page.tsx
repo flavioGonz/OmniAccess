@@ -96,7 +96,7 @@ export default function HelpPage() {
     };
 
     if (loading) return (
-        <div className="h-full flex items-center justify-center bg-[#0a0a0a]">
+        <div className="h-full flex items-center justify-center bg-background">
             <Activity className="animate-spin text-blue-500" size={40} />
         </div>
     );

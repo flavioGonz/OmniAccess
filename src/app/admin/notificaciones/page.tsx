@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import {
     Send, Save, TestTube2, RefreshCw, Mail, Webhook, MessageCircle,
-    AlertTriangle, Check, ChevronDown, Radio, Activity, ShieldCheck, Users, Calendar, FileText,
+    AlertTriangle, Check, ChevronDown, Radio, Activity, ShieldCheck, Users, Calendar, FileText, Smartphone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,6 +70,14 @@ const CHANNELS: DispatchChannel[] = [
             { key: "DISPATCH_WEBHOOK_SECRET", label: "Secret Header (opcional)", placeholder: "Bearer xxx", secret: true },
         ],
     },
+    {
+        key: "pwa",
+        label: "PWA noti (Web Push)",
+        icon: <Smartphone size={18} />,
+        accent: "#6366f1",
+        description: "Notificaciones push a la app instalada (navegador y móvil)",
+        fields: [],
+    },
 ];
 
 import RulesManager from "./RulesManager";
@@ -77,6 +85,7 @@ import TemplatesManager from "./TemplatesManager";
 import RecipientsManager from "./RecipientsManager";
 import AnimatedAlertToggle from "./AnimatedAlertToggle";
 import SchedulesManager from "./SchedulesManager";
+import SubscribersManager from "./SubscribersManager";
 
 const TABS = [
     { k: "canales", l: "Canales", icon: Radio },
@@ -84,6 +93,7 @@ const TABS = [
     { k: "reglas", l: "Reglas", icon: Activity },
     { k: "horarios", l: "Horarios", icon: Calendar },
     { k: "plantillas", l: "Plantillas", icon: FileText },
+    { k: "suscriptores", l: "Suscriptores", icon: Smartphone },
 ];
 
 export default function NotificacionesPage() {
@@ -121,7 +131,7 @@ export default function NotificacionesPage() {
 
     useEffect(() => { loadData(); }, [loadData]);
 
-    const isConfigured = (ch: DispatchChannel) => ch.fields.some(f => (values[f.key] || "").trim().length > 0);
+    const isConfigured = (ch: DispatchChannel) => ch.key === "pwa" ? true : ch.fields.some(f => (values[f.key] || "").trim().length > 0);
 
     const saveChannel = async (channelKey: string) => {
         setSaving(channelKey);
@@ -153,6 +163,13 @@ export default function NotificacionesPage() {
     const testChannel = async (channelKey: string) => {
         setTesting(channelKey);
         try {
+            if (channelKey === "pwa") {
+                const r = await fetch("/api/push/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+                const d = await r.json().catch(() => ({}));
+                if (r.ok && d.sent) toast.success(`Prueba enviada a ${d.sent} suscriptor(es)`); else toast.error("Sin suscriptores activos o push no configurado");
+                setTesting(null);
+                return;
+            }
             await saveChannel(channelKey);
             const res = await fetch("/api/queue/test-dispatch", {
                 method: "POST",
@@ -280,6 +297,9 @@ export default function NotificacionesPage() {
                                     <div className={cn("grid transition-all duration-300", isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0")}>
                                         <div className="overflow-hidden">
                                             <div className="px-4 pb-4 pt-1 border-t border-border space-y-4">
+                                                {ch.key === "pwa" && (
+                                                    <p className="text-xs text-muted-foreground pt-3 leading-relaxed">Envía notificaciones push a los navegadores y móviles que instalaron la PWA de Filas y activaron las notificaciones. Identificá y gestioná los suscriptores en la pestaña <b className="text-foreground">Suscriptores</b>.</p>
+                                                )}
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3">
                                                     {ch.fields.map((field) => (
                                                         <div key={field.key} className={field.span === 2 ? "md:col-span-2" : ""}>
@@ -325,6 +345,7 @@ export default function NotificacionesPage() {
                 {tab === "reglas" && (<div className="max-w-4xl"><RulesManager /></div>)}
                 {tab === "horarios" && (<div className="max-w-4xl"><SchedulesManager /></div>)}
                 {tab === "plantillas" && (<div className="max-w-4xl"><TemplatesManager /></div>)}
+                {tab === "suscriptores" && (<div className="max-w-3xl"><SubscribersManager /></div>)}
             </div>
 
             {/* Footer note */}

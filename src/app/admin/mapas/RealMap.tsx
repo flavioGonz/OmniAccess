@@ -44,7 +44,7 @@ function MapVideoTile({ ip, name, aforo, col }: { ip: string; name: string; afor
         return () => { stopped = true; v.removeEventListener("error", onErr); v.removeEventListener("progress", onProg); v.pause(); v.removeAttribute("src"); v.load(); };
     }, [ip]);
     return (
-        <div className="relative rounded-lg overflow-hidden border-2 shadow-xl bg-black" style={{ borderColor: col, width: 150, height: 86 }}>
+        <div className="relative rounded-lg overflow-hidden border-2 shadow-xl vid-surface" style={{ borderColor: col, width: 150, height: 86 }}>
             {!failed ? <video ref={ref} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-cover" /> : <div className="absolute inset-0 flex items-center justify-center text-white/40 text-[10px]">Reconectando…</div>}
             <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-black/60 text-[8px] font-semibold text-white max-w-[118px] truncate">{name}</div>
             <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-white font-black text-base leading-none tabular-nums" style={{ background: col + "dd" }}>{aforo}</div>

@@ -693,3 +693,58 @@
     --tw-exit-translate-x: calc(--value(--translate-*, [percentage], [length])*-1);
   }
 }
+
+@keyframes capscan {
+  0% { top: -4px; opacity: 0; }
+  12% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+
+/* Ocultar el botón de Chromecast/AirPlay nativo que el navegador inyecta sobre los <video> */
+video::-webkit-media-controls-overlay-cast-button,
+video::-internal-media-controls-overlay-cast-button { display: none !important; opacity: 0 !important; }
+video::-webkit-media-controls { display: none !important; }
+
+
+/* ── Ventana de video: fondo claro en modo light + skeleton loader mientras carga ── */
+.vid-surface { position: relative; background-color: #e7e9ec; overflow: hidden; }
+.dark .vid-surface { background-color: #0b0b0c; }
+/* Skeleton shimmer detras del contenido (::before); NO reposiciona hijos, para no romper overlays absolute (poligonos VCA, aforo). */
+.vid-surface::before {
+    content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    background: linear-gradient(100deg, transparent 30%, rgba(0,0,0,0.07) 50%, transparent 70%);
+    background-size: 220% 100%; animation: vidshimmer 1.25s linear infinite; opacity: 1; transition: opacity .5s ease;
+}
+.dark .vid-surface::before { background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,0.06) 50%, transparent 70%); background-size: 220% 100%; }
+/* Hide the skeleton shimmer once a media element inside has loaded (data-ready=1). */
+.vid-surface:has([data-ready="1"])::before { opacity: 0; animation: none; }
+
+/* ===== Camera shutter / iris capture animation (live video tiles) ===== */
+@property --iris { syntax: "<percentage>"; inherits: false; initial-value: 80%; }
+@keyframes irisShot {
+    0%   { --iris: 82%; }
+    40%  { --iris: 0%; }
+    56%  { --iris: 0%; }
+    100% { --iris: 82%; }
+}
+@keyframes irisSnap {
+    0%, 34% { background-color: rgba(255,255,255,0); }
+    46%     { background-color: rgba(255,255,255,0.55); }
+    66%,100%{ background-color: rgba(255,255,255,0); }
+}
+.iris-shot {
+    position: absolute; inset: 0; z-index: 30; pointer-events: none; border-radius: inherit; overflow: hidden;
+    background: radial-gradient(circle at 50% 50%,
+        transparent calc(var(--iris) - 1.5%),
+        rgba(255,255,255,0.85) var(--iris),
+        rgba(0,0,0,0.62) calc(var(--iris) + 1.5%));
+    animation: irisShot 0.72s ease-in-out;
+}
+.iris-shot::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit;
+    background-color: rgba(255,255,255,0);
+    animation: irisSnap 0.72s ease-out;
+}
+
+@keyframes vidshimmer { 0% { background-position: 220% 0; } 100% { background-position: -220% 0; } }

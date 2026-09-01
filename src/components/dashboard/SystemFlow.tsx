@@ -20,7 +20,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import FloatingEdge from './flow/FloatingEdge';
-import { Database, Server, Smartphone, HardDrive, ShieldCheck, Video, Globe, MessageSquare, Monitor, Webhook, Camera, Copy, Check } from 'lucide-react';
+import { Database, Server, Smartphone, HardDrive, ShieldCheck, Video, Globe, MessageSquare, Film, Zap, Monitor, Webhook, Camera, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import axios from 'axios';
 import { io } from 'socket.io-client';
@@ -149,6 +149,20 @@ const initialNodes: Node[] = [
         style: { background: '#1e1e24', color: '#fff', border: '2px solid #3b82f6', width: 220, borderRadius: 12, padding: 12 },
         type: 'default',
     },
+    {
+        id: 'redis',
+        data: { label: 'Cola & Cache', icon: Zap, sub: 'Redis 8 + BullMQ', ip: '127.0.0.1', port: '6379', status: 'connected' },
+        position: { x: 700, y: 450 },
+        style: { background: '#1e1e24', color: '#fff', border: '2px solid #f59e0b', width: 200, borderRadius: 12, padding: 12 },
+        type: 'default',
+    },
+    {
+        id: 'media',
+        data: { label: 'Media & Clips', icon: Film, sub: 'ffmpeg + go2rtc', ip: '127.0.0.1', port: '1984', status: 'connected' },
+        position: { x: 100, y: 640 },
+        style: { background: '#1e1e24', color: '#fff', border: '2px solid #a855f7', width: 200, borderRadius: 12, padding: 12 },
+        type: 'default',
+    },
 ];
 
 // Dynamic webhook driver nodes with images
@@ -214,6 +228,8 @@ export default function SystemFlow() {
                     { id: 'e-postgres', source: 'lpr-node', target: 'postgres', type: 'floating', animated: true, data: { latency: 0, status: 'unknown' } },
                     { id: 'e-minio', source: 'lpr-node', target: 'minio', type: 'floating', animated: true, data: { latency: 0, status: 'unknown' } },
                     { id: 'e-waha', source: 'lpr-node', target: 'waha', type: 'floating', animated: true, data: { latency: 0, status: 'unknown' } },
+                    { id: 'e-redis', source: 'lpr-node', target: 'redis', type: 'floating', animated: true, data: { latency: 0, status: 'unknown' } },
+                    { id: 'e-media', source: 'lpr-node', target: 'media', type: 'floating', animated: true, data: { latency: 0, status: 'unknown' } },
                     { id: 'e-webhook-core', source: 'webhook-api', target: 'lpr-node', type: 'floating', animated: false, data: { latency: 0, status: 'idle' } },
                     ...webhookDrivers.map(driver => ({
                         id: `e-${driver.id}`,
@@ -507,6 +523,9 @@ export default function SystemFlow() {
                             if (parts.length > 1) port = parts[1];
                         }
                     } else if (node.id === 'lpr-node') {
+                        nodeStatus = 'connected';
+                        borderColor = '#22c55e';
+                    }  else if (node.id === 'redis' || node.id === 'media') {
                         nodeStatus = 'connected';
                         borderColor = '#22c55e';
                     }

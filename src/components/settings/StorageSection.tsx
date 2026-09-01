@@ -30,7 +30,8 @@ export default function StorageSection() {
         accessKey: "",
         secretKey: "",
         bucketLpr: "lpr",
-        bucketFace: "face"
+        bucketFace: "face",
+        bucketQueue: "lpr"
     });
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -62,7 +63,8 @@ export default function StorageSection() {
                 accessKey: ak?.value || "",
                 secretKey: sk?.value || "",
                 bucketLpr: bl?.value || "lpr",
-                bucketFace: bf?.value || "face"
+                bucketFace: bf?.value || "face",
+                bucketQueue: ((await getSetting("S3_BUCKET_QUEUE"))?.value) || bl?.value || "lpr"
             });
 
             // Load stats
@@ -160,6 +162,7 @@ export default function StorageSection() {
                 updateSetting("S3_SECRET_KEY", s3.secretKey),
                 updateSetting("S3_BUCKET_LPR", s3.bucketLpr),
                 updateSetting("S3_BUCKET_FACE", s3.bucketFace),
+                updateSetting("S3_BUCKET_QUEUE", s3.bucketQueue),
                 updateBucketLifecycle(s3.bucketLpr, lifecycle.lpr),
                 updateBucketLifecycle(s3.bucketFace, lifecycle.face)
             ]);
@@ -194,7 +197,8 @@ export default function StorageSection() {
                 updateSetting("S3_ACCESS_KEY", config.accessKey),
                 updateSetting("S3_SECRET_KEY", config.secretKey),
                 updateSetting("S3_BUCKET_LPR", config.bucketLpr),
-                updateSetting("S3_BUCKET_FACE", config.bucketFace)
+                updateSetting("S3_BUCKET_FACE", config.bucketFace),
+                updateSetting("S3_BUCKET_QUEUE", config.bucketQueue)
             ]);
             toast.success({ title: "Configuración de almacenamiento guardada" });
         } catch (err) {
@@ -400,6 +404,15 @@ export default function StorageSection() {
                                         value={config.bucketFace}
                                         onChange={e => setConfig({ ...config, bucketFace: e.target.value })}
                                         className="bg-black/40 border-white/5 h-10 text-sm font-mono"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-black uppercase text-amber-400/80 ml-1">Bucket Filas (modo cola)</Label>
+                                    <Input
+                                        placeholder="lpr-prod"
+                                        value={config.bucketQueue}
+                                        onChange={e => setConfig({ ...config, bucketQueue: e.target.value })}
+                                        className="bg-black/40 border-amber-500/20 h-10 text-sm font-mono"
                                     />
                                 </div>
                             </div>

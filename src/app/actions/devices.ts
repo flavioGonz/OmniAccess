@@ -759,3 +759,15 @@ export async function deleteDevicePosition(id: string) {
         return { success: false };
     }
 }
+
+export async function getAvailableStreams(): Promise<string[]> {
+    try {
+        const base = process.env.GO2RTC_API || "http://127.0.0.1:1984";
+        const res = await fetch(`${base}/api/streams`, { cache: "no-store" });
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data && typeof data === "object" ? Object.keys(data) : [];
+    } catch {
+        return [];
+    }
+}

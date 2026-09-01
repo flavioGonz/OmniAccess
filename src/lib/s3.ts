@@ -73,7 +73,7 @@ export async function uploadToS3(
     fileBuffer: Buffer | ArrayBuffer,
     filename: string,
     contentType: string,
-    bucketType: "lpr" | "face" = "lpr"
+    bucketType: "lpr" | "face" | "queue" = "lpr"
 ) {
     const config = await getS3Config();
 
@@ -87,7 +87,10 @@ export async function uploadToS3(
         forcePathStyle: true,
     });
 
-    const bucketName = bucketType === "lpr" ? config.bucketLpr : config.bucketFace;
+    let bucketName = bucketType === "face" ? config.bucketFace : config.bucketLpr;
+    if (bucketType === "queue") {
+        try { const q = await prisma.setting.findUnique({ where: { key: "S3_BUCKET_QUEUE" } }); if (q?.value) bucketName = q.value; } catch {}
+    }
 
     try {
         const upload = new Upload({

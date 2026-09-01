@@ -107,7 +107,7 @@ export default function CredentialsPage() {
                 </div>
             </header>
 
-            <div className="border border-border rounded-3xl overflow-hidden bg-[#0c0c0c] shadow-2xl">
+            <div className="border border-border rounded-3xl overflow-hidden bg-card shadow-2xl">
                 <Table>
                     <TableHeader className="bg-card/80">
                         <TableRow className="border-border hover:bg-transparent">

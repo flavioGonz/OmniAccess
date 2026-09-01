@@ -7,14 +7,6 @@
     }
   },
   {
-    "endpoint": "https://wns2-bl2p.notify.windows.com/w/?token=BQYAAAAXlyXElzQ%2f0saFbWGLjS0yvLN3gnOWnaxadv3m8VYYSKiCzDvfLdUfITmH5RpYJMsMw6bgRojFXc8WiD9rgnTpOEF4ghCRr49WnVrmHSJMthPw6o8PvUV%2fZ9m0CF56R0IdKtRfoM6rfXcnNtlaeVWz9lLBG0L3mYq3NkvzdbHZF0L2rm6uODZvzlnzBM%2fv8hLIg1A9Abt8a%2faouJz3MNLb7mdjyEj9Q9zRxRlsmsNMvTjuerTby9UN35hnFmoWS7uhoisrh1sW%2bruwUr%2fGQYzrS96aNANJjzvIaIjMxNcQsN%2fU8%2fAbU4gVHQqmFWra4UCvnw%2bA7yvZyorhsz5Ik5B3",
-    "expirationTime": null,
-    "keys": {
-      "p256dh": "BECF5iNfGHStxatkeheq8y1ZTsMmDUAv9xtgqapy3ARl4N7qHM9CtwVfhMxd5JDCFIYKJma0ApyUHeC0oGFqTzk",
-      "auth": "QNH3Tl3MV7kY6Smxz-FOhA"
-    }
-  },
-  {
     "endpoint": "https://web.push.apple.com/QET0t_YZtuojcLl3_dh3-T0uht_p6kaU6kS3cdU06GqxJCIgj7AKUUeGD-y25suWUKpZncpBiE4snQuB_jP2CIfdQPx_fX8RbekGcBZ079AzUykAqjcsWPr1kR2dc1WuL4Ey82HsA0pbckqdQcxppHDT-g98c4rjHBexf25tf2g",
     "keys": {
       "p256dh": "BMLobk_F_yJiZV2kW-ucxNZc9kix5oFj7PsMezbKJwxWP39WNSSzQLbeL7VK5LCnx_wUqhnsaJLxJCghMgIYFu0",
@@ -27,7 +19,8 @@
     "keys": {
       "p256dh": "BAsVZE64V5Q03Z4IUjQeUoVK9AoNgd-C5tX1vZ62K9peak6deUlByTQsYRRPFkc4HiRsM3D4w_K1BdrMaMUS7Vs",
       "auth": "YFIODHcQzGqLpa-19Shwdg"
-    }
+    },
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
   },
   {
     "endpoint": "https://fcm.googleapis.com/fcm/send/fyb_uycAGpo:APA91bEU2QHkLsrn8qSqJ9A5hlkx4F9aWVTL22411EQ-2zsuVI2ga5ObRi-QqrzLYcnrHL33o4MGBAU9YVye9KR0m60q0qXaD4QbDdImkxoji3x1-mK_ud3_ERyzkqbLkkEocmLhbuQl",
@@ -35,7 +28,8 @@
     "keys": {
       "p256dh": "BD65Ji83Zvn_rvxnUqXNKKfJlEqrO_j2caaKx7Bs6n1VRghxCgciwYxfvOKoIcOx1Y-9g4M_12fZncC7yt1euto",
       "auth": "C6W_zfLwrogWmLlQGoRNUQ"
-    }
+    },
+    "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
   },
   {
     "endpoint": "https://web.push.apple.com/QMW9sD4rnyw7QEygwfXsL2AAzMD0s4ENPpwmDYMbuAqE8BvaSZHOyFgqGao-6dAoRwlr-X6oEexR1tlFiZJ5BSxP_PAt9fOI80sdgDVFPgETBmmuxMBnxAdh0PvZO3SvJJ5a_vdM5ITm6tlBcXHCeMuKiEOUFMRBz3-72ErdDOM",
@@ -43,5 +37,26 @@
       "p256dh": "BIpQhoLuFcrQxYYTGGfTTXzhjvtgPJETA1O50akTjSd2iixCnEK5CXk4sT_0JvDHZhHnS8pioDPjnxdc7Ipt95Q",
       "auth": "Xz7OQXhzUiND4-dOhwebAA"
     }
+  },
+  {
+    "endpoint": "https://web.push.apple.com/QIKSiEfofrTgWkcWCXgJyew-wZqABgVOa1Tt1RynM8i_ShbEa2A83TQUDoW9eGXmoIMnpzhRcwa2steviC93nLF7l-J03RPxM4uqHuRXJTtLVNmcMLNWYzT01AAvoBrg1vbq0_jH0N-oH6Wmje01Z_IrfgBakhVQ4GAj7bAjJFI",
+    "keys": {
+      "p256dh": "BIdBqxltMJWgikeCmTZtWJdc2SNtHv2sRyyERgAaXXF-O9jDFkh00UMeQtTZvXv9VgeoOGpEcTAQxp3R775BLgs",
+      "auth": "W4oezjgclEsahKc1Yp7QGg"
+    },
+    "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Mobile/15E148 Safari/604.1",
+    "createdAt": "2026-05-31T19:04:40.894Z",
+    "enabled": true
+  },
+  {
+    "endpoint": "https://fcm.googleapis.com/fcm/send/cqJKIQZYs60:APA91bFjmF589-zgE79lsbous9D91ABu85JAx9NkS8f8dWKVmfZ4GB3yl_UljFDobZzGrzAw7lop5gZAostBrDuUjn80GpF6idLW7weHbBgwGbOeyg2te6d-uKQw-8e95ZyGjwRUDmFK",
+    "expirationTime": null,
+    "keys": {
+      "p256dh": "BMZy01nfLOGOoJoXkbda6je0TOYrB0d8F4R6_SSYOrtRGotkCVR9W9f-mtxTXZfhZUf1cTB7gAM3sdeUAgD6-Ak",
+      "auth": "BqogTPYSA2kRRfGOByBE7w"
+    },
+    "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "createdAt": "2026-08-14T14:56:14.185Z",
+    "enabled": true
   }
 ]

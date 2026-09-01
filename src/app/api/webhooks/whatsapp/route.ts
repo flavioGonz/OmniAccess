@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendWahaText, sendWahaImage } from '@/lib/whatsapp';
+import { getQueueDevices, getLatestQueueCounts, getQueueAlerts } from '@/app/actions/queue';
 import { getSetting, updateSetting, getS3InternalClient } from '@/app/actions/settings';
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { Readable } from 'stream';
@@ -16,6 +17,8 @@ async function streamToBuffer(stream: Readable): Promise<Buffer> {
         stream.on('end', () => resolve(Buffer.concat(chunks)));
     });
 }
+
+function waDigits(s: string): string { return (s || '').replace(/\D/g, ''); }
 
 function extractS3Key(path: string | null): string | null {
     if (!path) return path;
@@ -67,7 +70,89 @@ export async function POST(req: Request) {
             return NextResponse.json({ status: 'ignored' });
         }
 
+        // Kill-switch global: chatbot desactivado desde Settings
+        const _cbEnabled = await getSetting('CHATBOT_ENABLED');
+        if (_cbEnabled?.value === 'false') {
+            await logToHistory(from, messageBody, 'ignored', 'Chatbot disabled globally');
+            return NextResponse.json({ status: 'ignored', reason: 'chatbot_disabled' });
+        }
+
+        // Capturar JIDs de grupos vistos (para el selector de destinatarios) — no bloqueante
+        if (typeof from === 'string' && from.endsWith('@g.us')) {
+            try {
+                const rawG = await getSetting('WHATSAPP_SEEN_GROUPS');
+                let seen: any[] = [];
+                try { seen = JSON.parse(rawG?.value || '[]'); } catch {}
+                const gname = (msg.chat?.name || msg.groupName || msg.chatName || msg.notifyName || '').toString().trim();
+                const gi = seen.findIndex((g: any) => g.id === from);
+                if (gi >= 0) { if (gname) seen[gi].name = gname; seen[gi].ts = Date.now(); }
+                else seen.unshift({ id: from, name: gname || from, ts: Date.now() });
+                await updateSetting('WHATSAPP_SEEN_GROUPS', JSON.stringify(seen.slice(0, 30)));
+            } catch {}
+        }
+
+        // ─── SEGURIDAD: lista blanca de remitentes (evita fuga de datos) ───
+        // Solo procesa mensajes de números/grupos autorizados cuando está habilitada.
+        try {
+            const allowEnabled = (await getSetting('WHATSAPP_ALLOWLIST_ENABLED'))?.value === 'true';
+            if (allowEnabled) {
+                let allow: string[] = [];
+                try { allow = JSON.parse((await getSetting('WHATSAPP_ALLOWLIST'))?.value || '[]'); } catch {}
+                const isGroup = typeof from === 'string' && from.endsWith('@g.us');
+                const fromD = waDigits(from);
+                const ok = (allow || []).some((entry: any) => {
+                    const e = String(entry || '').trim();
+                    if (!e) return false;
+                    if (e === from) return true; // identidad exacta (cubre @lid y @c.us)
+                    if (isGroup) return waDigits(e) === fromD;
+                    const ed = waDigits(e);
+                    if (!ed || !fromD) return false;
+                    const a = fromD.slice(-8), b = ed.slice(-8);
+                    return a.length >= 6 && a === b;
+                });
+                if (!ok) {
+                    await logToHistory(from, messageBody, 'blocked', 'Remitente no autorizado (lista blanca)');
+                    return NextResponse.json({ status: 'blocked' });
+                }
+            }
+        } catch (e) {
+            console.error('Allowlist check error:', e);
+        }
+
         const lowerMsg = messageBody.toLowerCase().trim();
+
+        // ─── COMANDOS DE CONTROL DE FILAS (aforo / filas / estado) ───
+        if (/^(aforo|filas|estado|ocupaci[oó]n|cola|espera)\b/i.test(lowerMsg)) {
+            try {
+                const [qDevs, qCounts, qAlerts]: any[] = await Promise.all([getQueueDevices(), getLatestQueueCounts(), getQueueAlerts()]);
+                if (!qDevs || qDevs.length === 0) {
+                    await sendWahaText(from, "\uD83D\uDCCA No hay filas configuradas en el sistema.");
+                    await logToHistory(from, messageBody, 'queue_status', 'no queues');
+                    return NextResponse.json({ status: 'queue_empty' });
+                }
+                const OCC = ["Aforo", "IVA Aforo", "Occupancy", "Ocupación"];
+                let total = 0;
+                let msg = "\uD83D\uDCCA *Aforo en vivo — Control de Filas*\n\n";
+                for (const d of qDevs) {
+                    const c = (qCounts || []).find((x: any) => x.device?.id === d.id);
+                    const ch = c ? (c.channels || []).find((x: any) => OCC.includes(x.channelName)) : null;
+                    const aforo = ch ? ch.peopleCount : 0;
+                    total += aforo;
+                    const al = (qAlerts || []).find((a: any) => a.deviceId === d.id);
+                    const thr = al ? al.threshold : null;
+                    const emoji = thr ? (aforo >= thr ? "\uD83D\uDD34" : aforo >= thr * 0.7 ? "\uD83D\uDFE1" : "\uD83D\uDFE2") : "⚪";
+                    msg += `${emoji} *${d.name}*: ${aforo}${thr ? ` / ${thr}` : ""} personas\n`;
+                }
+                msg += `\n👥 *Total*: ${total} personas\n_Escribí *aforo* para actualizar._`;
+                await sendWahaText(from, msg);
+                await logToHistory(from, messageBody, 'queue_status', `aforo total ${total}`);
+                return NextResponse.json({ status: 'queue_status' });
+            } catch (e: any) {
+                await sendWahaText(from, "❌ No pude obtener el aforo en este momento.");
+                await logToHistory(from, messageBody, 'queue_error', String(e?.message || e));
+                return NextResponse.json({ status: 'queue_error' });
+            }
+        }
 
         // ---------------------------------------------------------
         // 0. URGENT TRIGGERS (Direct Commands)

@@ -100,10 +100,10 @@ export default function StorageBrowser() {
                     ) : (filteredFolders.length === 0 && filteredObjects.length === 0) ? (
                         <div className="py-10 text-center text-sm text-muted-foreground flex flex-col items-center gap-2"><Folder size={22} className="opacity-40" /> Carpeta vacía.</div>
                     ) : (
-                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                        <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-12 gap-1.5">
                             {filteredFolders.map((fp) => (
                                 <button key={fp} onClick={() => goto(fp)} className="aspect-square rounded-lg border border-border bg-muted/40 hover:bg-accent flex flex-col items-center justify-center gap-1 p-2 transition">
-                                    <Folder size={22} className="text-amber-400" />
+                                    <Folder size={16} className="text-amber-400" />
                                     <span className="text-[9px] text-foreground/80 truncate w-full text-center">{baseName(fp)}</span>
                                 </button>
                             ))}
@@ -111,8 +111,9 @@ export default function StorageBrowser() {
                                 const href = `/api/files/${bucket}/${encodeURIComponent(o.key)}`;
                                 return (
                                     <a key={o.key} href={href} target="_blank" rel="noreferrer" title={`${baseName(o.key)} · ${fmtSize(o.size)}`} className="group relative aspect-square rounded-lg overflow-hidden border border-border bg-black flex items-center justify-center">
-                                        {isImg(o.key) ? <img src={href} alt="" loading="lazy" className="w-full h-full object-cover" /> : <FileText size={20} className="text-muted-foreground" />}
-                                        <span className="absolute inset-x-0 bottom-0 px-1 py-0.5 bg-black/65 text-[8px] text-white truncate opacity-0 group-hover:opacity-100 transition">{baseName(o.key)}</span>
+                                        {isImg(o.key) ? <img src={href} alt="" loading="lazy" className="w-full h-full object-cover" /> : <FileText size={18} className="text-muted-foreground" />}
+                                        <span className="absolute inset-x-0 bottom-0 px-1 pt-2 pb-0.5 bg-gradient-to-t from-black/85 to-transparent text-[7px] leading-tight text-white/90 truncate">{baseName(o.key)}</span>
+                                        <span className="absolute top-0 right-0 px-1 py-0.5 bg-black/55 text-[7px] text-white/80 rounded-bl">{fmtSize(o.size)}</span>
                                     </a>
                                 );
                             })}

@@ -41,7 +41,10 @@ import {
     PhoneCall,
     DoorClosed,
     Calendar,
-    ScanFace
+    ScanFace,
+    Filter,
+    Wifi,
+    WifiOff
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -71,6 +74,13 @@ import {
 } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 
+const TYPE_META: Record<string, { l: string; c: string; icon: any }> = {
+    LPR_CAMERA: { l: "LPR", c: "#3b82f6", icon: Camera },
+    FACE_TERMINAL: { l: "Facial", c: "#a855f7", icon: ScanFace },
+    QUEUE_COUNTER: { l: "Fila", c: "#f59e0b", icon: Activity },
+    DEFAULT: { l: "Otro", c: "#64748b", icon: Network },
+};
+
 export default function AuditPage() {
     const [devices, setDevices] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -92,6 +102,13 @@ export default function AuditPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [filterDecision, setFilterDecision] = useState<string>("ALL");
     const [filterType, setFilterType] = useState<string>("ALL");
+
+    // Device-list filter state (table)
+    const [showFilters, setShowFilters] = useState(false);
+    const [searchDev, setSearchDev] = useState("");
+    const [filterBrand, setFilterBrand] = useState("");
+    const [filterTypeDev, setFilterTypeDev] = useState("");
+    const [filterStatus, setFilterStatus] = useState("");
 
     // Sync Preview State
     const [previewDevice, setPreviewDevice] = useState<any | null>(null);
@@ -327,159 +344,157 @@ export default function AuditPage() {
         return matchesSearch;
     });
 
+    const isDevOnline = (d: any) => (Date.now() - new Date(d.lastOnlinePull || 0).getTime()) < 300000;
+    const onlineCount = devices.filter(isDevOnline).length;
+    const syncableCount = devices.filter(d => d.brand === 'AKUVOX').length;
+    const brands = Array.from(new Set(devices.map(d => d.brand).filter(Boolean)));
+    const filteredDevices = devices.filter(d => {
+        const q = searchDev.toLowerCase();
+        const matchesSearch = !q || (d.name || "").toLowerCase().includes(q) || (d.ip || "").toLowerCase().includes(q);
+        const matchesBrand = !filterBrand || d.brand === filterBrand;
+        const matchesType = !filterTypeDev || d.deviceType === filterTypeDev;
+        const matchesStatus = !filterStatus || (filterStatus === "online" ? isDevOnline(d) : !isDevOnline(d));
+        return matchesSearch && matchesBrand && matchesType && matchesStatus;
+    });
+
     return (
         <TooltipProvider>
-            <div className="p-6 h-full flex flex-col space-y-8 animate-in fade-in duration-700 overflow-hidden">
-                {/* Professional Header */}
-                <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 p-4 rounded-3xl">
-                    <div className="flex items-center gap-6">
-                        <div className="p-4 bg-blue-500/10 rounded-2xl border border-blue-500/20 shadow-inner group transition-all hover:scale-110">
-                            <ShieldCheck className="text-blue-400 group-hover:rotate-[15deg] transition-transform duration-500" size={32} />
+            <div className="p-6 space-y-4 animate-in fade-in duration-500">
+                {/* HEADER */}
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                            <ShieldCheck size={18} className="text-blue-400" />
                         </div>
                         <div>
-                            <h1 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400 uppercase tracking-tight">
-                                Auditoría de Hardware
-                            </h1>
-                            <p className="text-sm text-muted-foreground font-medium tracking-tight">Control integral de registros locales y sincronización forzada.</p>
+                            <h1 className="text-lg font-bold text-foreground tracking-tight">Auditoria de Hardware</h1>
+                            <p className="text-[11px] text-muted-foreground font-mono">{devices.length} dispositivos - registros locales y sincronizacion</p>
                         </div>
                     </div>
-                    <div className="flex gap-3">
-                        <Button
-                            variant="outline"
-                            onClick={loadData}
-                            disabled={loading}
-                            className="bg-card border-border text-muted-foreground hover:text-foreground font-bold uppercase tracking-widest text-[10px] h-12 rounded-xl"
-                        >
-                            <RefreshCw size={14} className={cn("mr-2", loading && "animate-spin")} />
-                            Actualizar
+                    <div className="flex items-center gap-1.5">
+                        <Button variant="ghost" size="sm" onClick={() => setShowFilters(x => !x)}
+                            className={cn("h-8 gap-1.5 text-xs", showFilters ? "text-blue-400" : "text-muted-foreground hover:text-foreground")}>
+                            <Filter size={12} /> Filtros
                         </Button>
-                        <Button
-                            onClick={() => toast.info("Función de pull masivo deshabilitada temporalmente por seguridad")}
-                            disabled={loading}
-                            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-foreground font-black uppercase tracking-widest text-xs h-12 px-8 rounded-xl shadow-xl shadow-blue-900/20"
-                        >
-                            <Zap size={16} className="mr-2 fill-current" />
-                            Pull Automático
+                        <Button variant="ghost" size="sm" onClick={loadData} disabled={loading} className="h-8 text-muted-foreground hover:text-foreground">
+                            <RefreshCw size={12} className={cn(loading && "animate-spin")} />
                         </Button>
                     </div>
-                </header>
+                </div>
 
-                <div className="flex-1 bg-black/40 border border-white/5 rounded-3xl overflow-hidden flex flex-col mt-0 shadow-2xl backdrop-blur-sm">
-                    <div className="flex-1 overflow-auto custom-scrollbar">
-                        <Table>
-                            <TableHeader className="bg-card/40 sticky top-0 z-10 backdrop-blur-md border-b border-border">
-                                <TableRow className="hover:bg-transparent border-none">
-                                    <TableHead className="text-muted-foreground font-black tracking-widest py-6 px-8 uppercase text-[10px]">Identificación & Marca</TableHead>
-                                    <TableHead className="text-muted-foreground font-black tracking-widest uppercase text-[10px]">Direccionamiento IP</TableHead>
-                                    <TableHead className="text-muted-foreground font-black tracking-widest uppercase text-[10px]">Ubicación & Punto</TableHead>
-                                    <TableHead className="text-muted-foreground font-black tracking-widest uppercase text-[10px]">Estado de Sincro</TableHead>
-                                    <TableHead className="text-right text-muted-foreground font-black tracking-widest pr-12 uppercase text-[10px]">Control de Auditoría</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {devices.map(dev => {
-                                    const isOnline = (Date.now() - new Date(dev.lastOnlinePull || 0).getTime()) < 300000;
+                {/* KPIs */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="rounded-xl border border-border bg-foreground/[0.04] p-4"><div className="flex items-center gap-1.5 text-[9px] text-muted-foreground font-mono uppercase mb-1"><HardDrive size={11} /> Dispositivos</div><div className="text-2xl font-black text-foreground/80 tabular-nums">{devices.length}</div></div>
+                    <div className="rounded-xl border border-emerald-500/10 bg-emerald-500/[0.03] p-4"><div className="flex items-center gap-1.5 text-[9px] text-emerald-400/60 font-mono uppercase mb-1"><Wifi size={11} /> En linea</div><div className="text-2xl font-black text-emerald-400 tabular-nums">{onlineCount}</div></div>
+                    <div className="rounded-xl border border-rose-500/10 bg-rose-500/[0.03] p-4"><div className="flex items-center gap-1.5 text-[9px] text-rose-400/60 font-mono uppercase mb-1"><WifiOff size={11} /> Sin link</div><div className="text-2xl font-black text-rose-400 tabular-nums">{devices.length - onlineCount}</div></div>
+                    <div className="rounded-xl border border-blue-500/10 bg-blue-500/[0.03] p-4"><div className="flex items-center gap-1.5 text-[9px] text-blue-400/60 font-mono uppercase mb-1"><DownloadCloud size={11} /> Sincronizables</div><div className="text-2xl font-black text-blue-400 tabular-nums">{syncableCount}</div></div>
+                </div>
+
+                {/* FILTERS */}
+                {showFilters && (
+                    <div className="rounded-xl border border-blue-500/10 bg-blue-500/[0.02] p-4 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                        <div className="flex items-center gap-2 mb-1"><Filter size={12} className="text-blue-400" /><span className="text-[10px] text-blue-400/70 font-mono uppercase tracking-wider">Filtros</span></div>
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                            <div>
+                                <label className="text-[9px] text-muted-foreground font-mono uppercase block mb-1">Buscar</label>
+                                <div className="relative">
+                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" size={12} />
+                                    <Input value={searchDev} onChange={e => setSearchDev(e.target.value)} placeholder="Nombre o IP..." className="h-8 text-xs bg-foreground/10 border-border pl-8" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-[9px] text-muted-foreground font-mono uppercase block mb-1">Marca</label>
+                                <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)} className="w-full h-8 text-xs bg-foreground/10 border border-border rounded-md px-2 text-foreground">
+                                    <option value="">Todas</option>
+                                    {brands.map(b => <option key={b} value={b}>{b}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-[9px] text-muted-foreground font-mono uppercase block mb-1">Tipo</label>
+                                <select value={filterTypeDev} onChange={e => setFilterTypeDev(e.target.value)} className="w-full h-8 text-xs bg-foreground/10 border border-border rounded-md px-2 text-foreground">
+                                    <option value="">Todos</option>
+                                    <option value="LPR_CAMERA">LPR</option>
+                                    <option value="FACE_TERMINAL">Facial</option>
+                                    <option value="QUEUE_COUNTER">Fila</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-[9px] text-muted-foreground font-mono uppercase block mb-1">Estado</label>
+                                <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="w-full h-8 text-xs bg-foreground/10 border border-border rounded-md px-2 text-foreground">
+                                    <option value="">Todos</option>
+                                    <option value="online">En linea</option>
+                                    <option value="offline">Sin link</option>
+                                </select>
+                            </div>
+                        </div>
+                        {(searchDev || filterBrand || filterTypeDev || filterStatus) && (
+                            <Button variant="ghost" size="sm" onClick={() => { setSearchDev(""); setFilterBrand(""); setFilterTypeDev(""); setFilterStatus(""); }} className="text-[10px] text-muted-foreground hover:text-foreground h-6"><XCircle size={10} className="mr-1" /> Limpiar filtros</Button>
+                        )}
+                    </div>
+                )}
+
+                {/* DEVICE TABLE */}
+                <div className="rounded-xl border border-border bg-foreground/[0.04] overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="border-b border-border bg-foreground/[0.04]">
+                                    <th className="text-left text-[9px] text-muted-foreground font-mono uppercase tracking-wider px-3 py-2.5">Dispositivo</th>
+                                    <th className="text-left text-[9px] text-muted-foreground font-mono uppercase tracking-wider px-3 py-2.5">Tipo</th>
+                                    <th className="text-left text-[9px] text-muted-foreground font-mono uppercase tracking-wider px-3 py-2.5">IP</th>
+                                    <th className="text-left text-[9px] text-muted-foreground font-mono uppercase tracking-wider px-3 py-2.5">Ubicacion</th>
+                                    <th className="text-left text-[9px] text-muted-foreground font-mono uppercase tracking-wider px-3 py-2.5">Estado</th>
+                                    <th className="text-left text-[9px] text-muted-foreground font-mono uppercase tracking-wider px-3 py-2.5">Ultima sincro</th>
+                                    <th className="text-right text-[9px] text-muted-foreground font-mono uppercase tracking-wider px-3 py-2.5">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {loading ? (
+                                    <tr><td colSpan={7} className="px-4 py-12 text-center"><div className="flex flex-col items-center gap-2"><RefreshCw className="w-6 h-6 text-muted-foreground animate-spin" /><span className="text-sm text-muted-foreground">Cargando...</span></div></td></tr>
+                                ) : filteredDevices.length === 0 ? (
+                                    <tr><td colSpan={7} className="px-4 py-12 text-center"><div className="flex flex-col items-center gap-2"><HardDrive className="w-8 h-8 text-muted-foreground" /><span className="text-sm text-muted-foreground">No hay dispositivos{searchDev || filterBrand || filterTypeDev || filterStatus ? " con esos filtros" : ""}</span></div></td></tr>
+                                ) : filteredDevices.map(dev => {
+                                    const isOnline = isDevOnline(dev);
                                     const canSync = dev.brand === 'AKUVOX';
-
+                                    const t = TYPE_META[dev.deviceType] || TYPE_META.DEFAULT;
+                                    const TIcon = t.icon;
                                     return (
-                                        <TableRow key={dev.id} className="border-border hover:bg-foreground/[0.04] transition-all group">
-                                            <TableCell className="py-6 px-8">
-                                                <div className="flex items-center gap-5">
-                                                    <div className="relative w-14 h-14 bg-background rounded-2xl border border-border flex items-center justify-center p-0 shadow-xl group-hover:scale-110 transition-transform overflow-hidden">
-                                                        {dev.modelPhoto ? (
-                                                            <img src={dev.modelPhoto} className="w-full h-full object-cover" alt="" />
-                                                        ) : dev.brandLogo ? (
-                                                            <img src={dev.brandLogo} className="w-full h-full object-contain p-2 opacity-60" alt="" />
-                                                        ) : (
-                                                            <Network className="text-muted-foreground" size={24} />
-                                                        )}
+                                        <tr key={dev.id} className="border-b border-border last:border-0 hover:bg-foreground/[0.03] transition-colors">
+                                            <td className="px-3 py-2">
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className="w-9 h-9 rounded-lg bg-background border border-border flex items-center justify-center overflow-hidden shrink-0">
+                                                        {dev.modelPhoto ? <img src={dev.modelPhoto} className="w-full h-full object-cover" alt="" /> : dev.brandLogo ? <img src={dev.brandLogo} className="w-full h-full object-contain p-1.5 opacity-70" alt="" /> : <Network className="text-muted-foreground" size={16} />}
                                                     </div>
-                                                    <div>
-                                                        <p className="font-black text-foreground text-[13px] uppercase tracking-tight leading-none mb-1.5">{dev.name}</p>
-                                                        <div className="flex items-center gap-2">
-                                                            <Badge className="bg-card text-muted-foreground border-border text-[8px] font-black uppercase tracking-widest h-5">
-                                                                {dev.brand}
-                                                            </Badge>
-                                                        </div>
+                                                    <div className="min-w-0">
+                                                        <p className="text-[12px] font-semibold text-foreground truncate leading-tight">{dev.name}</p>
+                                                        <span className="text-[10px] font-mono text-muted-foreground">{dev.brand}</span>
                                                     </div>
                                                 </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex flex-col gap-1.5">
-                                                    <div className="flex items-center gap-2 text-sm text-foreground font-black font-mono">
-                                                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500/40" />
-                                                        {dev.ip}
-                                                    </div>
-                                                    <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest pl-3.5">API v2.0</p>
+                                            </td>
+                                            <td className="px-3 py-2"><span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md" style={{ background: `${t.c}14`, color: t.c }}><TIcon size={11} /> {t.l}</span></td>
+                                            <td className="px-3 py-2"><span className="text-[11px] font-mono text-muted-foreground">{dev.ip}</span></td>
+                                            <td className="px-3 py-2"><span className="inline-flex items-center gap-1 text-[11px] text-foreground/80"><Globe size={11} className="text-muted-foreground" /> {dev.location || "-"}</span></td>
+                                            <td className="px-3 py-2">
+                                                <span className={cn("inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full", isOnline ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400")}>
+                                                    <span className={cn("w-1.5 h-1.5 rounded-full", isOnline ? "bg-emerald-400 animate-pulse" : "bg-rose-500")} /> {isOnline ? "En linea" : "Sin link"}
+                                                </span>
+                                            </td>
+                                            <td className="px-3 py-2"><span className="text-[10px] font-mono text-muted-foreground">{dev.lastOnlinePull ? new Date(dev.lastOnlinePull).toLocaleString() : "-"}</span></td>
+                                            <td className="px-3 py-2">
+                                                <div className="flex items-center justify-end gap-1.5">
+                                                    <Tooltip><TooltipTrigger asChild>
+                                                        <button onClick={() => handleOpenDbLogs(dev)} className="w-8 h-8 rounded-lg bg-card border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition"><Eye size={15} /></button>
+                                                    </TooltipTrigger><TooltipContent className="text-[10px]">Ver logs en DB</TooltipContent></Tooltip>
+                                                    <Tooltip><TooltipTrigger asChild>
+                                                        <button onClick={() => handleOpenPreview(dev)} disabled={!canSync || syncing === dev.id} className={cn("w-8 h-8 rounded-lg flex items-center justify-center transition", canSync ? "bg-blue-600 text-white hover:bg-blue-500" : "bg-card text-muted-foreground/40 border border-border cursor-not-allowed")}>{syncing === dev.id ? <RefreshCw size={15} className="animate-spin" /> : <DownloadCloud size={15} />}</button>
+                                                    </TooltipTrigger><TooltipContent className="text-[10px]">{canSync ? "Sincronizar memoria" : "No disponible"}</TooltipContent></Tooltip>
                                                 </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex flex-col gap-1.5">
-                                                    <div className="flex items-center gap-2 text-xs text-blue-400 font-black uppercase tracking-tight">
-                                                        <Globe size={12} /> {dev.location || "Central"}
-                                                    </div>
-                                                    <p className="text-[8px] font-black text-muted-foreground uppercase tracking-widest pl-4.5">{dev.direction}</p>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex flex-col gap-2">
-                                                    <div className={cn(
-                                                        "flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all duration-500",
-                                                        isOnline
-                                                            ? "bg-emerald-500/5 border-emerald-500/10 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.05)]"
-                                                            : "bg-rose-500/5 border-rose-500/10 text-rose-400"
-                                                    )}>
-                                                        <div className={cn("w-2 h-2 rounded-full", isOnline ? "bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.5)]" : "bg-rose-500")} />
-                                                        <span className="text-[10px] font-black uppercase tracking-widest">{isOnline ? "En Línea" : "Sin Link"}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-1.5 pl-1 opacity-50">
-                                                        <RefreshCw size={10} className={isOnline ? "animate-spin-slow text-emerald-500" : "text-muted-foreground"} />
-                                                        <p className="text-[9px] text-muted-foreground font-black uppercase tracking-tighter">
-                                                            {dev.lastOnlinePull ? new Date(dev.lastOnlinePull).toLocaleTimeString() : 'PENDIENTE'}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="text-right pr-12">
-                                                <div className="flex items-center justify-end gap-4">
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <button
-                                                                onClick={() => handleOpenDbLogs(dev)}
-                                                                className="w-10 h-10 rounded-xl bg-card border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-all shadow-lg"
-                                                            >
-                                                                <Eye size={18} />
-                                                            </button>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent className="bg-card border-border text-[10px] uppercase font-black tracking-widest text-foreground">
-                                                            Ver Logs en DB
-                                                        </TooltipContent>
-                                                    </Tooltip>
-
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <button
-                                                                onClick={() => handleOpenPreview(dev)}
-                                                                disabled={!canSync || syncing === dev.id}
-                                                                className={cn(
-                                                                    "w-10 h-10 rounded-xl flex items-center justify-center transition-all shadow-lg",
-                                                                    canSync ? "bg-blue-600 text-foreground hover:bg-blue-500 shadow-blue-900/20" : "bg-card text-muted-foreground cursor-not-allowed border border-border"
-                                                                )}
-                                                            >
-                                                                <DownloadCloud size={18} />
-                                                            </button>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent className="bg-card border-border text-[10px] uppercase font-black tracking-widest text-foreground">
-                                                            Sincronizar Memoria
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
+                                            </td>
+                                        </tr>
                                     );
                                 })}
-                            </TableBody>
-                        </Table>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 
@@ -958,7 +973,7 @@ export default function AuditPage() {
                                 </div>
                             )}
                         </div>
-                        <DialogFooter className="p-8 bg-[#0a0a0a] border-t border-border gap-3 shrink-0 rounded-b-3xl">
+                        <DialogFooter className="p-8 bg-card border-t border-border gap-3 shrink-0 rounded-b-3xl">
                             <Button variant="ghost" onClick={() => setPreviewDialogOpen(false)} className="text-muted-foreground font-black uppercase text-[10px] tracking-[0.2em] px-8 h-12 hover:bg-card rounded-xl transition-all">Cancelar</Button>
                             <Button
                                 disabled={loadingPreview || syncing === previewDevice?.id || (hardwarePreview.filter(p => !p.exists).length === 0 && hardwareCallPreview.filter(p => !p.exists).length === 0)}

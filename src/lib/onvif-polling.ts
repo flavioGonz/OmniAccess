@@ -17,6 +17,7 @@ import { sendQueueAlertToTelegram, sendTelegramMessage } from "@/lib/telegram";
 import { uploadToS3 } from "@/lib/s3";
 import { enqueueDispatch } from "@/lib/dispatch-queue";
 import { sendWebPushToAll } from "@/lib/webpush";
+import { isPushActive } from "@/app/api/onvif/notify/route";
 
 // ─── Types ─────────────────────────────────────────
 interface ONVIFSubscription {
@@ -470,7 +471,7 @@ async function grabSnapshot(
                         if (buf.length < 100) { resolve(null); return; }
                         try {
                             const filename = `queue/${deviceId}/${Date.now()}.jpg`;
-                            const path = await uploadToS3(buf, filename, "image/jpeg");
+                            const path = await uploadToS3(buf, filename, "image/jpeg", "queue");
                             resolve(path);
                         } catch {
                             resolve(null);
@@ -534,7 +535,7 @@ export async function pollBoschDevices(): Promise<{
             // Pull messages
             const pullResp = await httpsRequest(
                 sub.pullPointUrl,
-                pullMessagesEnvelope(3, 100),
+                pullMessagesEnvelope(1, 100),
                 device.username,
                 device.password,
                 10000
@@ -564,6 +565,9 @@ export async function pollBoschDevices(): Promise<{
                 // Record on ANY value change (Changed OR Initialized with a new value), so the
                 // occupancy resyncs with the camera after each re-subscription. Skip only when the
                 // value is identical to avoid noise/flicker.
+                // Si el PUSH (WS-BaseNotification) está entregando eventos en vivo, el poll
+                // NO inserta (evita doble-conteo). El poll queda como fallback si el push cae.
+                if (isPushActive(device.id)) { lastKnownCounts.set(cacheKey, evt.count); continue; }
                 if (lastCount === evt.count) {
                     continue;
                 }
@@ -576,9 +580,11 @@ export async function pollBoschDevices(): Promise<{
 
                 // Real-time: record exactly what the camera sends (incl. 0). Stability via camera rebote.
 
-                // Grab snapshot on significant events
+                // Capturar foto SOLO cuando el aforo alcanza/supera el umbral de alerta de esta fila.
                 let snapshotPath: string | null = null;
-                if (evt.count > 0) {
+                const isAforoCh = isOccupancy || /aforo|occupancy|ocupaci/i.test(channelName || "");
+                const snapThreshold = await getMinAlertThreshold(device.id, channelName);
+                if (isAforoCh && snapThreshold !== null && evt.count >= snapThreshold) {
                     snapshotPath = await grabSnapshot(device.ip, device.username, device.password, device.id);
                 }
 
@@ -702,6 +708,30 @@ async function getDispatchRecipientsRaw(): Promise<any[]> {
     try { const st = await prisma.setting.findUnique({ where: { key: "DISPATCH_RECIPIENTS" } }); return st?.value ? JSON.parse(st.value) : []; } catch { return []; }
 }
 
+// Umbral minimo de alerta habilitada para un dispositivo/canal (para gatear la captura de fotos).
+async function getMinAlertThreshold(deviceId: string, channelName: string | null | undefined): Promise<number | null> {
+    const alerts = await prisma.queueAlert.findMany({
+        where: {
+            enabled: true,
+            OR: [
+                { deviceId, channelName: channelName || undefined },
+                { deviceId, channelName: null },
+                { deviceId: null, channelName: channelName || undefined },
+                { deviceId: null, channelName: null },
+            ],
+        },
+        select: { threshold: true },
+    });
+    if (!alerts.length) {
+        // Fallback: si ninguna alerta coincide con el canal exacto, usar el umbral mínimo
+        // de cualquier alerta habilitada del dispositivo o global (tolerante a nombres de canal).
+        const any = await prisma.queueAlert.findMany({ where: { enabled: true, OR: [{ deviceId }, { deviceId: null }] }, select: { threshold: true } });
+        if (!any.length) return null;
+        return Math.min(...any.map(a => a.threshold));
+    }
+    return Math.min(...alerts.map(a => a.threshold));
+}
+
 async function checkQueueAlerts(deviceId: string, channelName: string | null | undefined, count: number, snapshotPath?: string | null) {
     const alerts = await prisma.queueAlert.findMany({
         where: {
@@ -709,6 +739,8 @@ async function checkQueueAlerts(deviceId: string, channelName: string | null | u
             OR: [
                 { deviceId, channelName: channelName || undefined },
                 { deviceId, channelName: null },
+                { deviceId: null, channelName: channelName || undefined },
+                { deviceId: null, channelName: null },
             ],
         },
     });
@@ -747,7 +779,7 @@ async function checkQueueAlerts(deviceId: string, channelName: string | null | u
                 ).catch(() => {});
                 // Critical-event trigger: enqueue an episode report for dispatch
                 enqueueDispatch({ type: "REPORT", channel: "telegram", deviceId, payload: { period: "daily", deviceId, reason: "escalation", ruleName: alert.name } }).catch(() => {});
-            } catch {}
+            } catch (e) { console.warn(`[QueueAlert] escalation dispatch failed "${alert.name}":`, e); }
         }
 
         if (alert.lastFiredAt) {
@@ -776,7 +808,7 @@ async function checkQueueAlerts(deviceId: string, channelName: string | null | u
                         snapshotPath: snapshotPath || null,
                         chatId: rcp.address, to: rcp.address, email: rcp.address,
                         recipientName: rcp.name || rcp.address, recipientChannel: rcp.channel,
-                        timestamp: now.toISOString(),
+                        timestamp: now.toISOString(), alertTs: now.getTime(),
                     },
                 });
             }
@@ -841,13 +873,51 @@ export function getActiveSubscriptions(): Array<{
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 let isPolling = false;
 
-export function startAutoPolling(intervalMs = 8000) {
+// ── ONVIF push (WS-BaseNotification): la cámara empuja eventos a /api/onvif/notify en vivo ──
+const ONVIF_PUSH_URL = process.env.ONVIF_PUSH_URL || "http://192.168.99.99:10001/api/onvif/notify";
+let pushRenewInterval: ReturnType<typeof setInterval> | null = null;
+
+function subscribeEnvelope(consumerUrl: string, terminationSeconds = 120): string {
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:wsa="http://www.w3.org/2005/08/addressing" xmlns:wsnt="http://docs.oasis-open.org/wsn/b-2">
+ <s:Body><wsnt:Subscribe>
+  <wsnt:ConsumerReference><wsa:Address>${consumerUrl}</wsa:Address></wsnt:ConsumerReference>
+  <wsnt:InitialTerminationTime>PT${terminationSeconds}S</wsnt:InitialTerminationTime>
+ </wsnt:Subscribe></s:Body></s:Envelope>`;
+}
+
+async function subscribePushForAll() {
+    try {
+        const devices = await prisma.device.findMany({
+            where: { deviceType: "QUEUE_COUNTER", brand: "BOSCH" },
+            select: { id: true, name: true, ip: true, username: true, password: true },
+        });
+        for (const d of devices) {
+            try {
+                await httpsRequest(`https://${d.ip}/onvif/events_service`,
+                    subscribeEnvelope(ONVIF_PUSH_URL, 120),
+                    d.username || "admin", d.password || "admin", 10000);
+                console.log(`[ONVIF-Push] Subscribed ${d.name} -> ${ONVIF_PUSH_URL}`);
+            } catch (e: any) {
+                console.warn(`[ONVIF-Push] Subscribe failed ${d.name}: ${e?.message || e}`);
+            }
+        }
+    } catch { /* noop */ }
+}
+
+export async function startPushSubscriptions() {
+    await subscribePushForAll();
+    if (!pushRenewInterval) pushRenewInterval = setInterval(() => { subscribePushForAll().catch(() => {}); }, 90000);
+}
+
+export function startAutoPolling(intervalMs = 1000) {
     if (pollInterval) {
         console.log("[ONVIF-Poll] Auto-polling already running");
         return;
     }
 
     console.log(`[ONVIF-Poll] Starting auto-polling every ${intervalMs / 1000}s`);
+    startPushSubscriptions().catch(() => {});
     pollInterval = setInterval(async () => {
         if (isPolling) return; // Skip if previous poll still running
         isPolling = true;

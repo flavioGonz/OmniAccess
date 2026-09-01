@@ -168,7 +168,7 @@ function LiveVideo({ streamName, className, fallbackDeviceId }: { streamName: st
     return (
         <video
             ref={videoRef}
-            className={cn("object-cover bg-black", className)}
+            className={cn("object-cover", className)}
             autoPlay
             muted
             playsInline
@@ -335,7 +335,7 @@ function showQueueAlertToast(data: { alertName: string; deviceName: string; chan
 }
 
 // Alert Form Modal
-function AlertFormModal({ open, editingId, formName, setFormName, formDevice, setFormDevice, formChannel, setFormChannel, formThreshold, setFormThreshold, formCooldown, setFormCooldown, devices, onSave, onClose }: {
+function AlertFormModal({ open, editingId, formName, setFormName, formDevice, setFormDevice, formChannel, setFormChannel, formThreshold, setFormThreshold, formCooldown, setFormCooldown, devices, onSave, onClose, alerts, onToggle, onDelete, onEditAlert }: {
     open: boolean; editingId: string | null;
     formName: string; setFormName: (v: string) => void;
     formDevice: string; setFormDevice: (v: string) => void;
@@ -343,56 +343,140 @@ function AlertFormModal({ open, editingId, formName, setFormName, formDevice, se
     formThreshold: number; setFormThreshold: (v: number) => void;
     formCooldown: number; setFormCooldown: (v: number) => void;
     devices: Device[]; onSave: () => void; onClose: () => void;
+    alerts?: any[]; onToggle?: (id: string, enabled: boolean) => void; onDelete?: (id: string) => void; onEditAlert?: (a: any) => void;
 }) {
     if (!open) return null;
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-card border border-border rounded-xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-violet-500/[0.05]">
+            <div className="bg-card border border-border rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-gradient-to-r from-violet-500/10 to-transparent">
                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-violet-500/20 border border-violet-500/30 flex items-center justify-center">
-                            {editingId ? <Pencil size={14} className="text-violet-400" /> : <Plus size={14} className="text-violet-400" />}
+                        <div className="w-9 h-9 rounded-xl bg-violet-500/20 border border-violet-500/30 flex items-center justify-center">
+                            {editingId ? <Pencil size={15} className="text-violet-400" /> : <Bell size={15} className="text-violet-400" />}
                         </div>
                         <div>
-                            <h3 className="text-sm font-bold text-foreground">{editingId ? "Editar Umbral" : "Nuevo Umbral de Aforo"}</h3>
-                            <p className="text-[10px] text-muted-foreground">Configura las reglas de alerta</p>
+                            <h3 className="text-base font-black text-foreground tracking-tight">{editingId ? "Editar alerta de aforo" : "Nueva alerta de aforo"}</h3>
+                            <p className="text-[11px] text-muted-foreground">Define cuándo el sistema avisa por ocupación de la fila</p>
                         </div>
                     </div>
                     <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"><X size={16} /></button>
                 </div>
-                <div className="p-6 space-y-5">
-                    <div>
-                        <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1.5 block">Nombre</label>
-                        <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="Ej: Alerta Caja 1" className="bg-foreground/10 border-border text-foreground text-sm h-10" autoFocus />
+
+                {Array.isArray(alerts) && alerts.length > 0 && (
+                    <div className="px-6 pt-5">
+                        <div className="flex items-center gap-2 mb-2">
+                            <Bell size={13} className="text-violet-400" />
+                            <span className="text-xs font-black uppercase tracking-wide text-foreground">Alertas configuradas</span>
+                            <span className="text-[10px] text-muted-foreground">({alerts.length})</span>
+                        </div>
+                        <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                            {alerts.map((a: any) => (
+                                <div key={a.id} className={`flex items-center justify-between px-3 py-2 rounded-xl border transition-colors ${editingId === a.id ? "border-violet-500/40 bg-violet-500/10" : "border-border bg-foreground/[0.03] hover:bg-foreground/[0.05]"}`}>
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <button onClick={() => onToggle && onToggle(a.id, !a.enabled)} className={`w-8 h-5 rounded-full relative transition-colors shrink-0 ${a.enabled ? "bg-emerald-500" : "bg-foreground/15"}`}>
+                                            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${a.enabled ? "left-3.5" : "left-0.5"}`} />
+                                        </button>
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-bold text-foreground truncate">{a.name}</p>
+                                            <p className="text-[10px] text-muted-foreground">Umbral {a.threshold} · Cooldown {(a.cooldownSec ?? a.cooldownMin * 60)}s</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                        <button onClick={() => onEditAlert && onEditAlert(a)} title="Editar" className="p-1.5 rounded hover:bg-accent text-muted-foreground hover:text-blue-400"><Pencil size={12} /></button>
+                                        <button onClick={() => onDelete && onDelete(a.id)} title="Eliminar" className="p-1.5 rounded hover:bg-accent text-muted-foreground hover:text-red-400"><Trash2 size={12} /></button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                )}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 overflow-y-auto">
+                    {/* Columna izquierda: configuración */}
+                    <div className="p-6 space-y-5 lg:border-r border-border">
+                        <div className="flex items-center gap-2">
+                            <Settings2 size={14} className="text-violet-400" />
+                            <span className="text-xs font-black uppercase tracking-wide text-foreground">Configuración</span>
+                        </div>
+                        <div>
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1.5 block">Nombre de la alerta</label>
+                            <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="Ej: Aforo Caja 1" className="bg-foreground/10 border-border text-foreground text-sm h-10" autoFocus />
+                            <p className="text-[10px] text-muted-foreground/70 mt-1">Un nombre claro te ayuda a identificarla en notificaciones.</p>
+                        </div>
                         <div>
                             <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1.5 block">Dispositivo</label>
                             <select value={formDevice} onChange={e => setFormDevice(e.target.value)} className="w-full rounded-md bg-foreground/10 border border-border text-foreground text-sm px-3 h-10">
-                                <option value="">Todos los dispositivos</option>
+                                <option value="">Todas las cámaras de fila</option>
                                 {devices.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                             </select>
+                            <p className="text-[10px] text-muted-foreground/70 mt-1">Vacío = aplica a todas las cámaras de conteo.</p>
                         </div>
                         <div>
                             <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1.5 block">Canal (opcional)</label>
                             <Input value={formChannel} onChange={e => setFormChannel(e.target.value)} placeholder="Ej: Aforo" className="bg-foreground/10 border-border text-foreground text-sm h-10" />
+                            <p className="text-[10px] text-muted-foreground/70 mt-1">Limita la alerta a un canal de aforo. Vacío = cualquier canal de ocupación.</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1.5 block flex items-center gap-1"><Target size={11} className="text-violet-400" /> Umbral (personas)</label>
+                                <Input type="number" value={formThreshold} onChange={e => setFormThreshold(Number(e.target.value))} min={1} className="bg-foreground/10 border-border text-foreground text-base font-black h-11" />
+                            </div>
+                            <div>
+                                <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1.5 block flex items-center gap-1"><Clock size={11} className="text-violet-400" /> Cooldown (seg)</label>
+                                <Input type="number" value={formCooldown} onChange={e => setFormCooldown(Number(e.target.value))} min={0} className="bg-foreground/10 border-border text-foreground text-base font-black h-11" />
+                            </div>
                         </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1.5 block flex items-center gap-1"><Target size={10} className="text-violet-400" /> Umbral (personas)</label>
-                            <Input type="number" value={formThreshold} onChange={e => setFormThreshold(Number(e.target.value))} min={1} className="bg-foreground/10 border-border text-foreground text-sm h-10" />
+
+                    {/* Columna derecha: explicación */}
+                    <div className="p-6 space-y-4 bg-foreground/[0.03]">
+                        <div className="flex items-center gap-2">
+                            <AlertTriangle size={14} className="text-amber-400" />
+                            <span className="text-xs font-black uppercase tracking-wide text-foreground">Cómo funciona</span>
                         </div>
-                        <div>
-                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-1.5 block flex items-center gap-1"><Clock size={10} className="text-violet-400" /> Cooldown (segundos)</label>
-                            <Input type="number" value={formCooldown} onChange={e => setFormCooldown(Number(e.target.value))} min={0} className="bg-foreground/10 border-border text-foreground text-sm h-10" />
+
+                        <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.06] p-3.5">
+                            <p className="text-[12px] leading-relaxed text-foreground/90">
+                                El <b>umbral</b> es la cantidad de personas a partir de la cual la fila se considera saturada.
+                                Cuando el aforo en vivo <b>alcanza o supera {formThreshold || 0} {(formThreshold || 0) === 1 ? "persona" : "personas"}</b>,
+                                el sistema <b className="text-violet-300">dispara la notificación</b> (WhatsApp / Telegram / push) con la foto y el video del momento.
+                            </p>
+                        </div>
+
+                        <div className="space-y-2.5">
+                            <div className="flex items-start gap-2.5">
+                                <div className="w-5 h-5 rounded-md bg-emerald-500/15 flex items-center justify-center shrink-0 mt-0.5"><Zap size={12} className="text-emerald-400" /></div>
+                                <p className="text-[11.5px] leading-snug text-muted-foreground"><b className="text-foreground">Cuándo dispara:</b> al cruzar el umbral hacia arriba (ej. pasa de {Math.max(0,(formThreshold||1)-1)} a {formThreshold || 1}).</p>
+                            </div>
+                            <div className="flex items-start gap-2.5">
+                                <div className="w-5 h-5 rounded-md bg-red-500/15 flex items-center justify-center shrink-0 mt-0.5"><BellOff size={12} className="text-red-400" /></div>
+                                <p className="text-[11.5px] leading-snug text-muted-foreground"><b className="text-foreground">Cuándo NO dispara:</b> si el aforo está por debajo del umbral, o si ya avisó hace menos de {formCooldown || 0}s (período de calma).</p>
+                            </div>
+                            <div className="flex items-start gap-2.5">
+                                <div className="w-5 h-5 rounded-md bg-blue-500/15 flex items-center justify-center shrink-0 mt-0.5"><Clock size={12} className="text-blue-400" /></div>
+                                <p className="text-[11.5px] leading-snug text-muted-foreground"><b className="text-foreground">Cooldown ({formCooldown || 0}s):</b> evita spam — tras un aviso, espera ese tiempo antes de volver a notificar aunque siga saturada.</p>
+                            </div>
+                        </div>
+
+                        <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.07] p-3.5">
+                            <div className="flex items-center gap-1.5 mb-1">
+                                <Activity size={13} className="text-amber-400" />
+                                <span className="text-[11px] font-black uppercase tracking-wide text-amber-300">Ajustá con la calibración</span>
+                            </div>
+                            <p className="text-[11.5px] leading-relaxed text-foreground/85">
+                                El conteo puede oscilar según iluminación, ángulo y movimiento. Usá la <b>Calibración de aforo</b> para
+                                comparar el valor crudo vs. estabilizado y ajustar el <i>tiempo de rebote</i>, así el umbral refleja el aforo real del entorno y evitás falsas alertas.
+                            </p>
+                            <a href="/admin/calibracion-aforo" className="inline-flex items-center gap-1 mt-2 text-[11px] font-bold text-amber-300 hover:text-amber-200">
+                                Abrir Calibración <ArrowRight size={12} />
+                            </a>
                         </div>
                     </div>
                 </div>
+
                 <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border bg-foreground/[0.04]">
                     <Button variant="ghost" size="sm" onClick={onClose} className="text-muted-foreground hover:text-foreground">Cancelar</Button>
                     <Button size="sm" onClick={onSave} className="bg-violet-600 hover:bg-violet-700 text-foreground gap-1.5 px-5">
-                        <Save size={14} /> {editingId ? "Actualizar" : "Crear Umbral"}
+                        <Save size={14} /> {editingId ? "Actualizar" : "Crear alerta"}
                     </Button>
                 </div>
             </div>
@@ -622,6 +706,27 @@ export default function FilasPage() {
     const globalRatio = globalThreshold > 0 ? aforoCount / globalThreshold : 0;
     const globalStatus = globalRatio >= 1 ? "alert" : globalRatio >= 0.7 ? "warning" : "ok";
 
+    const relTime = (d: Date) => {
+        const ms = Date.now() - new Date(d).getTime();
+        const sec = Math.floor(ms / 1000);
+        if (sec < 5) return "ahora";
+        if (sec < 60) return `hace ${sec}s`;
+        const mn = Math.floor(sec / 60); if (mn < 60) return `hace ${mn}m`;
+        const hr = Math.floor(mn / 60); return `hace ${hr}h`;
+    };
+    const detectedRows = liveCounts.flatMap(d => d.channels.map(c => {
+        const cn0 = c.channelName || "";
+        const isAforo = /aforo|occupancy|ocupaci|personas/i.test(cn0);
+        const isFlow = /entrada|salida/i.test(cn0);
+        const tipo = isAforo ? { label: "Aforo", cls: "bg-violet-500/15 text-violet-400" } : isFlow ? { label: "Flujo", cls: "bg-cyan-500/15 text-cyan-400" } : { label: "Contador", cls: "bg-amber-500/15 text-amber-400" };
+        const al = enabledAlerts.find(a => a.deviceId === d.device.id && a.channelName === cn0) || enabledAlerts.find(a => a.deviceId === d.device.id && !a.channelName);
+        const threshold = al ? al.threshold : globalThreshold;
+        const ratio = isAforo && threshold > 0 ? c.peopleCount / threshold : 0;
+        const estado = ratio >= 1 ? { label: "Lleno", cls: "bg-red-500/15 text-red-400" } : ratio >= 0.7 ? { label: "Alto", cls: "bg-amber-500/15 text-amber-400" } : { label: "OK", cls: "bg-emerald-500/15 text-emerald-400" };
+        const valueColor = isAforo ? (ratio >= 1 ? "text-red-400" : ratio >= 0.7 ? "text-amber-400" : "text-emerald-400") : "text-foreground/80";
+        return { devName: d.device.name, ip: d.device.ip, channelName: cn0, peopleCount: c.peopleCount, isAforo, tipo, threshold, estado, valueColor, rel: relTime(c.lastUpdate) };
+    })).sort((a, b) => (a.devName === b.devName ? (a.isAforo === b.isAforo ? 0 : a.isAforo ? -1 : 1) : a.devName.localeCompare(b.devName)));
+
     return (
         <div className="space-y-5 p-6">
             <style>{`
@@ -699,7 +804,7 @@ export default function FilasPage() {
                             globalStatus === "warning" ? "border-amber-500/40" : "border-border"
                         )}
                     >
-                        <div className="relative aspect-video bg-black">
+                        <div className="relative aspect-video vid-surface">
                             <LiveVideo
                                 streamName={getStreamName(liveCounts[0].device.ip)}
                                 fallbackDeviceId={liveCounts[0].device.id}
@@ -774,7 +879,7 @@ export default function FilasPage() {
                                 </div>
                                 {/* Floating action buttons */}
                                 <div className="flex items-center gap-1.5 pointer-events-auto">
-                                    <button onClick={() => setShowAlertsModal(true)}
+                                    <button onClick={() => { resetForm(); setShowForm(true); }}
                                         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-black/55 hover:bg-black/75 border border-white/10 text-amber-300 backdrop-blur-md transition-colors">
                                         <Bell size={12} /> Alertas{alerts.length > 0 && <span className="text-[9px] bg-amber-500/30 text-amber-200 rounded-full px-1.5">{alerts.length}</span>}
                                     </button>
@@ -838,70 +943,57 @@ export default function FilasPage() {
                 </div>
             )}
 
-            {/* ── Alerts Modal ── */}
-            {showAlertsModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setShowAlertsModal(false)}>
-            <div className="bg-card border border-border rounded-2xl w-full max-w-2xl shadow-2xl p-5 space-y-3 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-foreground/70 flex items-center gap-2">
-                        <Bell size={14} className="text-amber-400" />
-                        Alertas de aforo
-                    </h3>
+            {/* ── Filas detectadas (tabla) ── */}
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                     <div className="flex items-center gap-2">
-                        <Button size="sm" variant="outline" className="h-7 text-xs border-border hover:bg-accent"
-                            onClick={() => { resetForm(); setShowForm(true); }}>
-                            <Plus size={12} className="mr-1" /> Nueva alerta
-                        </Button>
-                        <button onClick={() => setShowAlertsModal(false)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent"><X size={16} /></button>
+                        <Rows3 size={15} className="text-violet-400" />
+                        <h3 className="text-sm font-bold text-foreground">Detección por fila (en vivo)</h3>
+                        <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">{liveCounts.length} fila{liveCounts.length !== 1 ? "s" : ""} · {detectedRows.length} analíticas</span>
                     </div>
+                    <p className="text-[10px] text-muted-foreground hidden sm:block">Cada fila puede tener varias analíticas: aforo (ocupación) + flujo (entradas/salidas). Solo se muestran las que la cámara está reportando ahora.</p>
                 </div>
-
-                {alerts.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground text-xs">
-                        No hay alertas configuradas
-                    </div>
+                {detectedRows.length === 0 ? (
+                    <div className="py-10 text-center text-xs text-muted-foreground"><Camera size={26} className="mx-auto mb-2 opacity-30" /> Sin lecturas todavía de las cámaras de filas.</div>
                 ) : (
-                    <div className="space-y-2">
-                        {alerts.map((a: any) => (
-                            <div key={a.id} className="flex items-center justify-between px-4 py-3 rounded-xl bg-foreground/[0.04] border border-border hover:bg-foreground/[0.04] transition-all group">
-                                <div className="flex items-center gap-3 min-w-0">
-                                    <button onClick={() => toggleAlert(a.id, !a.enabled)}
-                                        className={cn("w-8 h-5 rounded-full relative transition-colors", a.enabled ? "bg-emerald-500" : "bg-foreground/10")}>
-                                        <div className={cn("absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all", a.enabled ? "left-3.5" : "left-0.5")} />
-                                    </button>
-                                    <div className="min-w-0">
-                                        <p className="text-xs font-medium text-foreground/70 truncate">{a.name}</p>
-                                        <p className="text-[10px] text-muted-foreground truncate">
-                                            Umbral: {a.threshold} · Cooldown: {(a.cooldownSec ?? a.cooldownMin * 60)}s
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => quickAdjustThreshold(a.id, -1)}
-                                        className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground/60">
-                                        <Minus size={12} />
-                                    </button>
-                                    <span className="text-xs font-mono text-foreground/70 w-6 text-center">{a.threshold}</span>
-                                    <button onClick={() => quickAdjustThreshold(a.id, 1)}
-                                        className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground/60">
-                                        <Plus size={12} />
-                                    </button>
-                                    <button onClick={() => { editAlert(a); }}
-                                        className="p-1.5 rounded hover:bg-accent text-muted-foreground hover:text-blue-400 ml-1">
-                                        <Pencil size={12} />
-                                    </button>
-                                    <button onClick={() => removeAlert(a.id)}
-                                        className="p-1.5 rounded hover:bg-accent text-muted-foreground hover:text-red-400">
-                                        <Trash2 size={12} />
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead className="bg-muted/40">
+                                <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                                    <th className="text-left font-semibold px-4 py-2">Fila / Cámara</th>
+                                    <th className="text-left font-semibold px-3 py-2">Zona / Canal</th>
+                                    <th className="text-left font-semibold px-3 py-2">Tipo</th>
+                                    <th className="text-right font-semibold px-3 py-2">Valor</th>
+                                    <th className="text-center font-semibold px-3 py-2">Umbral</th>
+                                    <th className="text-center font-semibold px-3 py-2">Estado</th>
+                                    <th className="text-right font-semibold px-4 py-2">Última lectura</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {detectedRows.map((r, i) => (
+                                    <tr key={i} className="border-t border-border hover:bg-muted/20 transition-colors">
+                                        <td className="px-4 py-2.5">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                                <div className="min-w-0">
+                                                    <p className="font-semibold text-foreground truncate">{r.devName}</p>
+                                                    <p className="text-[10px] text-muted-foreground font-mono truncate">{r.ip}</p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-3 py-2.5 text-foreground/80">{r.channelName || "—"}</td>
+                                        <td className="px-3 py-2.5"><span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-md", r.tipo.cls)}>{r.tipo.label}</span></td>
+                                        <td className="px-3 py-2.5 text-right"><span className={cn("text-base font-black tabular-nums", r.valueColor)}>{r.peopleCount}</span></td>
+                                        <td className="px-3 py-2.5 text-center text-muted-foreground tabular-nums">{r.isAforo ? (r.threshold || "—") : "—"}</td>
+                                        <td className="px-3 py-2.5 text-center">{r.isAforo ? <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-md", r.estado.cls)}>{r.estado.label}</span> : <span className="text-[10px] text-muted-foreground">—</span>}</td>
+                                        <td className="px-4 py-2.5 text-right text-[11px] text-muted-foreground whitespace-nowrap">{r.rel}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
                 )}
             </div>
-            </div>
-            )}
 
             {/* ── Analíticas ONVIF Modal ── */}
             {showOnvifModal && liveCounts.length > 0 && liveCounts[0]?.device && (
@@ -959,6 +1051,10 @@ export default function FilasPage() {
                 formThreshold={formThreshold} setFormThreshold={setFormThreshold}
                 formCooldown={formCooldown} setFormCooldown={setFormCooldown}
                 onSave={saveAlert}
+                alerts={alerts}
+                onToggle={toggleAlert}
+                onDelete={removeAlert}
+                onEditAlert={editAlert}
             />
         </div>
     );

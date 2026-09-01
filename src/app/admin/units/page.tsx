@@ -425,7 +425,7 @@ export default function UnitsPage() {
     }
 
     return (
-        <div className="h-full flex flex-col bg-[#0a0a0a] animate-in fade-in duration-700 overflow-hidden">
+        <div className="h-full flex flex-col bg-background animate-in fade-in duration-700 overflow-hidden">
             {/* Horizontal Header Menu */}
             <header className="px-8 py-6 border-b border-border bg-card/40 backdrop-blur-md flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-8">

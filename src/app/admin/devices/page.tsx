@@ -124,7 +124,7 @@ function BoschLiveVideo({ ip }: { ip: string }) {
             </div>
         );
     }
-    return <video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-contain bg-black" />;
+    return <video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-contain" />;
 }
 
 export default function DevicesPage() {
@@ -717,7 +717,7 @@ export default function DevicesPage() {
                                 <Plus className="rotate-45" size={18} />
                             </Button>
                         </div>
-                        <div className="aspect-video bg-black flex items-center justify-center relative group">
+                        <div className="aspect-video vid-surface flex items-center justify-center relative group">
                             {viewingLive.brand === "BOSCH" ? (
                                 <BoschLiveVideo ip={viewingLive.ip} />
                             ) : (

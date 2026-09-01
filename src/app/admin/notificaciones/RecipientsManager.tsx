@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Users, Plus, Save, Trash2, RefreshCw, X, Pencil, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { getDispatchRecipients, saveDispatchRecipients } from "@/app/actions/queue";
+import { getDispatchRecipients, saveDispatchRecipients, getWhatsAppSeenGroups } from "@/app/actions/queue";
 
 type R = { id: string; name: string; channel: string; address: string; enabled: boolean };
 const CHANNELS = [
@@ -14,19 +14,21 @@ const CHANNELS = [
 ];
 const uid = () => Math.random().toString(36).slice(2, 9);
 const chMeta = (v: string) => CHANNELS.find(c => c.v === v) || CHANNELS[0];
-const ph = (ch: string) => ch === "whatsapp" ? "59899123456" : ch === "email" ? "correo@empresa.com" : "-100123456789 (chat id)";
+const ph = (ch: string) => ch === "whatsapp" ? "59899123456 o grupo (...@g.us)" : ch === "email" ? "correo@empresa.com" : "-100123456789 (chat id)";
 
 export default function RecipientsManager() {
     const [list, setList] = useState<R[]>([]);
     const [editing, setEditing] = useState<R | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [waGroups, setWaGroups] = useState<{ id: string; name: string }[]>([]);
 
     const load = useCallback(async () => {
         try { const r = await getDispatchRecipients(); setList((r as any) || []); }
         catch (e) { console.error(e); } finally { setLoading(false); }
     }, []);
     useEffect(() => { load(); }, [load]);
+    useEffect(() => { getWhatsAppSeenGroups().then(g => setWaGroups((g as any) || [])).catch(() => {}); }, []);
 
     const persist = async (next: R[]) => {
         setSaving(true);
@@ -71,7 +73,14 @@ export default function RecipientsManager() {
                         </select>
                     </div>
                     <input value={editing.address} onChange={e => setEditing({ ...editing, address: e.target.value })} placeholder={ph(editing.channel)}
+                        list={editing.channel === "whatsapp" ? "wa-groups-dl" : undefined}
                         className="w-full bg-muted/60 border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-sky-500 font-mono" />
+                    {editing.channel === "whatsapp" && (
+                        <>
+                            <datalist id="wa-groups-dl">{waGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</datalist>
+                            <p className="text-[10px] text-muted-foreground -mt-1 flex items-center gap-1"><Users size={11} /> Para un <b>grupo</b>, pegá su ID terminado en <code className="font-mono text-sky-400">@g.us</code>. Los grupos que le escriban al bot aparecen como sugerencias.</p>
+                        </>
+                    )}
                     <div className="flex items-center gap-2 pt-1">
                         <button onClick={save} disabled={saving} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-semibold transition">
                             {saving ? <RefreshCw size={13} className="animate-spin" /> : <Save size={13} />} Guardar

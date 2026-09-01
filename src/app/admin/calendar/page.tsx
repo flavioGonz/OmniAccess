@@ -413,8 +413,8 @@ export default function CalendarPage() {
             </div>
 
             {/* Sidebar Details for Selected Date */}
-            <div className="w-full xl:w-[400px] bg-[#0c0c0c] rounded-2xl p-0 flex flex-col shadow-2xl overflow-hidden relative">
-                <div className="p-6 bg-card border-b border-border/50">
+            <div className="w-full xl:w-[400px] bg-card border border-border rounded-2xl p-0 flex flex-col shadow-2xl overflow-hidden relative">
+                <div className="p-6 bg-muted/30 border-b border-border">
                     <h2 className="text-lg font-bold text-foreground uppercase tracking-tight flex items-center gap-2">
                         <Clock className="text-muted-foreground" size={18} />
                         {selectedDate
@@ -480,7 +480,7 @@ export default function CalendarPage() {
                         // Skeleton loader for events list
                         <div className="space-y-3">
                             {Array.from({ length: 8 }).map((_, i) => (
-                                <div key={`event-skeleton-${i}`} className="bg-card/50 p-3 rounded-xl flex items-start gap-3 animate-pulse">
+                                <div key={`event-skeleton-${i}`} className="bg-muted/40 p-3 rounded-xl flex items-start gap-3 animate-pulse">
                                     <Skeleton className="w-4 h-4 rounded-full bg-muted/50 mt-1" />
                                     <div className="flex-1 space-y-2">
                                         <div className="flex justify-between">
@@ -497,7 +497,7 @@ export default function CalendarPage() {
                             selectedDayEvents.slice(0, visibleCount).map(evt => {
                                 if ((evt as any)._queue) {
                                     return (
-                                        <div key={evt.id} className="bg-card/50 p-3 rounded-xl flex items-start gap-3 border border-transparent">
+                                        <div key={evt.id} className="bg-muted/40 p-3 rounded-xl flex items-start gap-3 border border-border/60">
                                             <div className="mt-1"><UserIcon size={16} className="text-violet-500" /></div>
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex justify-between items-start gap-2">
@@ -513,7 +513,7 @@ export default function CalendarPage() {
                                 }
                                 return (
                                 <EventDetailsDialog key={evt.id} event={evt}>
-                                    <div className="group bg-card/50 hover:bg-muted p-3 rounded-xl cursor-pointer transition-all flex items-start gap-3 border border-transparent hover:border-border/50">
+                                    <div className="group bg-muted/40 hover:bg-accent p-3 rounded-xl cursor-pointer transition-all flex items-start gap-3 border border-border/60 hover:border-border">
                                         <div className="mt-1">
                                             {evt.decision === 'GRANT'
                                                 ? <CheckCircle2 size={16} className="text-emerald-500" />
@@ -575,7 +575,7 @@ export default function CalendarPage() {
                 </div>
 
                 {/* Fade Overlay */}
-                <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-[#0c0c0c] to-transparent pointer-events-none select-none" />
+                <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-card to-transparent pointer-events-none select-none" />
             </div>
 
             <style jsx global>{`

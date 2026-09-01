@@ -144,7 +144,7 @@ export default function ConsolasAdminPage() {
     }, [socketRef.current]);
 
     return (
-        <div className="flex flex-col h-screen overflow-hidden bg-[#0a0a0c]">
+        <div className="flex flex-col h-screen overflow-hidden bg-background">
             {/* Top Bar */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800 bg-black/40 backdrop-blur-sm shrink-0">
                 <div className="flex items-center gap-4">

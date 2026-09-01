@@ -324,7 +324,7 @@ export default function PlazasPage() {
     };
 
     return (
-        <div className="w-full h-full relative bg-[#0a0a0a] overflow-hidden animate-in fade-in duration-700 flex items-center justify-center">
+        <div className="w-full h-full relative bg-background overflow-hidden animate-in fade-in duration-700 flex items-center justify-center">
             {/* Floating Controls - Top Left */}
             <div className="absolute top-6 left-6 z-20 space-y-3">
                 {!mapImage ? (

@@ -42,6 +42,57 @@ function severityOf(count: number, threshold: number) {
     return { color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/25", label: "En umbral" };
 }
 
+function DispatchDetail({ d, onClose }: { d: any; onClose: () => void }) {
+    const chC = d.recipientChannel === "whatsapp" ? "#25D366" : d.recipientChannel === "telegram" ? "#0ea5e9" : d.recipientChannel === "email" ? "#f59e0b" : "#a855f7";
+    const img = d.snapshotPath ? (d.snapshotPath.startsWith("/") ? d.snapshotPath : `/api/files/lpr-prod/${d.snapshotPath}`) : null;
+    const t = new Date(d.sentAt || d.createdAt);
+    const st = d.status === "SENT" ? { c: "#10b981", l: "Enviada" } : d.status === "FAILED" ? { c: "#ef4444", l: "Fallida" } : d.status === "PROCESSING" ? { c: "#0ea5e9", l: "Procesando" } : { c: "#f59e0b", l: "En cola" };
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
+            <div className="bg-card border border-border rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${chC}1a`, color: chC }}><Bell size={16} /></div>
+                        <div className="min-w-0">
+                            <div className="text-sm font-bold text-foreground truncate">{d.ruleName}</div>
+                            <div className="text-[11px] text-muted-foreground">{t.toLocaleString("es-UY")}</div>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent"><X size={16} /></button>
+                </div>
+                {img && <div className="bg-black flex items-center justify-center"><img src={img} alt="" className="w-full max-h-72 object-contain" /></div>}
+                <div className="p-5 space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="flex items-start gap-2 p-3 rounded-lg bg-foreground/[0.04] border border-border">
+                            <Send size={13} className="text-muted-foreground mt-0.5 shrink-0" />
+                            <div className="min-w-0"><span className="text-[9px] text-muted-foreground font-mono uppercase block mb-0.5">Destinatario</span><span className="text-xs text-foreground/80 font-medium break-words">{d.recipient || "\u2014"}</span></div>
+                        </div>
+                        <div className="flex items-start gap-2 p-3 rounded-lg bg-foreground/[0.04] border border-border">
+                            <Cpu size={13} className="text-muted-foreground mt-0.5 shrink-0" />
+                            <div className="min-w-0"><span className="text-[9px] text-muted-foreground font-mono uppercase block mb-0.5">Canal</span><span className="text-xs text-foreground/80 font-medium uppercase">{d.recipientChannel}</span></div>
+                        </div>
+                        {d.deviceName && <div className="flex items-start gap-2 p-3 rounded-lg bg-foreground/[0.04] border border-border"><MonitorSmartphone size={13} className="text-muted-foreground mt-0.5 shrink-0" /><div className="min-w-0"><span className="text-[9px] text-muted-foreground font-mono uppercase block mb-0.5">Dispositivo</span><span className="text-xs text-foreground/80 font-medium truncate">{d.deviceName}</span></div></div>}
+                        {d.count != null && <div className="flex items-start gap-2 p-3 rounded-lg bg-foreground/[0.04] border border-border"><Gauge size={13} className="text-muted-foreground mt-0.5 shrink-0" /><div><span className="text-[9px] text-muted-foreground font-mono uppercase block mb-0.5">Aforo / Umbral</span><span className="text-xs text-foreground/80 font-medium">{d.count} / {d.threshold ?? "\u2014"}</span></div></div>}
+                    </div>
+                    {d.message && (
+                        <div>
+                            <span className="text-[9px] text-muted-foreground font-mono uppercase block mb-1.5">Mensaje enviado</span>
+                            <div className="text-[13px] text-foreground/90 whitespace-pre-wrap break-words rounded-lg bg-foreground/[0.04] border border-border p-3 max-h-52 overflow-y-auto custom-scrollbar">{d.message}</div>
+                        </div>
+                    )}
+                    {d.lastError && d.status === "FAILED" && (
+                        <div className="text-[11px] text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg p-2.5 break-words">{d.lastError}</div>
+                    )}
+                    <div className="flex items-center justify-between pt-1">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded border" style={{ color: st.c, borderColor: `${st.c}40`, background: `${st.c}18` }}>{st.l}</span>
+                        {d.attempts != null && <span className="text-[10px] text-muted-foreground font-mono">Intentos {d.attempts}/{d.maxAttempts}</span>}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function NotifDetail({ n, onClose }: { n: Notif; onClose: () => void }) {
     const time = new Date(n.timestamp);
     const sev = severityOf(n.peopleCount, n.threshold);
@@ -159,6 +210,7 @@ export default function DespachosPage() {
     const [notifs, setNotifs] = useState<Notif[]>([]);
     const [loading, setLoading] = useState(true);
     const [selected, setSelected] = useState<Notif | null>(null);
+    const [selDisp, setSelDisp] = useState<any | null>(null);
     const [filter, setFilter] = useState<"all" | "Crítico" | "Superado" | "En umbral">("all");
     const [dispatches, setDispatches] = useState<any[]>([]);
 
@@ -271,7 +323,7 @@ export default function DespachosPage() {
                         const img = d.snapshotPath ? (d.snapshotPath.startsWith("/") ? d.snapshotPath : `/api/files/lpr-prod/${d.snapshotPath}`) : null;
                         const t = new Date(d.sentAt || d.createdAt);
                         return (
-                            <div key={d.id} className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-2.5">
+                            <div key={d.id} onClick={() => setSelDisp(d)} className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-2.5 cursor-pointer hover:border-foreground/20 hover:bg-accent/40 transition-colors">
                                 <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${chC}1a`, color: chC }}>
                                     <Bell size={15} />
                                 </div>
@@ -286,6 +338,7 @@ export default function DespachosPage() {
                                         {d.recipient && <span className="inline-flex items-center gap-1 text-foreground/70 truncate max-w-[160px]">· <Send size={10} /> {d.recipient}</span>}
                                         {d.count != null && <span>· aforo {d.count}/{d.threshold ?? "—"}</span>}
                                     </div>
+                                    {d.message && <p className="text-[11px] text-foreground/80 mt-1 line-clamp-2 whitespace-pre-wrap break-words" title={d.message}>{d.message}</p>}
                                 </div>
                                 <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded border shrink-0" style={{ color: st.c, borderColor: `${st.c}40`, background: `${st.c}18` }}>{st.l}</span>
                             </div>
@@ -298,6 +351,7 @@ export default function DespachosPage() {
             </div>{/* /grid 2col */}
 
             {selected && <NotifDetail n={selected} onClose={() => setSelected(null)} />}
+            {selDisp && <DispatchDetail d={selDisp} onClose={() => setSelDisp(null)} />}
         </div>
     );
 }

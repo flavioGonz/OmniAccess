@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import LiveEdgeKeeper from "@/components/LiveEdgeKeeper";
+import PwaSplash from "@/components/PwaSplash";
 import {
     Zap, ChevronDown, Bell, BellOff, User, LayoutGrid, Settings, Sparkles,
-    Camera, Video, Users, RefreshCw, Maximize2, X, Check, Rows3, Grid2x2, Download,
+    Camera, Video, Users, RefreshCw, Maximize2, X, Check, Rows3, Grid2x2, Download, WifiOff, Sun, Activity, MessageCircle, Send,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getQueueDevices, getLatestQueueCounts, getQueueAlerts } from "@/app/actions/queue";
@@ -13,27 +15,83 @@ const OCC = ["Aforo", "Occupancy", "Ocupación", "Ocupacion"];
 type Dev = { id: string; name: string; ip: string };
 
 function getStreamName(ip: string) { return `bosch_${ip.replace(/\./g, "_")}`; }
+
+// ─── VCA analytics overlay (zonas/líneas sobre el video) ───
+const VCA_COLORS: Record<string, { stroke: string; fill: string }> = {
+    EnteringField: { stroke: "#10b981", fill: "rgba(16,185,129,0.08)" },
+    LeavingField: { stroke: "#3b82f6", fill: "rgba(59,130,246,0.08)" },
+    OccupancyCounting: { stroke: "#a855f7", fill: "rgba(168,85,247,0.10)" },
+    LineCounting: { stroke: "#f59e0b", fill: "none" },
+    Unknown: { stroke: "#6b7280", fill: "rgba(107,114,128,0.06)" },
+};
+const VCA_ICONS: Record<string, string> = { EnteringField: "\u2192", LeavingField: "\u2190", OccupancyCounting: "\u2302", LineCounting: "\u2502", Unknown: "\u2022" };
+
+function VCAOverlay({ rules }: { rules: any[] }) {
+    if (!rules || rules.length === 0) return null;
+    return (
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full z-[8] pointer-events-none">
+            {rules.map((rule, idx) => {
+                const c = VCA_COLORS[rule.type] || VCA_COLORS.Unknown;
+                const pts = rule.points || [];
+                if (rule.type === "LineCounting" && pts.length >= 2) {
+                    const p1 = pts[0], p2 = pts[pts.length - 1];
+                    return (
+                        <g key={idx}>
+                            <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke={c.stroke} strokeWidth="0.6" strokeLinecap="round" opacity={0.9} />
+                            <circle cx={p1.x} cy={p1.y} r="0.7" fill={c.stroke} /><circle cx={p2.x} cy={p2.y} r="0.7" fill={c.stroke} />
+                        </g>
+                    );
+                }
+                if (pts.length < 2) return null;
+                const d = pts.map((p: any, i: number) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ") + " Z";
+                return <path key={idx} d={d} fill={c.fill} stroke={c.stroke} strokeWidth="0.4" strokeLinejoin="round" opacity={0.85} />;
+            })}
+        </svg>
+    );
+}
+
+function AforoOverZone({ rules, occ, color }: { rules: any[]; occ: number; color: string }) {
+    const occRule = (rules || []).find((r: any) => r.type === "OccupancyCounting") || (rules || [])[0];
+    const pts = occRule?.points || [];
+    if (pts.length === 0) return null;
+    const cx = pts.reduce((s: number, p: any) => s + p.x, 0) / pts.length;
+    const cy = pts.reduce((s: number, p: any) => s + p.y, 0) / pts.length;
+    return (
+        <div className="absolute z-[9] pointer-events-none select-none" style={{ left: `${cx}%`, top: `${cy}%`, transform: "translate(-50%, -50%)", animation: "aforoBeat 1.6s ease-in-out infinite" }}>
+            <span className="font-black tabular-nums leading-none" style={{ fontSize: "clamp(34px, 12vw, 96px)", color, opacity: 0.6, textShadow: "0 2px 16px rgba(0,0,0,0.6)" }}>{occ}</span>
+        </div>
+    );
+}
+
 function statusColor(aforo: number, limit: number) { const r = limit > 0 ? aforo / limit : 0; return r >= 1 ? "#ef4444" : r >= 0.7 ? "#f59e0b" : "#10b981"; }
-function urlB64ToUint8(base64: string) { const p = "=".repeat((4 - (base64.length % 4)) % 4); const b = (base64 + p).replace(/-/g, "+").replace(/_/g, "/"); const raw = atob(b); return Uint8Array.from([...raw].map((c) => c.charCodeAt(0))); }
 
 function LiveVideo({ streamName, deviceId, className }: { streamName: string; deviceId: string; className?: string }) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [failed, setFailed] = useState(false);
+    const [ready, setReady] = useState(false);
     const retry = useRef(0);
     useEffect(() => {
         if (!streamName) { setFailed(true); return; }
-        setFailed(false); retry.current = 0;
+        setFailed(false); setReady(false); retry.current = 0;
         const video = videoRef.current; if (!video) return;
         let destroyed = false; let timer: any = null;
         const src = `/go2rtc/api/stream.mp4?src=${encodeURIComponent(streamName)}`;
         const load = () => { if (destroyed || !video) return; video.src = src; video.play().catch(() => {}); };
-        const onError = () => { if (destroyed) return; retry.current++; if (retry.current > 6) { setFailed(true); return; } timer = setTimeout(load, Math.min(1000 * retry.current, 5000)); };
+        const onPlaying = () => { if (!destroyed) setReady(true); };
+        const onError = () => { if (destroyed) return; setReady(false); retry.current++; if (retry.current > 8) { setFailed(true); return; } timer = setTimeout(load, Math.min(800 * retry.current, 4000)); };
         const onProgress = () => { if (!video || video.buffered.length === 0) return; const end = video.buffered.end(video.buffered.length - 1); if (end - video.currentTime > 3) video.currentTime = end - 0.4; };
+        video.addEventListener("playing", onPlaying);
         video.addEventListener("error", onError); video.addEventListener("progress", onProgress); load();
-        return () => { destroyed = true; if (timer) clearTimeout(timer); video.removeEventListener("error", onError); video.removeEventListener("progress", onProgress); video.pause(); video.removeAttribute("src"); video.load(); };
+        return () => { destroyed = true; if (timer) clearTimeout(timer); video.removeEventListener("playing", onPlaying); video.removeEventListener("error", onError); video.removeEventListener("progress", onProgress); video.pause(); video.removeAttribute("src"); video.load(); };
     }, [streamName]);
     if (failed) return <SnapshotImg deviceId={deviceId} className={className} />;
-    return <video ref={videoRef} className={cn("object-cover bg-black", className)} autoPlay muted playsInline />;
+    return (
+        <div className={cn("relative bg-black overflow-hidden", className)}>
+            {!ready && <SnapshotImg deviceId={deviceId} className="absolute inset-0 w-full h-full" />}
+            <video ref={videoRef} className={cn("absolute inset-0 w-full h-full object-cover transition-opacity duration-300", ready ? "opacity-100" : "opacity-0")} autoPlay muted playsInline />
+            {!ready && <div className="absolute bottom-2 left-2 flex items-center gap-1.5 px-2 py-0.5 rounded bg-black/55 text-[9px] text-white/80 pointer-events-none"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" /> Conectando…</div>}
+        </div>
+    );
 }
 function SnapshotImg({ deviceId, className }: { deviceId: string; className?: string }) {
     const [src, setSrc] = useState(`/api/snapshot/${deviceId}?t=${Date.now()}`);
@@ -92,6 +150,34 @@ function EventsFeed({ events, onlyAlerts }: { events: any[]; onlyAlerts: boolean
 export default function FilasPWA() {
     const [devices, setDevices] = useState<Dev[]>([]);
     const [aforo, setAforo] = useState<Record<string, number>>({});
+    const [vcaRules, setVcaRules] = useState<Record<string, any[]>>({});
+    const [showVca, setShowVca] = useState(true);
+    const [chatOpen, setChatOpen] = useState(false);
+    const [chatMsgs, setChatMsgs] = useState<{ role: "user" | "bot"; text: string }[]>([{ role: "bot", text: "Hola 👋 Consultá el estado de las filas. Escribí *aforo* o *ayuda*." }]);
+    const [chatInput, setChatInput] = useState("");
+    const [chatBusy, setChatBusy] = useState(false);
+    const [iconUpdate, setIconUpdate] = useState(false);
+    useEffect(() => {
+        (async () => {
+            try {
+                const r = await fetch("/manifest-filas.json", { cache: "no-store" });
+                const j = await r.json();
+                const src = (j?.icons?.[0]?.src || "");
+                const v = (src.split("?v=")[1] || "").trim();
+                if (!v) return;
+                const prev = localStorage.getItem("omni_pwa_iconv");
+                if (prev && prev !== v) setIconUpdate(true);
+                localStorage.setItem("omni_pwa_iconv", v);
+            } catch {}
+        })();
+    }, []);
+    const sendChat = async (preset?: string) => {
+        const t = (preset ?? chatInput).trim(); if (!t || chatBusy) return;
+        setChatMsgs(m => [...m, { role: "user", text: t }]); setChatInput(""); setChatBusy(true);
+        try { const r = await fetch("/api/chatbot/query", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: t }) }); const j = await r.json(); setChatMsgs(m => [...m, { role: "bot", text: j.reply || "…" }]); }
+        catch { setChatMsgs(m => [...m, { role: "bot", text: "Error de conexión." }]); }
+        finally { setChatBusy(false); }
+    };
     const [limit, setLimit] = useState(8);
     const [connected, setConnected] = useState(false);
     const [now, setNow] = useState(new Date());
@@ -102,7 +188,26 @@ export default function FilasPWA() {
     const [menu, setMenu] = useState<null | "device" | "profile">(null);
     const [refreshing, setRefreshing] = useState(false);
     const [tab, setTab] = useState<"vivo" | "eventos" | "alertas">("vivo");
+    const pullStart = useRef<number | null>(null);
+    const [pullY, setPullY] = useState(0);
+    useEffect(() => {
+        if ("serviceWorker" in navigator) navigator.serviceWorker.getRegistration().then((r) => r && r.update()).catch(() => {});
+        let hiddenAt = 0;
+        const onVis = () => {
+            if (document.visibilityState === "hidden") hiddenAt = Date.now();
+            else if (hiddenAt && Date.now() - hiddenAt > 20000) location.reload();
+        };
+        document.addEventListener("visibilitychange", onVis);
+        return () => document.removeEventListener("visibilitychange", onVis);
+    }, []);
+    const onPullStart = (e: any) => { const el = e.currentTarget; pullStart.current = el.scrollTop <= 0 ? e.touches[0].clientY : null; };
+    const onPullMove = (e: any) => { if (pullStart.current == null) return; const dy = e.touches[0].clientY - pullStart.current; if (dy > 0) setPullY(Math.min(dy * 0.5, 90)); };
+    const onPullEnd = async () => { if (pullStart.current == null) return; const should = pullY > 60; pullStart.current = null; setPullY(0); if (should) { setRefreshing(true); await load(); setTimeout(() => setRefreshing(false), 500); } };
     const [events, setEvents] = useState<any[]>([]);
+    const [splash, setSplash] = useState(true);
+    const [online, setOnline] = useState(true);
+    const [awake, setAwake] = useState(false);
+    const wakeRef = useRef<any>(null);
     const feedRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
     const load = useCallback(async () => {
@@ -117,6 +222,18 @@ export default function FilasPWA() {
         } catch (e) { console.error(e); }
     }, []);
     useEffect(() => { load(); const t = setInterval(() => setNow(new Date()), 1000); const r = setInterval(load, 15000); return () => { clearInterval(t); clearInterval(r); }; }, [load]);
+    const devKey = devices.map((d) => d.id).join(",");
+    useEffect(() => {
+        let cancel = false;
+        (async () => {
+            const out: Record<string, any[]> = {};
+            await Promise.all(devices.map(async (d) => {
+                try { const res = await fetch(`/api/queue/vca-config?deviceId=${d.id}`); if (res.ok) { const j = await res.json(); out[d.id] = j.rules || []; } } catch {}
+            }));
+            if (!cancel) setVcaRules(out);
+        })();
+        return () => { cancel = true; };
+    }, [devKey]);
 
     useEffect(() => {
         const socket = io(window.location.origin, { path: "/io/socket.io", transports: ["polling"] });
@@ -141,6 +258,28 @@ export default function FilasPWA() {
         if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
         if ("Notification" in window) { if (Notification.permission === "granted") setPushState("on"); else if (Notification.permission === "denied") setPushState("denied"); }
     }, []);
+
+    useEffect(() => { const t = setTimeout(() => setSplash(false), 1700); return () => clearTimeout(t); }, []);
+    useEffect(() => {
+        setOnline(typeof navigator !== "undefined" ? navigator.onLine : true);
+        const on = () => setOnline(true); const off = () => setOnline(false);
+        window.addEventListener("online", on); window.addEventListener("offline", off);
+        return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+    }, []);
+    useEffect(() => {
+        const onVis = async () => { if (awake && document.visibilityState === "visible" && "wakeLock" in navigator) { try { wakeRef.current = await (navigator as any).wakeLock.request("screen"); } catch {} } };
+        document.addEventListener("visibilitychange", onVis);
+        return () => document.removeEventListener("visibilitychange", onVis);
+    }, [awake]);
+
+    const toggleWake = async () => {
+        setMenu(null);
+        try {
+            if (awake) { await wakeRef.current?.release?.(); wakeRef.current = null; setAwake(false); }
+            else if ("wakeLock" in navigator) { wakeRef.current = await (navigator as any).wakeLock.request("screen"); setAwake(true); wakeRef.current?.addEventListener?.("release", () => setAwake(false)); }
+            else { alert("Tu dispositivo no soporta mantener la pantalla encendida."); }
+        } catch { setAwake(false); }
+    };
 
     const enablePush = async () => {
         setMenu(null);
@@ -167,6 +306,19 @@ export default function FilasPWA() {
 
     return (
         <div className="fixed inset-0 flex flex-col bg-[#0a0a0b] overflow-hidden">
+            <style>{`@keyframes aforoBeat{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.08)}}`}</style>
+            {/* Splash animada de apertura */}
+            <PwaSplash target="filas" />
+            <LiveEdgeKeeper />
+            {!online && <div className="absolute top-0 inset-x-0 z-[90] bg-red-600 text-white text-[11px] font-bold text-center py-1 animate-in slide-in-from-top pointer-events-none flex items-center justify-center gap-1.5"><WifiOff size={12} /> Sin conexión · reintentando…</div>}
+            {iconUpdate && <div className="absolute top-0 inset-x-0 z-[95] bg-violet-600 text-white text-[11px] font-semibold py-1.5 px-3 animate-in slide-in-from-top flex items-center justify-center gap-2"><Sparkles size={13} /> Icono nuevo disponible · quita y vuelve a agregar la PWA al inicio <button onClick={() => setIconUpdate(false)} className="ml-1 opacity-80 active:scale-95"><X size={14} /></button></div>}
+            {(pullY > 0 || refreshing) && (
+                <div className="absolute left-0 right-0 z-40 flex justify-center pointer-events-none" style={{ top: "calc(env(safe-area-inset-top) + 8px)", transform: `translateY(${refreshing ? 8 : pullY * 0.4}px)`, opacity: refreshing ? 1 : Math.min(pullY / 60, 1) }}>
+                    <div className="w-9 h-9 rounded-full bg-zinc-800/90 border border-white/10 flex items-center justify-center shadow-lg">
+                        <RefreshCw size={16} className={cn("text-blue-400", refreshing && "animate-spin")} style={refreshing ? undefined : { transform: `rotate(${pullY * 4}deg)` }} />
+                    </div>
+                </div>
+            )}
             {/* Top bar */}
             <header className="px-4 pt-[max(0.9rem,env(safe-area-inset-top))] pb-2 shrink-0 relative z-30">
                 <div className="flex items-center justify-between">
@@ -176,16 +328,13 @@ export default function FilasPWA() {
                         <ChevronDown size={16} className={cn("text-white/50 transition", menu === "device" && "rotate-180")} />
                     </button>
                     <div className="flex items-center gap-2">
-                        <button onClick={enablePush} className={cn("w-10 h-10 rounded-full flex items-center justify-center border border-white/10 transition", pushState === "on" ? "bg-blue-500 text-white" : "bg-white/[0.06] text-white/80")}>
-                            {pushState === "loading" ? <RefreshCw size={17} className="animate-spin" /> : pushState === "on" ? <Bell size={17} /> : <BellOff size={17} />}
-                        </button>
-                        <button onClick={() => setMenu(menu === "profile" ? null : "profile")} className="w-10 h-10 rounded-full bg-white/[0.06] border border-white/10 flex items-center justify-center text-white/70 active:bg-white/10"><User size={18} /></button>
+                        {pushState === "on" && <span className="flex items-center gap-1 text-[10px] text-blue-300/80"><span className="w-2 h-2 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.8)]" /> push</span>}
                     </div>
                 </div>
 
                 {/* Device dropdown */}
                 {menu === "device" && (
-                    <div className="absolute left-4 top-[calc(100%-0.25rem)] w-64 rounded-2xl bg-zinc-900 border border-white/10 shadow-2xl overflow-hidden">
+                    <div className="absolute left-4 top-[calc(100%-0.25rem)] w-64 rounded-2xl bg-zinc-900 border border-white/10 shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 zoom-in-95 duration-200">
                         <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white/40">Cámaras</div>
                         <button onClick={() => focusDevice(null)} className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-white/5 text-sm">
                             <span className="flex items-center gap-2"><Grid2x2 size={15} className="text-blue-400" /> Todas</span>
@@ -204,10 +353,15 @@ export default function FilasPWA() {
                 )}
                 {/* Profile dropdown */}
                 {menu === "profile" && (
-                    <div className="absolute right-4 top-[calc(100%-0.25rem)] w-56 rounded-2xl bg-zinc-900 border border-white/10 shadow-2xl overflow-hidden py-1">
+                    <div className="absolute right-4 top-[calc(100%-0.25rem)] w-60 rounded-2xl bg-zinc-900 border border-white/10 shadow-2xl overflow-hidden py-1 animate-in fade-in slide-in-from-top-2 zoom-in-95 duration-200">
                         <button onClick={doRefresh} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 text-sm"><RefreshCw size={16} className="text-white/60" /> Actualizar</button>
                         <button onClick={goFs} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 text-sm"><Maximize2 size={16} className="text-white/60" /> Pantalla completa</button>
-                        <button onClick={enablePush} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 text-sm">{pushState === "on" ? <Bell size={16} className="text-blue-400" /> : <BellOff size={16} className="text-white/60" />} Notificaciones {pushState === "on" ? "activas" : "off"}</button>
+                        <button onClick={enablePush} disabled={pushState === "loading"} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 text-sm transition-colors">
+                            {pushState === "loading" ? <RefreshCw size={16} className="text-white/60 animate-spin" /> : pushState === "on" ? <Bell size={16} className="text-blue-400" /> : <BellOff size={16} className="text-white/60" />}
+                            <span className="flex-1 text-left">Notificaciones push{pushState === "denied" && <span className="block text-[10px] text-red-400/80">Bloqueadas en el navegador</span>}</span>
+                            <span className={cn("relative w-9 h-5 rounded-full transition-colors shrink-0", pushState === "on" ? "bg-blue-500" : "bg-white/15")}><span className={cn("absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform", pushState === "on" && "translate-x-4")} /></span>
+                        </button>
+                        <button onClick={toggleWake} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 text-sm"><Sun size={16} className={awake ? "text-amber-400" : "text-white/60"} /> Pantalla siempre encendida {awake ? "· ON" : ""}</button>
                         <div className="h-px bg-white/10 my-1" />
                         <div className="px-4 py-2 text-[11px] text-white/40">Aforo total: <b className="text-white/70">{totalAforo}</b> · {connected ? "en vivo" : "sin conexión"}</div>
                     </div>
@@ -237,6 +391,7 @@ export default function FilasPWA() {
             <div className="shrink-0 flex items-center gap-2 px-4 pb-2">
                 <button onClick={() => setView("list")} className={cn("w-12 h-11 rounded-2xl border flex items-center justify-center transition", view === "list" ? "bg-blue-500/90 text-white border-blue-500" : "bg-white/[0.06] text-blue-400 border-white/10")}><Rows3 size={18} /></button>
                 <button onClick={() => setView("grid")} className={cn("w-12 h-11 rounded-2xl border flex items-center justify-center transition", view === "grid" ? "bg-blue-500/90 text-white border-blue-500" : "bg-white/[0.06] text-blue-400 border-white/10")}><LayoutGrid size={18} /></button>
+                <button onClick={() => setShowVca(v => !v)} title="Analítica VCA" className={cn("w-12 h-11 rounded-2xl border flex items-center justify-center transition", showVca ? "bg-violet-500/90 text-white border-violet-500" : "bg-white/[0.06] text-violet-400 border-white/10")}><Activity size={18} /></button>
                 <div className="flex-1 h-11 rounded-2xl border flex items-center justify-center gap-2 font-bold text-[15px]" style={{ borderColor: statusColor(totalAforo, limit) + "55", background: statusColor(totalAforo, limit) + "14", color: statusColor(totalAforo, limit) }}>
                     <Users size={17} /> Aforo {totalAforo}{limit > 0 ? ` / ${limit}` : ""}
                 </div>
@@ -245,7 +400,7 @@ export default function FilasPWA() {
             </>)}
             {/* Feeds (vivo) */}
             {tab === "vivo" && (
-            <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden pb-24">
+            <div key="vivo-feed" onTouchStart={onPullStart} onTouchMove={onPullMove} onTouchEnd={onPullEnd} className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden pb-24 animate-in fade-in slide-in-from-bottom-3 duration-300">
                 {devices.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-white/40 gap-2"><Camera size={28} /><span className="text-sm">Sin cámaras de fila</span></div>
                 ) : (
@@ -255,6 +410,7 @@ export default function FilasPWA() {
                             return (
                                 <div key={d.id} ref={(el) => { feedRefs.current[d.id] = el; }} className="relative w-full aspect-video border-b border-white/10 bg-black">
                                     <LiveVideo streamName={getStreamName(d.ip)} deviceId={d.id} className="absolute inset-0 w-full h-full" />
+                                    {showVca && (<><VCAOverlay rules={vcaRules[d.id] || []} /><AforoOverZone rules={vcaRules[d.id] || []} occ={a} color={col} /></>)}
                                     <div className="absolute top-2 left-3 text-[11px] font-mono text-white/90" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.9)" }}>{tStr}</div>
                                     <div className="absolute top-2 right-3 flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/55 text-[9px] font-bold uppercase tracking-wider"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />Live</div>
                                     <div className="absolute inset-x-0 bottom-0 px-3 pb-2.5 pt-10 bg-gradient-to-t from-black/85 via-black/20 to-transparent flex items-end justify-between">
@@ -273,16 +429,52 @@ export default function FilasPWA() {
             </div>
             )}
             {tab !== "vivo" && (
-                <EventsFeed events={events} onlyAlerts={tab === "alertas"} />
+                <div key={tab} className="flex-1 min-h-0 flex flex-col animate-in fade-in slide-in-from-bottom-3 duration-300">
+                    <EventsFeed events={events} onlyAlerts={tab === "alertas"} />
+                </div>
+            )}
+
+            {/* Chat FAB */}
+            {!chatOpen && (
+                <button onClick={() => setChatOpen(true)} className="absolute right-4 z-30 w-12 h-12 rounded-full bg-violet-600 text-white flex items-center justify-center shadow-lg shadow-violet-900/40 active:scale-95 transition" style={{ bottom: "calc(env(safe-area-inset-bottom) + 78px)" }}>
+                    <MessageCircle size={22} />
+                </button>
+            )}
+
+            {/* Chat sheet */}
+            {chatOpen && (
+                <div className="absolute inset-0 z-[60] flex flex-col bg-[#0a0a0b]/95 backdrop-blur-md animate-in fade-in slide-in-from-bottom-4 duration-200">
+                    <div className="flex items-center justify-between px-4 pt-[max(0.9rem,env(safe-area-inset-top))] pb-3 border-b border-white/10">
+                        <div className="flex items-center gap-2">
+                            <span className="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center"><MessageCircle size={16} className="text-violet-400" /></span>
+                            <div><div className="text-sm font-bold">Asistente OmniAccess</div><div className="text-[10px] text-white/40">Consultá el aforo y estado</div></div>
+                        </div>
+                        <button onClick={() => setChatOpen(false)} className="w-9 h-9 rounded-full bg-white/[0.06] flex items-center justify-center text-white/70 active:scale-95"><X size={18} /></button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4 space-y-2 [&::-webkit-scrollbar]:hidden">
+                        {chatMsgs.map((m, i) => (
+                            <div key={i} className={cn("max-w-[82%] px-3 py-2 rounded-2xl text-sm whitespace-pre-wrap break-words", m.role === "user" ? "ml-auto bg-violet-600 text-white rounded-br-sm" : "bg-white/[0.07] text-white/90 rounded-bl-sm")}>{m.text}</div>
+                        ))}
+                        {chatBusy && <div className="bg-white/[0.07] w-14 px-3 py-2.5 rounded-2xl rounded-bl-sm flex items-center"><RefreshCw size={14} className="animate-spin text-white/50" /></div>}
+                    </div>
+                    <div className="px-3 pt-2 flex gap-1.5 flex-wrap">
+                        {["aforo", "espera", "ayuda"].map(q => (
+                            <button key={q} onClick={() => sendChat(q)} className="px-3 py-1 rounded-full bg-white/[0.06] border border-white/10 text-[11px] text-white/70 active:bg-white/10">{q}</button>
+                        ))}
+                    </div>
+                    <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-2">
+                        <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") sendChat(); }} placeholder="Escribí: aforo, ayuda…" className="flex-1 bg-white/[0.06] border border-white/10 rounded-full px-4 py-2.5 text-sm text-white outline-none focus:border-violet-500" />
+                        <button onClick={() => sendChat()} disabled={chatBusy} className="w-11 h-11 rounded-full bg-violet-600 text-white flex items-center justify-center disabled:opacity-50 active:scale-95 transition"><Send size={18} /></button>
+                    </div>
+                </div>
             )}
 
             {/* Bottom nav */}
             <nav className="absolute bottom-0 inset-x-0 pb-[max(0.6rem,env(safe-area-inset-bottom))] pt-2 px-6 flex justify-center pointer-events-none z-30">
                 <div className="pointer-events-auto flex items-center gap-1 px-2 py-1.5 rounded-full bg-zinc-900/85 backdrop-blur-xl border border-white/10 shadow-2xl">
-                    <button onClick={() => setTab("vivo")} className={cn("w-12 h-11 rounded-full flex items-center justify-center transition", tab === "vivo" ? "bg-blue-500/90 text-white" : "text-white/60")}><Video size={19} /></button>
-                    <button onClick={() => setTab("eventos")} className={cn("relative w-12 h-11 rounded-full flex items-center justify-center transition", tab === "eventos" ? "bg-blue-500/90 text-white" : "text-white/60")}><Rows3 size={19} />{tab !== "eventos" && events.length > 0 && <span className="absolute top-1.5 right-2.5 w-2 h-2 rounded-full bg-blue-400" />}</button>
-                    <button onClick={() => setTab("alertas")} className={cn("relative w-12 h-11 rounded-full flex items-center justify-center transition", tab === "alertas" ? "bg-blue-500/90 text-white" : "text-white/60")}><Zap size={19} />{tab !== "alertas" && events.some((e) => e.type === "alert") && <span className="absolute top-1.5 right-2.5 w-2 h-2 rounded-full bg-red-500" />}</button>
-                    <button onClick={enablePush} className="w-12 h-11 rounded-full text-white/60 flex items-center justify-center">{pushState === "on" ? <Bell size={19} className="text-blue-400" /> : <Sparkles size={19} />}</button>
+                    <button onClick={() => setTab("vivo")} className={cn("w-12 h-11 rounded-full flex items-center justify-center transition-all duration-300", tab === "vivo" ? "bg-blue-500/90 text-white scale-105" : "text-white/60 hover:text-white/80")}><Video size={19} /></button>
+                    <button onClick={() => setTab("eventos")} className={cn("relative w-12 h-11 rounded-full flex items-center justify-center transition-all duration-300", tab === "eventos" ? "bg-blue-500/90 text-white scale-105" : "text-white/60 hover:text-white/80")}><Rows3 size={19} />{tab !== "eventos" && events.length > 0 && <span className="absolute top-1.5 right-2.5 w-2 h-2 rounded-full bg-blue-400" />}</button>
+                    <button onClick={() => setTab("alertas")} className={cn("relative w-12 h-11 rounded-full flex items-center justify-center transition-all duration-300", tab === "alertas" ? "bg-blue-500/90 text-white scale-105" : "text-white/60 hover:text-white/80")}><Zap size={19} />{tab !== "alertas" && events.some((e) => e.type === "alert") && <span className="absolute top-1.5 right-2.5 w-2 h-2 rounded-full bg-red-500" />}</button>
                     <button onClick={() => setMenu(menu === "profile" ? null : "profile")} className="w-12 h-11 rounded-full text-white/60 flex items-center justify-center"><Settings size={19} /></button>
                 </div>
             </nav>

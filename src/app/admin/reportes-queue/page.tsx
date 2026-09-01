@@ -9,12 +9,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { getAppBranding } from "@/app/actions/settings";
+import { getAppBranding, getReportBranding } from "@/app/actions/settings";
 import {
     getQueueHourlyBreakdown,
     getQueueDailyBreakdown,
     getQueueWeeklyBreakdown,
     getQueueMonthlyBreakdown,
+    getQueueIntervalBreakdown,
     getQueueDevices,
     getCameraOutages,
 } from "@/app/actions/queue";
@@ -22,9 +23,9 @@ import { toast } from "sonner";
 
 /* ── Types ─────────────────────────────────── */
 interface HourlyData { hour: number; avg: number; max: number; count: number; }
-interface DailyData { date: string; avg: number; max: number; count: number; total: number; }
-interface WeeklyData { week: string; avg: number; max: number; count: number; total: number; }
-interface MonthlyData { month: string; avg: number; max: number; count: number; total: number; }
+interface DailyData { date: string; avg: number; max: number; last: number; count: number; total: number; }
+interface WeeklyData { week: string; avg: number; max: number; last: number; count: number; total: number; }
+interface MonthlyData { month: string; avg: number; max: number; last: number; count: number; total: number; }
 type TabKey = "hora" | "dia" | "semana" | "mes";
 
 const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
@@ -52,7 +53,7 @@ function BarChart({ data, labelKey, valueKeys, colors, labels: seriesLabels, hei
 
     const n = Math.max(data.length, 1);
     const maxVal = Math.max(...data.flatMap(d => valueKeys.map(k => d[k] || 0)), 1);
-    const W = 1000, H = 300, PAD_L = 42, PAD_R = 18, PAD_T = 18, PAD_B = 40;
+    const W = 1400, H = 300, PAD_L = 46, PAD_R = 26, PAD_T = 22, PAD_B = 40;
     const plotW = W - PAD_L - PAD_R, plotH = H - PAD_T - PAD_B;
     const SERIES = [
         { c: "#a855f7", glow: true },   // Máximo (violeta)
@@ -81,7 +82,7 @@ function BarChart({ data, labelKey, valueKeys, colors, labels: seriesLabels, hei
 
     return (
         <div className="relative">
-            <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: "auto", maxHeight: 300 }} preserveAspectRatio="xMidYMid meet"
+            <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: "auto" }} preserveAspectRatio="xMidYMid meet"
                 onMouseLeave={() => setHovered(null)}>
                 <defs>
                     {SERIES.map((sx, i) => (
@@ -137,6 +138,12 @@ function BarChart({ data, labelKey, valueKeys, colors, labels: seriesLabels, hei
                                     style={{ opacity: animated ? 1 : 0, transition: "opacity .6s ease" }} />
                             ) : null;
                         })}
+                        {valueKeys[0] && (item[valueKeys[0]] || 0) >= Math.max(maxVal * 0.12, 2) && (
+                            <text x={xOf(i)} y={yOf(item[valueKeys[0]] || 0) - 9} textAnchor="middle" fontSize="12" fontWeight={700}
+                                style={{ fill: SERIES[0]?.c || "#a855f7" }}>
+                                {item[valueKeys[0]]}
+                            </text>
+                        )}
                         {(i % labelEvery === 0 || n <= 12) && (
                             <text x={xOf(i)} y={H - PAD_B + 18} textAnchor="middle" fontSize="11" fontFamily="monospace"
                                 style={{ fill: hovered === i ? "var(--foreground)" : "var(--muted-foreground)", fontWeight: hovered === i ? 700 : 400 }}>
@@ -265,90 +272,181 @@ async function loadDataUrl(url: string): Promise<{ data: string; w: number; h: n
 async function exportPDF(title: string, subtitle: string, columns: { key: string; label: string }[], data: any[], filename: string) {
     const { jsPDF } = await import("jspdf");
     const autoTable = (await import("jspdf-autotable")).default;
-    let brand: any = {};
-    try { brand = await getAppBranding(); } catch {}
-    const brandName = brand?.name || "OmniAccess";
-    const logo = brand?.logoUrl ? await loadDataUrl(brand.logoUrl) : null;
+    let rb: any = {};
+    try { rb = await getReportBranding(); } catch {}
+    const brandName = rb?.company || "OmniAccess";
+    const footerTxt = rb?.footer || brandName;
+    const logo = rb?.logoUrl ? await loadDataUrl(rb.logoUrl) : null;
 
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const W = doc.internal.pageSize.width;
     const H = doc.internal.pageSize.height;
     const M = 14;
-    const primary: [number, number, number] = hexToRgb(brand?.primary) || [124, 58, 237];
+    const primary: [number, number, number] = hexToRgb(rb?.primary) || [124, 58, 237];
+    const accent: [number, number, number] = hexToRgb(rb?.accent) || primary;
+    const tableHead: [number, number, number] = hexToRgb(rb?.tableHeader) || primary;
+    const stripe: [number, number, number] = hexToRgb(rb?.tableStripe) || [247, 244, 255];
     const violet = primary;
 
-    // ── Header band ──
+    // ── Professional data palette (fallback when brand color is near-black) ──
+    const lum = (c: [number, number, number]) => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+    const chartDark = lum(accent) < 70 && lum(primary) < 70;
+    const cAvg: [number, number, number] = chartDark ? [37, 99, 235] : primary;
+    const cMax: [number, number, number] = chartDark
+        ? [191, 219, 254]
+        : [Math.round(accent[0] + (255 - accent[0]) * 0.6), Math.round(accent[1] + (255 - accent[1]) * 0.6), Math.round(accent[2] + (255 - accent[2]) * 0.6)];
+
+    // ── Metric detection (avg / max / count) ──
+    const keyByLabel = (...names: string[]): string | null => {
+        for (const c of columns) { const l = c.label.toLowerCase(); if (names.some(n => l.includes(n))) return c.key; }
+        return null;
+    };
+    const labelKey = columns[0]?.key;
+    const avgKey = keyByLabel("promedio", "average");
+    const maxKey = keyByLabel("máximo", "maximo", "pico");
+    const totalKey = keyByLabel("total");
+    const num = (r: any, k: string | null) => k ? (Number(String(r[k] ?? "").replace(/[^\d.-]/g, "")) || 0) : 0;
+    const maxVals = maxKey ? data.map(r => num(r, maxKey)) : [];
+    const avgVals = avgKey ? data.map(r => num(r, avgKey)) : [];
+    const peakMax = maxVals.length ? Math.max(...maxVals) : 0;
+    const peakIdx = maxVals.length ? maxVals.indexOf(peakMax) : -1;
+    const peakLabel = peakIdx >= 0 ? String(data[peakIdx]?.[labelKey] ?? "") : "—";
+    const avgActive = avgVals.filter(v => v > 0);
+    const avgOfAvg = avgActive.length ? Math.round((avgActive.reduce((a, b) => a + b, 0) / avgActive.length) * 10) / 10 : 0;
+    const sumTotal = totalKey ? data.reduce((a, r) => a + num(r, totalKey), 0) : 0;
+
+    const subParts = String(subtitle).split(" - ");
+    const periodPart = subParts[0] || String(subtitle);
+    const devicePart = subParts[1] || "Todos los puntos";
+
+    // ══ COVER PAGE (estilo propuesta corporativa) ══
+    const coverImg = rb?.coverUrl ? await loadDataUrl(rb.coverUrl) : null;
+    {
+        const navy: [number, number, number] = [23, 42, 92];
+        const blue: [number, number, number] = chartDark ? [37, 99, 235] : cAvg;
+        const lite: [number, number, number] = [96, 165, 250];
+
+        if (coverImg) {
+            try { doc.addImage(coverImg.data, coverImg.fmt, 0, 0, W, H); } catch { }
+        } else {
+            // capas de onda en la esquina superior derecha
+            doc.setFillColor(navy[0], navy[1], navy[2]);
+            doc.lines([[-92, 0], [30, 26, 62, 58, 92, 96], [0, -96]], W, 0, [1, 1], "F", true);
+            doc.setFillColor(blue[0], blue[1], blue[2]);
+            doc.lines([[-66, 0], [22, 24, 46, 52, 66, 82], [0, -82]], W, 0, [1, 1], "F", true);
+            doc.setFillColor(lite[0], lite[1], lite[2]);
+            doc.lines([[-42, 0], [15, 18, 30, 40, 42, 62], [0, -62]], W, 0, [1, 1], "F", true);
+            // marco fino
+            doc.setDrawColor(225, 228, 235); doc.setLineWidth(0.4);
+            doc.rect(8, 8, W - 16, H - 16);
+        }
+
+        const LX = M + 4;
+
+        // logo + empresa (arriba izquierda)
+        if (logo) {
+            const maxS = 16; let lw = maxS, lh = maxS;
+            if (logo.w && logo.h) { const ar = logo.w / logo.h; if (ar >= 1) { lw = maxS; lh = maxS / ar; } else { lh = maxS; lw = maxS * ar; } }
+            try { doc.addImage(logo.data, logo.fmt, LX, 24, lw, lh); } catch { }
+        }
+        doc.setTextColor(70, 78, 95); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+        doc.text(String(brandName).toUpperCase(), LX, logo ? 72 : 32);
+
+        // título grande en dos líneas
+        doc.setTextColor(55, 60, 70); doc.setFont("helvetica", "normal"); doc.setFontSize(34);
+        doc.text("INFORME DE", LX, 116);
+        doc.setTextColor(25, 30, 40); doc.setFont("helvetica", "bold"); doc.setFontSize(34);
+        doc.text("AFORO", LX, 132);
+        doc.setTextColor(blue[0], blue[1], blue[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(13);
+        doc.text(title, LX, 144);
+
+        // realizado / autorizado por
+        let yy = 166;
+        const block = (label: string, value: string) => {
+            doc.setTextColor(120, 126, 138); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+            doc.text(label.toUpperCase(), LX, yy);
+            doc.setTextColor(40, 45, 55); doc.setFont("helvetica", "bold"); doc.setFontSize(10.5);
+            doc.text(value, LX, yy + 5.5);
+            yy += 15;
+        };
+        block("Realizado por", rb?.preparedBy || brandName);
+        if (rb?.authorizedBy) block("Autorizado por", rb.authorizedBy);
+
+        // descripción
+        doc.setTextColor(120, 126, 138); doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
+        const desc = `Datos recabados durante ${periodPart}${devicePart && devicePart !== "Todos los puntos" ? ` · ${devicePart}` : ""}. Pico máximo ${peakMax}, aforo promedio ${avgOfAvg.toFixed(1)} en ${data.length} períodos.`;
+        const dl = doc.splitTextToSize(desc, 96);
+        doc.text(dl, LX, yy + 1);
+        yy += 4 + dl.length * 4;
+
+        // rango de fechas en negrita
+        doc.setTextColor(25, 30, 40); doc.setFont("helvetica", "bold"); doc.setFontSize(15);
+        doc.text(String(periodPart).toUpperCase(), LX, yy + 8);
+
+        // emblema inferior
+        doc.setFillColor(navy[0], navy[1], navy[2]);
+        doc.circle(W / 2, H - 20, 5, "F");
+        doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(7);
+        doc.text((brandName || "O").charAt(0), W / 2, H - 18, { align: "center" });
+
+        doc.addPage();
+    }
+
+    // ── Header band (content pages) ──
     doc.setFillColor(violet[0], violet[1], violet[2]);
     doc.rect(0, 0, W, 34, "F");
-    // logo mark (white rounded tile + ring)
     doc.setFillColor(255, 255, 255);
-    doc.roundedRect(M, 9, 16, 16, 3, 3, "F");
+    doc.roundedRect(M, 8, 20, 20, 3, 3, "F");
     if (logo) {
-        const maxS = 13; let lw = maxS, lh = maxS;
+        const maxS = 17; let lw = maxS, lh = maxS;
         if (logo.w && logo.h) { const ar = logo.w / logo.h; if (ar >= 1) { lw = maxS; lh = maxS / ar; } else { lh = maxS; lw = maxS * ar; } }
-        try { doc.addImage(logo.data, logo.fmt, M + (16 - lw) / 2, 9 + (16 - lh) / 2, lw, lh); } catch { }
+        try { doc.addImage(logo.data, logo.fmt, M + (20 - lw) / 2, 8 + (20 - lh) / 2, lw, lh); } catch { }
     } else {
-        doc.setDrawColor(violet[0], violet[1], violet[2]);
-        doc.setLineWidth(1.6);
+        doc.setDrawColor(violet[0], violet[1], violet[2]); doc.setLineWidth(1.6);
         doc.circle(M + 8, 17, 4.2, "S");
-        doc.setFillColor(violet[0], violet[1], violet[2]);
-        doc.circle(M + 8, 17, 1.3, "F");
+        doc.setFillColor(violet[0], violet[1], violet[2]); doc.circle(M + 8, 17, 1.3, "F");
     }
-    // brand text
     doc.setTextColor(255, 255, 255);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.text(brandName, M + 21, 16);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(228, 218, 255);
-    doc.text("Reporte de aforo \u00b7 Control de Filas", M + 21, 22);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(16);
+    doc.text(brandName, M + 25, 16);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+    doc.setTextColor(215, 215, 222);
+    doc.text(rb?.tagline || "Reporte de aforo · Control de Filas", M + 25, 22);
     doc.setFontSize(7.5);
     doc.text(new Date().toLocaleString("es-UY"), W - M, 14, { align: "right" });
+    if (rb?.contact) { doc.setFontSize(7); doc.setTextColor(215, 215, 222); doc.text(String(rb.contact), W - M, 19, { align: "right" }); }
 
     // ── Title block ──
     doc.setTextColor(28, 28, 30);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(15);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(15);
     doc.text(title, M, 48);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9.5);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
     doc.setTextColor(120, 120, 120);
     doc.text(subtitle, M, 55);
 
-    // ── KPI cards (detect numeric metric column) ──
+    // ── KPI cards (managerial) ──
     let cursorY = 62;
-    const numericMeta = (() => {
-        for (let i = columns.length - 1; i >= 0; i--) {
-            const k = columns[i].key;
-            const vals = data.map(r => Number(String(r[k] ?? "").replace(/[^\d.-]/g, "")));
-            if (vals.length && vals.every(v => !isNaN(v))) return { label: columns[i].label, vals };
-        }
-        return null;
-    })();
-    if (numericMeta && numericMeta.vals.length) {
-        const vals = numericMeta.vals;
-        const max = Math.max(...vals);
-        const sum = vals.reduce((a, b) => a + b, 0);
-        const avg = Math.round((sum / vals.length) * 10) / 10;
-        const kpis: { label: string; value: string; col: [number, number, number] }[] = [
-            { label: "Registros", value: String(data.length), col: [99, 102, 241] },
-            { label: "M\u00e1ximo", value: String(max), col: [239, 68, 68] },
-            { label: "Promedio", value: String(avg), col: [16, 185, 129] },
-            { label: "Total", value: String(sum), col: [124, 58, 237] },
-        ];
+    const kpis: { label: string; value: string; col: [number, number, number] }[] = [
+        { label: "Pico máximo", value: String(peakMax), col: [239, 68, 68] },
+        { label: "Aforo promedio", value: avgOfAvg.toFixed(1), col: [16, 185, 129] },
+        { label: "Período pico", value: peakLabel || "—", col: [245, 158, 11] },
+        totalKey
+            ? { label: "Aforo acumulado", value: String(sumTotal), col: [99, 102, 241] }
+            : { label: "Períodos", value: String(data.length), col: [99, 102, 241] },
+    ];
+    {
         const gap = 4;
         const cardW = (W - M * 2 - gap * 3) / 4;
-        kpis.forEach((k, i) => {
-            const x = M + i * (cardW + gap);
+        kpis.forEach((k, idx) => {
+            const x = M + idx * (cardW + gap);
             doc.setFillColor(248, 248, 250);
             doc.roundedRect(x, cursorY, cardW, 20, 2.5, 2.5, "F");
             doc.setFillColor(k.col[0], k.col[1], k.col[2]);
             doc.roundedRect(x, cursorY, 2.6, 20, 1, 1, "F");
             doc.setTextColor(k.col[0], k.col[1], k.col[2]);
             doc.setFont("helvetica", "bold");
-            doc.setFontSize(15);
-            doc.text(k.value, x + 6, cursorY + 11);
+            doc.setFontSize(String(k.value).length > 6 ? 10 : 15);
+            doc.text(String(k.value), x + 6, cursorY + 11);
             doc.setTextColor(135, 135, 140);
             doc.setFont("helvetica", "normal");
             doc.setFontSize(6.5);
@@ -357,30 +455,66 @@ async function exportPDF(title: string, subtitle: string, columns: { key: string
         cursorY += 26;
     }
 
-    // ── Mini bar chart ──
-    if (numericMeta && numericMeta.vals.length) {
-        const vals = numericMeta.vals.slice(0, 31);
-        doc.setTextColor(90, 90, 95);
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(8);
-        doc.text(numericMeta.label.toUpperCase(), M, cursorY);
-        const plotY = cursorY + 2.5;
-        const plotH = 26;
+    // ── Chart: Máximo vs Promedio por período ──
+    if (maxVals.length || avgVals.length) {
+        const labels = data.map(r => String(r[labelKey] ?? ""));
+        const N = Math.min(data.length, 24);
+        const idxs = Array.from({ length: N }, (_, k) => Math.floor(k * data.length / N));
+        const mx = idxs.map(k => maxVals[k] ?? 0);
+        const av = idxs.map(k => avgVals[k] ?? 0);
+        const lbl = idxs.map(k => labels[k]);
+        const maxV = Math.max(...mx, ...av, 1);
+
+        doc.setTextColor(60, 60, 65);
+        doc.setFont("helvetica", "bold"); doc.setFontSize(8.5);
+        doc.text("AFORO POR PERÍODO", M, cursorY);
+        const lgX = W - M - 58;
+        doc.setFillColor(cMax[0], cMax[1], cMax[2]); doc.roundedRect(lgX, cursorY - 2.6, 3, 3, 0.5, 0.5, "F");
+        doc.setTextColor(110, 110, 115); doc.setFont("helvetica", "normal"); doc.setFontSize(7);
+        doc.text("Máximo", lgX + 4.5, cursorY);
+        const lg2 = lgX + 28;
+        doc.setFillColor(cAvg[0], cAvg[1], cAvg[2]); doc.roundedRect(lg2, cursorY - 2.6, 3, 3, 0.5, 0.5, "F");
+        doc.text("Promedio", lg2 + 4.5, cursorY);
+
+        const plotY = cursorY + 4;
+        const plotH = 36;
         const cw = W - M * 2;
-        const maxV = Math.max(...vals, 1);
-        const n = vals.length;
-        const gap = n > 1 ? 1.2 : 0;
-        const bw = (cw - gap * (n - 1)) / n;
-        vals.forEach((v, i) => {
-            const hh = Math.max((v / maxV) * plotH, 0.4);
-            const x = M + i * (bw + gap);
-            doc.setFillColor(primary[0], primary[1], primary[2]);
-            doc.roundedRect(x, plotY + plotH - hh, bw, hh, 0.4, 0.4, "F");
+
+        doc.setDrawColor(232, 232, 236); doc.setLineWidth(0.15);
+        [0, 0.5, 1].forEach(fr => {
+            const y = plotY + plotH - fr * plotH;
+            doc.line(M, y, M + cw, y);
+            doc.setTextColor(175, 175, 180); doc.setFont("helvetica", "normal"); doc.setFontSize(5.5);
+            doc.text(String(Math.round(maxV * fr)), M - 1.5, y + 1, { align: "right" });
         });
-        doc.setDrawColor(225, 225, 230);
-        doc.setLineWidth(0.2);
+
+        const n = mx.length;
+        const slot = cw / n;
+        const bw = Math.min(slot * 0.6, 7);
+        for (let k = 0; k < n; k++) {
+            const cx = M + k * slot + slot / 2;
+            const hMax = Math.max((mx[k] / maxV) * plotH, 0.4);
+            const hAvg = Math.max((av[k] / maxV) * plotH, 0.4);
+            doc.setFillColor(cMax[0], cMax[1], cMax[2]);
+            doc.roundedRect(cx - bw / 2, plotY + plotH - hMax, bw, hMax, 0.5, 0.5, "F");
+            doc.setFillColor(cAvg[0], cAvg[1], cAvg[2]);
+            doc.roundedRect(cx - bw / 4, plotY + plotH - hAvg, bw / 2, hAvg, 0.4, 0.4, "F");
+            // value label on the peak bar
+            if (mx[k] === peakMax && peakMax > 0) {
+                doc.setTextColor(cAvg[0], cAvg[1], cAvg[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(6);
+                doc.text(String(mx[k]), cx, plotY + plotH - hMax - 1.5, { align: "center" });
+            }
+        }
+        doc.setDrawColor(200, 200, 205); doc.setLineWidth(0.3);
         doc.line(M, plotY + plotH, M + cw, plotY + plotH);
-        cursorY = plotY + plotH + 9;
+
+        doc.setTextColor(140, 140, 145); doc.setFont("helvetica", "normal"); doc.setFontSize(5.5);
+        const step = Math.max(1, Math.ceil(n / 12));
+        for (let k = 0; k < n; k += step) {
+            const cx = M + k * slot + slot / 2;
+            doc.text(String(lbl[k] ?? "").slice(0, 6), cx, plotY + plotH + 4, { align: "center" });
+        }
+        cursorY = plotY + plotH + 12;
     }
 
     // ── Table ──
@@ -389,23 +523,23 @@ async function exportPDF(title: string, subtitle: string, columns: { key: string
         head: [columns.map(c => c.label)],
         body: data.map(row => columns.map(c => row[c.key] ?? "")),
         theme: "striped",
-        headStyles: { fillColor: violet, textColor: [255, 255, 255], fontSize: 9, fontStyle: "bold", halign: "center", cellPadding: 2.6 },
+        headStyles: { fillColor: tableHead, textColor: [255, 255, 255], fontSize: 9, fontStyle: "bold", halign: "center", cellPadding: 2.6 },
         bodyStyles: { fontSize: 8.5, halign: "center", textColor: [55, 55, 55], cellPadding: 2.4 },
-        alternateRowStyles: { fillColor: [247, 244, 255] },
+        alternateRowStyles: { fillColor: stripe },
         styles: { lineColor: [235, 235, 240], lineWidth: 0.1 },
         margin: { left: M, right: M },
     });
 
     // ── Footer band on each page ──
     const pageCount = doc.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
+    for (let i = 2; i <= pageCount; i++) {
         doc.setPage(i);
         doc.setDrawColor(230, 230, 235);
         doc.setLineWidth(0.3);
         doc.line(M, H - 14, W - M, H - 14);
         doc.setFontSize(7);
         doc.setTextColor(160, 160, 160);
-        doc.text(brandName, M, H - 9);
+        doc.text(footerTxt, M, H - 9);
         doc.text(`P\u00e1gina ${i} de ${pageCount}`, W - M, H - 9, { align: "right" });
     }
 
@@ -474,6 +608,9 @@ function OutagesPanel({ outages, devices }: { outages: any[]; devices: { id: str
 
 export default function ReportesQueuePage() {
     const [activeTab, setActiveTab] = useState<TabKey>("hora");
+    const [slideDir, setSlideDir] = useState<"l" | "r">("r");
+    const tabOrder: TabKey[] = ["hora", "dia", "semana", "mes"];
+    const switchTab = (k: TabKey) => { setSlideDir(tabOrder.indexOf(k) >= tabOrder.indexOf(activeTab) ? "r" : "l"); setActiveTab(k); };
     const [devices, setDevices] = useState<{ id: string; name: string }[]>([]);
     const [selectedDevice, setSelectedDevice] = useState<string>("");
     const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split("T")[0]);
@@ -484,6 +621,8 @@ export default function ReportesQueuePage() {
     const [loading, setLoading] = useState(true);
 
     const [hourly, setHourly] = useState<HourlyData[]>([]);
+    const [gran, setGran] = useState<number>(60);
+    const [intervalRows, setIntervalRows] = useState<any[]>([]);
     const [daily, setDaily] = useState<DailyData[]>([]);
     const [weekly, setWeekly] = useState<WeeklyData[]>([]);
     const [monthly, setMonthly] = useState<MonthlyData[]>([]);
@@ -501,8 +640,8 @@ export default function ReportesQueuePage() {
 
             if (activeTab === "hora") {
                 const date = new Date(selectedDate + "T12:00:00");
-                const data = await getQueueHourlyBreakdown(devId, date);
-                setHourly(data);
+                const data = await getQueueIntervalBreakdown(devId, date, gran);
+                setIntervalRows(data as any[]);
             } else if (activeTab === "dia") {
                 const data = await getQueueDailyBreakdown(devId, from, to);
                 setDaily(data);
@@ -527,7 +666,7 @@ export default function ReportesQueuePage() {
             toast.error("Error cargando reportes");
             setLoading(false);
         }
-    }, [activeTab, selectedDate, dateFrom, dateTo, selectedDevice]);
+    }, [activeTab, selectedDate, dateFrom, dateTo, selectedDevice, gran]);
 
     useEffect(() => { loadData(); }, [loadData]);
 
@@ -542,28 +681,28 @@ export default function ReportesQueuePage() {
     /* ── Export handlers ── */
     const handleExport = async (format: "pdf" | "xlsx") => {
         if (activeTab === "hora") {
+            const ivLabel = gran === 60 ? "1 h" : `${gran} min`;
             const cols = [
-                { key: "hourLabel", label: "Hora" },
-                { key: "avg", label: "Promedio" },
+                { key: "rangeLabel", label: "Intervalo" },
+                { key: "last", label: "Aforo exacto" },
                 { key: "max", label: "Máximo" },
-                { key: "count", label: "Eventos" },
+                { key: "avg", label: "Promedio" },
+                { key: "count", label: "Lecturas" },
             ];
-            const rows = hourly.map(h => ({
-                hourLabel: `${String(h.hour).padStart(2, "0")}:00`,
-                avg: h.avg, max: h.max, count: h.count,
-            }));
+            const rows = intervalRows.filter((r: any) => r.count > 0);
             const dateLabel = new Date(selectedDate + "T12:00:00").toLocaleDateString("es-UY", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-            if (format === "xlsx") await exportXLSX("Afluencia por Hora", cols, rows, `afluencia-hora-${selectedDate}.xlsx`);
-            else await exportPDF("Afluencia por Hora", `${dateLabel} - ${deviceLabel}`, cols, rows, `afluencia-hora-${selectedDate}.pdf`);
+            if (format === "xlsx") await exportXLSX(`Afluencia (${ivLabel})`, cols, rows, `afluencia-${gran}min-${selectedDate}.xlsx`);
+            else await exportPDF(`Afluencia por intervalo (${ivLabel})`, `${dateLabel} - ${deviceLabel}`, cols, rows, `afluencia-${gran}min-${selectedDate}.pdf`);
         } else if (activeTab === "dia") {
             const cols = [
                 { key: "dateLabel", label: "Fecha" },
                 { key: "avg", label: "Promedio" },
                 { key: "max", label: "Máximo" },
+                { key: "last", label: "Aforo exacto" },
                 { key: "count", label: "Eventos" },
                 { key: "total", label: "Total" },
             ];
-            const rows = daily.map(d => ({ dateLabel: fmtDate(d.date), avg: d.avg, max: d.max, count: d.count, total: d.total }));
+            const rows = daily.map(d => ({ dateLabel: fmtDate(d.date), avg: d.avg, max: d.max, last: d.last, count: d.count, total: d.total }));
             if (format === "xlsx") await exportXLSX("Afluencia por Día", cols, rows, `afluencia-diaria-${dateFrom}-${dateTo}.xlsx`);
             else await exportPDF("Afluencia por Día", `${dateFrom} a ${dateTo} - ${deviceLabel}`, cols, rows, `afluencia-diaria-${dateFrom}-${dateTo}.pdf`);
         } else if (activeTab === "semana") {
@@ -571,6 +710,7 @@ export default function ReportesQueuePage() {
                 { key: "week", label: "Semana" },
                 { key: "avg", label: "Promedio" },
                 { key: "max", label: "Máximo" },
+                { key: "last", label: "Aforo exacto" },
                 { key: "count", label: "Eventos" },
                 { key: "total", label: "Total" },
             ];
@@ -581,12 +721,13 @@ export default function ReportesQueuePage() {
                 { key: "monthLabel", label: "Mes" },
                 { key: "avg", label: "Promedio" },
                 { key: "max", label: "Máximo" },
+                { key: "last", label: "Aforo exacto" },
                 { key: "count", label: "Eventos" },
                 { key: "total", label: "Total" },
             ];
             const rows = monthly.map(m => {
                 const [y, mo] = m.month.split("-");
-                return { monthLabel: `${MONTHS_ES[parseInt(mo) - 1]} ${y}`, avg: m.avg, max: m.max, count: m.count, total: m.total };
+                return { monthLabel: `${MONTHS_ES[parseInt(mo) - 1]} ${y}`, avg: m.avg, max: m.max, last: m.last, count: m.count, total: m.total };
             });
             if (format === "xlsx") await exportXLSX("Afluencia por Mes", cols, rows, `afluencia-mensual.xlsx`);
             else await exportPDF("Afluencia por Mes", `${deviceLabel}`, cols, rows, `afluencia-mensual.pdf`);
@@ -602,51 +743,66 @@ export default function ReportesQueuePage() {
         );
 
         if (activeTab === "hora") {
-            const maxHourlyMax = Math.max(...hourly.map(h => h.max), 1);
-            const totalEvents = hourly.reduce((s, h) => s + h.count, 0);
-            const avgPeak = hourly.length > 0 ? Math.round(hourly.reduce((s, h) => s + h.avg, 0) / hourly.filter(h => h.count > 0).length * 10) / 10 || 0 : 0;
-            const peakHour = hourly.reduce((p, h) => h.max > p.max ? h : p, hourly[0]);
+            const rows = intervalRows;
+            const withData = rows.filter((r: any) => r.count > 0);
+            const totalReadings = rows.reduce((s: number, r: any) => s + r.count, 0);
+            const avgAforo = withData.length ? Math.round(withData.reduce((s: number, r: any) => s + r.avg, 0) / withData.length * 10) / 10 : 0;
+            const peak = rows.reduce((p: any, r: any) => (r.max > (p?.max ?? -1) ? r : p), rows[0] || { max: 0, label: "—" });
+            const granOptions = [5, 15, 30, 45, 60];
 
             return (
                 <div className="space-y-5">
+                    {/* Granularity + explicación */}
+                    <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Intervalo</span>
+                            <div className="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/60 border border-border">
+                                {granOptions.map(g => (
+                                    <button key={g} onClick={() => setGran(g)} className={cn("px-2.5 py-1 rounded-md text-xs font-semibold transition", gran === g ? "bg-violet-600 text-white" : "text-muted-foreground hover:text-foreground")}>{g === 60 ? "1 h" : `${g} min`}</button>
+                                ))}
+                            </div>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">
+                            <b className="text-cyan-400">Aforo exacto</b> = última lectura del intervalo · <b className="text-violet-400">Máximo</b> = aforo más alto · <b className="text-amber-400">Promedio</b> = aforo medio
+                        </p>
+                    </div>
+
                     {/* Mini KPIs */}
                     <div className="grid grid-cols-3 gap-3">
                         <div className="rounded-lg border border-border bg-foreground/[0.04] px-4 py-3">
-                            <div className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold">{"Eventos del día"}</div>
-                            <div className="text-xl font-black text-violet-400 tabular-nums">{totalEvents}</div>
+                            <div className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold">Lecturas del día</div>
+                            <div className="text-xl font-black text-violet-400 tabular-nums">{totalReadings}</div>
                         </div>
                         <div className="rounded-lg border border-border bg-foreground/[0.04] px-4 py-3">
-                            <div className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold">{"Promedio personas"}</div>
-                            <div className="text-xl font-black text-sky-400 tabular-nums">{avgPeak}</div>
+                            <div className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold">Aforo promedio</div>
+                            <div className="text-xl font-black text-sky-400 tabular-nums">{avgAforo}</div>
                         </div>
                         <div className="rounded-lg border border-border bg-foreground/[0.04] px-4 py-3">
-                            <div className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold">{"Pico máximo"}</div>
-                            <div className="text-xl font-black text-red-400 tabular-nums">{peakHour?.max || 0} <span className="text-xs font-normal text-muted-foreground">a las {String(peakHour?.hour || 0).padStart(2, "0")}:00</span></div>
+                            <div className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold">Pico máximo</div>
+                            <div className="text-xl font-black text-red-400 tabular-nums">{peak?.max || 0} <span className="text-xs font-normal text-muted-foreground">a las {peak?.label || "—"}</span></div>
                         </div>
                     </div>
 
                     {/* Chart */}
                     <div className="rounded-lg border border-border bg-foreground/[0.04] p-5">
                         <BarChart
-                            data={hourly.map(h => ({ ...h, label: `${String(h.hour).padStart(2, "0")}:00` }))}
-                            labelKey="label" valueKeys={["max", "avg"]}
-                            colors={["bg-violet-500/20", "bg-violet-500/60"]}
-                            labels={["Máximo", "Promedio"]}
+                            data={rows}
+                            labelKey="label" valueKeys={["max", "last", "avg"]}
+                            colors={["bg-violet-500/40", "bg-cyan-500/40", "bg-amber-500/40"]}
+                            labels={["Máximo", "Aforo exacto", "Promedio"]}
                         />
                     </div>
 
                     {/* Table */}
                     <DataTable
                         columns={[
-                            { key: "label", label: "Hora" },
-                            { key: "avg", label: "Promedio", align: "right" },
+                            { key: "rangeLabel", label: "Intervalo" },
+                            { key: "last", label: "Aforo exacto", align: "right" },
                             { key: "max", label: "Máximo", align: "right" },
-                            { key: "count", label: "Eventos", align: "right" },
+                            { key: "avg", label: "Promedio", align: "right" },
+                            { key: "count", label: "Lecturas", align: "right" },
                         ]}
-                        data={hourly.filter(h => h.count > 0).map(h => ({
-                            label: `${String(h.hour).padStart(2, "0")}:00 - ${String(h.hour + 1).padStart(2, "0")}:00`,
-                            avg: h.avg, max: h.max, count: h.count,
-                        }))}
+                        data={withData}
                     />
                 </div>
             );
@@ -677,9 +833,9 @@ export default function ReportesQueuePage() {
                     <div className="rounded-lg border border-border bg-foreground/[0.04] p-5">
                         <BarChart
                             data={daily.map(d => ({ ...d, label: fmtDate(d.date) }))}
-                            labelKey="label" valueKeys={["max", "avg"]}
-                            colors={["bg-violet-500/20", "bg-violet-500/60"]}
-                            labels={["Máximo", "Promedio"]} height={220}
+                            labelKey="label" valueKeys={["max", "last", "avg"]}
+                            colors={["bg-violet-500/40", "bg-cyan-500/40", "bg-amber-500/40"]}
+                            labels={["Máximo", "Aforo exacto", "Promedio"]} height={220}
                         />
                     </div>
 
@@ -688,11 +844,12 @@ export default function ReportesQueuePage() {
                             { key: "dateLabel", label: "Fecha" },
                             { key: "avg", label: "Promedio", align: "right" },
                             { key: "max", label: "Máximo", align: "right" },
+                            { key: "last", label: "Aforo exacto", align: "right" },
                             { key: "count", label: "Eventos", align: "right" },
                             { key: "total", label: "Total", align: "right" },
                         ]}
                         data={daily.filter(d => d.count > 0).map(d => ({
-                            dateLabel: fmtDate(d.date), avg: d.avg, max: d.max, count: d.count, total: d.total,
+                            dateLabel: fmtDate(d.date), avg: d.avg, max: d.max, last: d.last, count: d.count, total: d.total,
                         }))}
                     />
                 </div>
@@ -723,9 +880,9 @@ export default function ReportesQueuePage() {
                     <div className="rounded-lg border border-border bg-foreground/[0.04] p-5">
                         <BarChart
                             data={weekly}
-                            labelKey="week" valueKeys={["max", "avg"]}
-                            colors={["bg-violet-500/20", "bg-violet-500/60"]}
-                            labels={["Máximo", "Promedio"]} height={220}
+                            labelKey="week" valueKeys={["max", "last", "avg"]}
+                            colors={["bg-violet-500/40", "bg-cyan-500/40", "bg-amber-500/40"]}
+                            labels={["Máximo", "Aforo exacto", "Promedio"]} height={220}
                         />
                     </div>
 
@@ -734,6 +891,7 @@ export default function ReportesQueuePage() {
                             { key: "week", label: "Semana" },
                             { key: "avg", label: "Promedio", align: "right" },
                             { key: "max", label: "Máximo", align: "right" },
+                            { key: "last", label: "Aforo exacto", align: "right" },
                             { key: "count", label: "Eventos", align: "right" },
                             { key: "total", label: "Total", align: "right" },
                         ]}
@@ -781,7 +939,7 @@ export default function ReportesQueuePage() {
                         { key: "count", label: "Eventos", align: "right" },
                         { key: "total", label: "Total", align: "right" },
                     ]}
-                    data={monthly.map(m => { const [y, mo] = m.month.split("-"); return { monthLabel: `${MONTHS_ES[parseInt(mo) - 1]} ${y}`, avg: m.avg, max: m.max, count: m.count, total: m.total }; })}
+                    data={monthly.map(m => { const [y, mo] = m.month.split("-"); return { monthLabel: `${MONTHS_ES[parseInt(mo) - 1]} ${y}`, avg: m.avg, max: m.max, last: m.last, count: m.count, total: m.total }; })}
                 />
             </div>
         );
@@ -820,7 +978,7 @@ export default function ReportesQueuePage() {
                 {/* Segmented control */}
                 <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-muted/60 border border-border">
                     {TABS.map(tab => (
-                        <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+                        <button key={tab.key} onClick={() => switchTab(tab.key)}
                             className={cn(
                                 "inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all",
                                 activeTab === tab.key
@@ -869,7 +1027,9 @@ export default function ReportesQueuePage() {
             </div>
 
             {/* Content */}
-            {renderContent()}
+            <div key={activeTab} className={cn("animate-in fade-in duration-300 ease-out", slideDir === "r" ? "slide-in-from-right-6" : "slide-in-from-left-6")}>
+                {renderContent()}
+            </div>
 
             {/* Camera outages */}
             <OutagesPanel outages={outages} devices={devices} />

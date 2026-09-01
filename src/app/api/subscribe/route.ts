@@ -22,11 +22,13 @@ export async function POST(request: Request) {
         }
 
         // Add if not exists (compare endpoints)
+        const ua = request.headers.get('user-agent') || '';
         const exists = subs.find((s: any) => s.endpoint === subscription.endpoint);
         if (!exists) {
-            subs.push(subscription);
+            subs.push({ ...subscription, ua, createdAt: new Date().toISOString(), enabled: true });
             await fs.writeFile(SUBS_FILE, JSON.stringify(subs, null, 2));
         } else {
+            if (ua && !exists.ua) { exists.ua = ua; await fs.writeFile(SUBS_FILE, JSON.stringify(subs, null, 2)); }
         }
 
         return NextResponse.json({ success: true });

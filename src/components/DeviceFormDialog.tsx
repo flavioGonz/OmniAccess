@@ -77,6 +77,7 @@ const BRANDS = [
     { value: "MILESIGHT", label: "Milesight", color: "#00AEEF", logoUrl: "" },
     { value: "UNIFI", label: "Ubiquiti UniFi", color: "#005EAD", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/e/e0/Ubiquiti_Networks_logo.svg" },
     { value: "UNIVIEW", label: "Uniview", color: "#005EB8", logoUrl: "https://www.uniview.com/etc/designs/uniview/logo.png" },
+    { value: "BOSCH", label: "Bosch", color: "#E2001A", logoUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Bosch-logo.svg/2560px-Bosch-logo.svg.png" },
 ];
 
 
@@ -137,14 +138,16 @@ const CAMERA_GUIDES: Record<string, { title: string; steps: string[]; webhookUrl
     BOSCH: {
         title: "Configuracion Bosch Queue Counter",
         steps: [
-            "Acceder al panel web del sensor Bosch",
-            "Configurar el endpoint HTTP para envio de conteos",
-            "Definir las zonas de conteo (entrada/salida)",
-            "Configurar el intervalo de envio de datos",
-            "Verificar la recepcion de eventos de conteo en OmniAccess",
+            "Acceder al panel web de la camara Bosch (https://IP_CAMARA) e iniciar sesion como service",
+            "En General > ONVIF, habilitar ONVIF y crear un usuario ONVIF (rol Operator) — OmniAccess usa Profile M para leer las analiticas",
+            "En Alarm > VCA (Intelligent Video Analytics), configurar el perfil y dibujar los campos/lineas de conteo (zona de aforo + lineas de Entrada/Salida)",
+            "Activar el contador 'Occupancy' (aforo) y los contadores de cruce de linea (in/out); estos se publican como metadatos ONVIF (OccupancyCounter / CountingSensor)",
+            "En la pestana Conexion del dispositivo en OmniAccess, ingresar IP, usuario y contrasena ONVIF — el servidor hace polling de los metadatos automaticamente (no requiere webhook push)",
+            "El video en vivo se sirve por RTSP via go2rtc; verificar que el stream rtsp://IP_CAMARA es accesible desde el servidor",
+            "Confirmar en /admin/filas y /admin/devices que llegan los eventos de aforo y los cruces Entrada/Salida",
         ],
-        webhookUrl: "/api/webhooks/bosch",
-        authNote: "Consultar manual del modelo para autenticacion",
+        webhookUrl: "ONVIF Profile M (polling de metadatos) — sin webhook HTTP",
+        authNote: "Usuario ONVIF (no el admin web). OccupancyCounter = aforo; CountingSensor = entradas/salidas",
     },
 };
 
@@ -267,7 +270,7 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
                                                     <SelectTrigger className="bg-card border-border h-12 rounded-lg font-bold">
                                                         <SelectValue />
                                                     </SelectTrigger>
-                                                    <SelectContent className="bg-[#0c0c0c] border-border text-foreground rounded-md">
+                                                    <SelectContent className="bg-popover border-border text-foreground rounded-md">
                                                         <SelectItem value="LPR_CAMERA" className="py-3 font-bold">Cámara LPR</SelectItem>
                                                         <SelectItem value="FACE_TERMINAL" className="py-3 font-bold">Acceso Facial</SelectItem>
                                                         <SelectItem value="QUEUE_COUNTER" className="py-3 font-bold">Contador de Filas</SelectItem>
@@ -280,7 +283,7 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
                                                     <SelectTrigger className="bg-card border-border h-12 rounded-lg font-bold">
                                                         <SelectValue />
                                                     </SelectTrigger>
-                                                    <SelectContent className="bg-[#0c0c0c] border-border text-foreground rounded-md">
+                                                    <SelectContent className="bg-popover border-border text-foreground rounded-md">
                                                         {BRANDS.map(b => (
                                                             <SelectItem key={b.value} value={b.value} className="py-3 font-bold">
                                                                 {b.label}
@@ -306,8 +309,8 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
                                                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                                     </Button>
                                                 </PopoverTrigger>
-                                                <PopoverContent className="w-[400px] p-0 bg-[#0c0c0c] border-border shadow-2xl">
-                                                    <Command className="bg-[#0c0c0c]">
+                                                <PopoverContent className="w-[400px] p-0 bg-popover border-border shadow-2xl">
+                                                    <Command className="bg-popover">
                                                         <CommandInput placeholder="Filtrar modelos..." className="h-10" />
                                                         <CommandEmpty>No hay resultados.</CommandEmpty>
                                                         <CommandGroup className="max-h-60 overflow-y-auto custom-scrollbar">
@@ -460,7 +463,7 @@ export function DeviceFormDialog({ device, groups, onSuccess, children }: Device
                                                     <SelectTrigger className="bg-card border-border h-12 rounded-lg font-bold">
                                                         <SelectValue />
                                                     </SelectTrigger>
-                                                    <SelectContent className="bg-[#0c0c0c] border-border text-foreground rounded-md">
+                                                    <SelectContent className="bg-popover border-border text-foreground rounded-md">
                                                         <SelectItem value="ENTRY" className="py-3 font-bold">ENTRADA (Ingreso)</SelectItem>
                                                         <SelectItem value="EXIT" className="py-3 font-bold">SALIDA (Egreso)</SelectItem>
                                                     </SelectContent>

@@ -84,7 +84,6 @@ export class BoschDriver {
     async getCountingData(device: Device): Promise<{ channels: Array<{ id: number; name: string; count: number }> }> {
         try {
             // Use ONVIF PullPoint for live counting data
-            const auth = this.getAuthHeaders(device);
             const eventServiceUrl = `https://${device.ip}/onvif/events_service`;
 
             // Create a short-lived subscription
@@ -142,6 +141,12 @@ export class BoschDriver {
                     count: countMatch ? parseInt(countMatch[1], 10) : 0,
                 });
             }
+
+            // Best-effort cleanup: unsubscribe so we don't leak the PullPoint subscription on the camera
+            try {
+                const unsubEnvelope = `<?xml version="1.0" encoding="UTF-8"?>\n<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:wsnt="http://docs.oasis-open.org/wsn/b-2"><s:Body><wsnt:Unsubscribe/></s:Body></s:Envelope>`;
+                await this.soapRequest(pullPointUrl, unsubEnvelope, device, 4000);
+            } catch { /* ignore cleanup errors */ }
 
             return { channels };
         } catch (err) {

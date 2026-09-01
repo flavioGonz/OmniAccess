@@ -87,7 +87,7 @@ function LiveVideo({ streamName, fallbackDeviceId, className }: { streamName: st
         return () => { destroyed = true; if (retryTimer) clearTimeout(retryTimer); video.removeEventListener("error", onError); video.removeEventListener("progress", onProgress); video.pause(); video.removeAttribute("src"); video.load(); };
     }, [streamName]);
     if (failed) return <FallbackSnapshot deviceId={fallbackDeviceId} className={className} />;
-    return <video ref={videoRef} className={cn("object-cover bg-black", className)} autoPlay muted playsInline />;
+    return <video ref={videoRef} className={cn("object-cover", className)} autoPlay muted playsInline />;
 }
 
 // ─── Spectacular Flow Area Chart (SVG) ──────────────
@@ -101,8 +101,10 @@ function RangeToggle({ range, onRange }: { range: string; onRange: (r: string) =
     );
 }
 
-function HourlyChart({ buckets = [], unit = "hour", range, onRange, outages = [], className }: { buckets?: any[]; unit?: string; range: string; onRange: (r: string) => void; outages?: any[]; className?: string }) {
+function HourlyChart({ buckets = [], unit = "hour", range, onRange, outages = [], flow, className }: { buckets?: any[]; unit?: string; range: string; onRange: (r: string) => void; outages?: any[]; flow?: any; className?: string }) {
     const [animated, setAnimated] = useState(false);
+    const [mode, setMode] = useState<"aforo" | "flujo">("aforo");
+    const isFlow = mode === "flujo";
     useEffect(() => {
         const t = setTimeout(() => setAnimated(true), 80);
         return () => clearTimeout(t);
@@ -110,9 +112,11 @@ function HourlyChart({ buckets = [], unit = "hour", range, onRange, outages = []
 
     const hours = (buckets && buckets.length ? buckets : Array.from({ length: 24 }, () => ({}))).map((b: any, i: number) => ({ hour: i, label: b.label ?? (String(i).padStart(2, "0") + "h"), avg: b.avg ?? 0, max: b.max ?? 0, count: b.count ?? 0 }));
     const N = hours.length || 24;
+    const _flowSrc = flow?.buckets || flow?.hours || [];
+    const fhours = hours.map((_h: any, i: number) => ({ entradas: _flowSrc[i]?.entradas ?? 0, salidas: _flowSrc[i]?.salidas ?? 0 }));
 
     const W = 1000, H = 240, PAD_L = 28, PAD_B = 26, PAD_T = 18;
-    const maxVal = Math.max(...hours.map(h => h.max), 4);
+    const maxVal = isFlow ? Math.max(...fhours.map((h: any) => Math.max(h.entradas, h.salidas)), 4) : Math.max(...hours.map(h => h.max), 4);
     const currentHour = unit === "hour" ? new Date().getHours() : N - 1;
     const totalEvents = hours.reduce((s, h) => s + h.count, 0);
     const peak = hours.reduce((m, h) => h.max > m.max ? h : m, hours[0]);
@@ -139,25 +143,38 @@ function HourlyChart({ buckets = [], unit = "hour", range, onRange, outages = []
         return d;
     };
 
-    const avgLine = smooth(hours.map(h => h.avg));
-    const maxLine = smooth(hours.map(h => h.max));
     const baseY = y(0);
-    const avgArea = avgLine ? `${avgLine} L ${x(N - 1)} ${baseY} L ${x(0)} ${baseY} Z` : "";
-    const maxArea = maxLine ? `${maxLine} L ${x(N - 1)} ${baseY} L ${x(0)} ${baseY} Z` : "";
+    const ser1 = isFlow ? smooth(fhours.map((h: any) => h.entradas)) : smooth(hours.map(h => h.avg));
+    const ser2 = isFlow ? smooth(fhours.map((h: any) => h.salidas)) : smooth(hours.map(h => h.max));
+    const area1 = ser1 ? `${ser1} L ${x(N - 1)} ${baseY} L ${x(0)} ${baseY} Z` : "";
+    const area2 = ser2 ? `${ser2} L ${x(N - 1)} ${baseY} L ${x(0)} ${baseY} Z` : "";
+    const col1 = isFlow ? "#10b981" : "#a855f7";
+    const col2 = isFlow ? "#f59e0b" : "#d946ef";
+    const fill1 = isFlow ? "url(#flowInFill)" : "url(#avgFill)";
+    const fill2 = isFlow ? "url(#flowOutFill)" : "url(#maxFill)";
 
     return (
         <div className={cn("rounded-xl border border-border bg-gradient-to-b from-foreground/[0.04] to-transparent p-5", className)}>
             <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                    <BarChart3 size={14} className="text-violet-400" />
-                    <span className="text-xs font-semibold text-foreground/70">Flujo de Aforo</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                    {isFlow ? <ArrowLeftRight size={14} className="text-cyan-400" /> : <BarChart3 size={14} className="text-violet-400" />}
+                    <div className="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-muted/60 border border-border">
+                        <button onClick={() => setMode("aforo")} className={cn("px-2.5 py-1 rounded-md text-[11px] font-semibold transition", !isFlow ? "bg-violet-600 text-white" : "text-muted-foreground hover:text-foreground")}>Aforo</button>
+                        <button onClick={() => setMode("flujo")} className={cn("px-2.5 py-1 rounded-md text-[11px] font-semibold transition", isFlow ? "bg-cyan-600 text-white" : "text-muted-foreground hover:text-foreground")}>Entradas/Salidas</button>
+                    </div>
                     <RangeToggle range={range} onRange={onRange} />
                 </div>
                 <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-[3px] rounded bg-violet-400 inline-block" /> Promedio</span>
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-[3px] rounded bg-fuchsia-500/40 inline-block" /> Pico</span>
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded-sm inline-block" style={{ background: "rgba(244,63,94,0.4)" }} /> Corte</span>
-                    <span className="text-muted-foreground font-mono">{totalEvents} eventos · pico {peak.max} @ {peak.label}</span>
+                    {isFlow ? (<>
+                        <span className="flex items-center gap-1.5"><span className="w-3 h-[3px] rounded bg-emerald-500 inline-block" /> Entradas <b className="tabular-nums text-emerald-400">{flow?.totalIn ?? 0}</b></span>
+                        <span className="flex items-center gap-1.5"><span className="w-3 h-[3px] rounded bg-amber-500 inline-block" /> Salidas <b className="tabular-nums text-amber-400">{flow?.totalOut ?? 0}</b></span>
+                        <span className="text-foreground/70">Neto <b className={cn("tabular-nums", (flow?.net ?? 0) >= 0 ? "text-emerald-400" : "text-amber-400")}>{(flow?.net ?? 0) >= 0 ? "+" : ""}{flow?.net ?? 0}</b></span>
+                    </>) : (<>
+                        <span className="flex items-center gap-1.5"><span className="w-3 h-[3px] rounded bg-violet-400 inline-block" /> Promedio</span>
+                        <span className="flex items-center gap-1.5"><span className="w-3 h-[3px] rounded bg-fuchsia-500/40 inline-block" /> Pico</span>
+                        <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded-sm inline-block" style={{ background: "rgba(244,63,94,0.4)" }} /> Corte</span>
+                        <span className="text-muted-foreground font-mono">{totalEvents} eventos · pico {peak.max} @ {peak.label}</span>
+                    </>)}
                 </div>
             </div>
             <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: "auto" }} preserveAspectRatio="none">
@@ -169,6 +186,14 @@ function HourlyChart({ buckets = [], unit = "hour", range, onRange, outages = []
                     <linearGradient id="maxFill" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#d946ef" stopOpacity="0.18" />
                         <stop offset="100%" stopColor="#d946ef" stopOpacity="0" />
+                    </linearGradient>
+                    <linearGradient id="flowInFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity="0.4" />
+                        <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+                    </linearGradient>
+                    <linearGradient id="flowOutFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.22" />
+                        <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
                     </linearGradient>
                     <filter id="lineGlow" x="-20%" y="-20%" width="140%" height="140%">
                         <feGaussianBlur stdDeviation="3" result="b" />
@@ -212,23 +237,27 @@ function HourlyChart({ buckets = [], unit = "hour", range, onRange, outages = []
                     });
                 })()}
 
-                {/* max area + line */}
-                {maxArea && <path d={maxArea} fill="url(#maxFill)" style={{ opacity: animated ? 1 : 0, transition: "opacity 1s ease" }} />}
-                {maxLine && <path d={maxLine} fill="none" stroke="#d946ef" strokeOpacity="0.4" strokeWidth="1.5" style={{ opacity: animated ? 1 : 0, transition: "opacity 1s ease 0.1s" }} />}
+                {/* serie 2 (Pico / Salidas) */}
+                {area2 && <path d={area2} fill={fill2} style={{ opacity: animated ? 1 : 0, transition: "opacity 1s ease" }} />}
+                {ser2 && <path d={ser2} fill="none" stroke={col2} strokeOpacity={isFlow ? 0.9 : 0.4} strokeWidth={isFlow ? 2 : 1.5} style={{ opacity: animated ? 1 : 0, transition: "opacity 1s ease 0.1s" }} />}
 
-                {/* avg area + glowing line */}
-                {avgArea && <path d={avgArea} fill="url(#avgFill)" style={{ opacity: animated ? 1 : 0, transition: "opacity 1.1s ease" }} />}
-                {avgLine && <path d={avgLine} fill="none" stroke="#a855f7" strokeWidth="2.5" strokeLinecap="round" filter="url(#lineGlow)" style={{ opacity: animated ? 1 : 0, transition: "opacity 1.1s ease 0.2s" }} />}
+                {/* serie 1 (Promedio / Entradas) */}
+                {area1 && <path d={area1} fill={fill1} style={{ opacity: animated ? 1 : 0, transition: "opacity 1.1s ease" }} />}
+                {ser1 && <path d={ser1} fill="none" stroke={col1} strokeWidth="2.5" strokeLinecap="round" filter="url(#lineGlow)" style={{ opacity: animated ? 1 : 0, transition: "opacity 1.1s ease 0.2s" }} />}
 
                 {/* dots on hours with data */}
-                {hours.map(h => h.count > 0 && (
-                    <g key={h.hour} className="group">
-                        <circle cx={x(h.hour)} cy={y(h.avg)} r="9" fill="transparent" />
-                        <circle cx={x(h.hour)} cy={y(h.avg)} r={h.hour === currentHour ? 4 : 2.5} fill={h.hour === currentHour ? "#c084fc" : "#a855f7"} stroke="#0b0b0f" strokeWidth="1.5">
-                            {h.hour === currentHour && <animate attributeName="r" values="4;6;4" dur="1.6s" repeatCount="indefinite" />}
-                        </circle>
-                    </g>
-                ))}
+                {hours.map((h, i) => {
+                    const val = isFlow ? fhours[i].entradas : h.avg;
+                    const show = isFlow ? (fhours[i].entradas > 0 || fhours[i].salidas > 0) : h.count > 0;
+                    return show ? (
+                        <g key={h.hour} className="group">
+                            <circle cx={x(h.hour)} cy={y(val)} r="9" fill="transparent" />
+                            <circle cx={x(h.hour)} cy={y(val)} r={h.hour === currentHour ? 4 : 2.5} fill={h.hour === currentHour ? (isFlow ? "#34d399" : "#c084fc") : col1} stroke="#0b0b0f" strokeWidth="1.5">
+                                {h.hour === currentHour && <animate attributeName="r" values="4;6;4" dur="1.6s" repeatCount="indefinite" />}
+                            </circle>
+                        </g>
+                    ) : null;
+                })}
 
                 {/* hour axis labels (every 3h) */}
                 {hours.filter((h: any, i: number) => i % Math.max(1, Math.ceil(N / 8)) === 0).map((h: any) => (
@@ -334,7 +363,7 @@ function EventDetail({ event, onClose }: { event: CrowdEvent; onClose: () => voi
             <div className="bg-card border border-border rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
                 {/* Image */}
                 {imgSrc ? (
-                    <div className="relative aspect-video bg-black">
+                    <div className="relative aspect-video vid-surface">
                         <img src={imgSrc} alt="" className="w-full h-full object-contain" />
                         <div className="absolute top-3 right-3">
                             <button onClick={onClose} className="p-2 rounded-xl bg-black/60 text-white/60 hover:text-white hover:bg-black/80 transition-colors backdrop-blur-sm">
@@ -559,7 +588,7 @@ export default function FlujoFilasPage() {
 
             {/* ═══ CHART + KPIs ═══ */}
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
-                <HourlyChart buckets={hourly?.buckets || []} unit={hourly?.unit} range={range} onRange={setRange} outages={outages} className="lg:col-span-3" />
+                <HourlyChart buckets={hourly?.buckets || []} unit={hourly?.unit} range={range} onRange={setRange} outages={outages} flow={flow} className="lg:col-span-3" />
                 {(() => {
                     const vd = devices.find((d: any) => d.id === filterDevice) || devices[0] || null;
                     if (!vd) return (
@@ -589,7 +618,6 @@ export default function FlujoFilasPage() {
             </div>
 
             {/* ═══ FLOW ═══ */}
-            <FlowSection flow={flow} range={range} onRange={setRange} />
 
             {/* ═══ FILTERS ═══ */}
             {showFilters && (
